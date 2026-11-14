@@ -30,6 +30,7 @@
 #include "core/ipc/ipc.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
+#include "graphics/gr2port/catcher.h"
 #include "graphics/gr2port/device_lost.h"
 
 #ifdef _WIN32
@@ -157,12 +158,17 @@ int main(int argc, char* argv[]) {
 
     LOG_INFO(Debug, "Run: {}", fmt::join(std::span(argv, argc), " "));
 
-    // GR2port: the run after one that lost the GPU device traces the GPU for its log.
+    // GR2port: the log of each run after one that lost the GPU device repeats that run's report,
+    // and each such run traces the GPU for its own.
+    if (Gr2Port::DeviceLost::KeepLastReport(
+            Common::FS::GetUserPath(Common::FS::PathType::LogDir) / Common::FS::LOG_FILE)) {
+        Gr2Port::DeviceLost::Arm("an earlier run lost the device");
+    }
     if (gpuTrace || std::getenv("GR2PORT_GPU_TRACE") != nullptr) {
         Gr2Port::DeviceLost::Arm("asked for");
-    } else if (Gr2Port::DeviceLost::LastRunLost(
-                   Common::FS::GetUserPath(Common::FS::PathType::LogDir) / Common::FS::LOG_FILE)) {
-        Gr2Port::DeviceLost::Arm("the last run lost the device");
+    }
+    if (Gr2Port::Catcher::On) {
+        Gr2Port::DeviceLost::Arm("this build catches lost devices");
     }
 
     // GR2port: Steam hides the real gamepads from the programs it starts, which leaves its own

@@ -24,6 +24,7 @@
 #include "common/thread.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/capture_math.h"
+#include "graphics/gr2port/catcher.h"
 #include "graphics/gr2port/character_glass.h"
 #include "graphics/gr2port/contours.h"
 #include "graphics/gr2port/deformers.h"
@@ -369,7 +370,7 @@ bool Thread::Init() {
         };
         timestamps = d.device.createQueryPool(info, nullptr, dl).value;
     }
-    if (graphics.pass_times) {
+    if (graphics.pass_times || Catcher::On) {
         PassTimes::Start(d, FramesInFlight);
     }
     memory = std::make_unique<Memory>(d);
@@ -377,6 +378,9 @@ bool Thread::Init() {
         return false;
     }
     DeviceLost::Start(d, *memory, FramesInFlight);
+    if (Catcher::On) {
+        Catcher::Start(*memory);
+    }
     const vk::PhysicalDeviceProperties gpu = d.gpu.getProperties(d.dispatch);
     gpu_vendor = gpu.vendorID;
     gpu_device = gpu.deviceID;
@@ -1462,6 +1466,20 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     // One read of the header: the packet is write-combined.
     Scene::Header header;
     std::memcpy(&header, packet.data, sizeof(header));
+    // The catcher's line of this frame ends wherever the frame does.
+    struct Caught {
+        bool submitted = false;
+        u32 slot = 0;
+        ~Caught() {
+            if (Catcher::On) {
+                Catcher::EndFrame(submitted, slot);
+            }
+        }
+    } caught;
+    if (Catcher::On) {
+        Catcher::BeginFrame(header);
+        Catcher::Enter(Catcher::Call::Record);
+    }
     if (g_settings_changed.exchange(false, std::memory_order_acquire)) {
         TakeSettings();
     }
@@ -1471,10 +1489,17 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     }
     const u32 slot_index = next;
     Slot& slot = slots[slot_index];
+    caught.slot = slot_index;
+    if (Catcher::On) {
+        Catcher::Enter(Catcher::Call::Wait);
+    }
     const auto wait_start = std::chrono::steady_clock::now();
     DeviceLost::Check(d, d.device.waitForFences(slot.done, true, UINT64_MAX, dl),
                       "the wait for an earlier frame");
     const auto wait_end = std::chrono::steady_clock::now();
+    if (Catcher::On) {
+        Catcher::Enter(Catcher::Call::Record);
+    }
     ReadTimes(slot_index);
     PassTimes::Collect(slot_index);
     Photo::Collect(slot_index);
@@ -1488,9 +1513,15 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     }
 
     u32 index = 0;
+    if (Catcher::On) {
+        Catcher::Enter(Catcher::Call::Acquire);
+    }
     const auto acquire_start = std::chrono::steady_clock::now();
     const bool acquired = swapchain->Acquire(slot.acquired, index);
     const auto acquire_end = std::chrono::steady_clock::now();
+    if (Catcher::On) {
+        Catcher::Enter(Catcher::Call::Record);
+    }
     if (!acquired) {
         needs_swapchain = true;
         SceneRing::Release(packet.slot);
@@ -1518,6 +1549,9 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         .signalSemaphoreInfoCount = 1,
         .pSignalSemaphoreInfos = &signal,
     };
+    if (Catcher::On) {
+        Catcher::Enter(Catcher::Call::Submit);
+    }
     const vk::Result submitted = d.queue.submit2(submit, slot.done, dl);
     DeviceLost::Check(d, submitted, "the frame's submit");
     if (submitted != vk::Result::eSuccess) {
@@ -1527,6 +1561,10 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         return;
     }
     DeviceLost::Submitted();
+    caught.submitted = true;
+    if (Catcher::On) {
+        Catcher::Enter(Catcher::Call::Present);
+    }
     next = (next + 1) % FramesInFlight;
     frame++;
     using Ms = std::chrono::duration<double, std::milli>;

@@ -76,9 +76,27 @@ enum class Pass : u32 {
     Count,
 };
 
+/// The GPU's progress with the frame in a slot: whether its marks could be read, whether the
+/// frame is done, the marks its commands hold and those the GPU has passed, the pass whose mark it
+/// passed last and the pass it is in, each Pass::Count when there is none.
+struct Progress {
+    bool known = false;
+    bool done = false;
+    u64 game_frame = 0;
+    u32 written = 0;
+    u32 finished = 0;
+    u32 last = static_cast<u32>(Pass::Count);
+    u32 next = static_cast<u32>(Pass::Count);
+};
+
+const char* Name(Pass pass);
+
 /// Creates the query pool for slots frame slots and, with --debug-files, opens the file of every
 /// frame's times.
 void Start(const Device& device, u32 slots);
+
+/// Any thread, without waiting for the GPU: its progress with the frame in slot.
+Progress Poll(u32 slot);
 
 /// At the start of a frame's commands in slot: resets its marks and writes the first.
 void Begin(vk::CommandBuffer cmd, u32 slot, const Scene::Header& header);

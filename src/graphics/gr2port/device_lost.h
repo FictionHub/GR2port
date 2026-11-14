@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <source_location>
 #include <string_view>
@@ -20,7 +21,8 @@ struct Header;
 // The log of a lost device: the call that reported it, the frames in flight, the memory, the
 // driver's checkpoints and fault, the buffer each fault address lies in, and every device address
 // of the frames in flight checked against the buffers. With the trace on, the GPU also writes
-// each pass it begins into memory the CPU reads, on every GPU.
+// each pass it begins into memory the CPU reads, on every GPU. The log of each run after a loss
+// starts with that report, and those runs trace.
 namespace Gr2Port::DeviceLost {
 
 enum class Pass : u32 {
@@ -61,8 +63,19 @@ enum class Pass : u32 {
 /// Before the renderer starts: turns the trace on for this run. The log names reason.
 void Arm(std::string_view reason);
 
-/// Whether the log at path, the last run's, reports a lost device.
-bool LastRunLost(const std::filesystem::path& path);
+const char* Name(Pass pass);
+
+/// The number of the frame recorded last.
+u64 Frame();
+
+/// Any thread, with the trace on: the last frame that began each pass, by its low half. False
+/// without the trace.
+bool Crumbs(std::array<u32, static_cast<u32>(Pass::Count)>& crumbs);
+
+/// Before the renderer starts: reads the log at path, the last run's, and keeps the report of a
+/// lost device it holds for this run's log: that run's own, or the one it kept from a run before
+/// it. True when it holds one.
+bool KeepLastReport(const std::filesystem::path& path);
 
 /// Render thread, once: keeps memory for the report and, with the trace on, makes the buffer the
 /// GPU writes its passes into. frames_in_flight frames keep their packets until they are done.

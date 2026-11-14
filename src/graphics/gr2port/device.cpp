@@ -13,6 +13,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include "common/logging/log.h"
+#include "graphics/gr2port/catcher.h"
 #include "graphics/gr2port/device.h"
 #include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/pipeline.h"
@@ -149,6 +150,9 @@ bool CreateInstance(Device& d) {
     }
     std::vector<const char*> extensions{surface_extensions, surface_extensions + count};
     Upscaler::ExtendInstance(extensions, d.dispatch);
+    if (Catcher::On) {
+        Catcher::ExtendInstance(extensions, d.dispatch);
+    }
     const vk::ApplicationInfo application{
         .pApplicationName = "GR2port",
         .apiVersion = ApiVersion,
@@ -170,6 +174,9 @@ bool CreateInstance(Device& d) {
     d.dispatch.init(instance);
     if (validation) {
         LOG_INFO(Render_Vulkan, "GR2port: the validation layer checks the renderer");
+    }
+    if (Catcher::On) {
+        Catcher::LogInstance(d);
     }
     return true;
 }
@@ -267,6 +274,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     const auto [extensions_result, available] =
         d.gpu.enumerateDeviceExtensionProperties(nullptr, d.dispatch);
     vk::PhysicalDeviceFaultFeaturesEXT fault_features;
+    vk::PhysicalDeviceDiagnosticsConfigFeaturesNV diagnostics_features;
     vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT blend_features{
         .extendedDynamicState3ColorBlendEnable = true,
         .extendedDynamicState3ColorBlendEquation = true,
@@ -286,6 +294,13 @@ bool CreateDevice(SDL_Window* window, Device& d) {
             if (d.device_fault) {
                 extensions.push_back(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
             }
+        } else if (Catcher::On && name == VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME) {
+            vk::PhysicalDeviceFeatures2 query{.pNext = &diagnostics_features};
+            d.gpu.getFeatures2(&query, d.dispatch);
+            d.driver_diagnostics = diagnostics_features.diagnosticsConfig != VK_FALSE;
+            if (d.driver_diagnostics) {
+                extensions.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
+            }
         } else if (name == VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME) {
             vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT supported_blend;
             vk::PhysicalDeviceFeatures2 query{.pNext = &supported_blend};
@@ -302,9 +317,14 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         features.pNext = &blend_features;
     }
     if (d.device_fault) {
-        fault_features.deviceFaultVendorBinary = false;
+        d.fault_binary = Catcher::On && fault_features.deviceFaultVendorBinary != VK_FALSE;
+        fault_features.deviceFaultVendorBinary = d.fault_binary;
         fault_features.pNext = features.pNext;
         features.pNext = &fault_features;
+    }
+    if (d.driver_diagnostics) {
+        diagnostics_features.pNext = features.pNext;
+        features.pNext = &diagnostics_features;
     }
     vk::DeviceCreateInfo info{
         .pNext = &features,
@@ -314,6 +334,17 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         .ppEnabledExtensionNames = extensions.data(),
     };
     Upscaler::ExtendDevice(d.gpu, d.dispatch, info, features, features11, features12, features13);
+    // The driver keeps what its record of a fault needs: the shaders' debug information, the
+    // resources' tracking and checkpoints of its own.
+    vk::DeviceDiagnosticsConfigCreateInfoNV diagnostics{
+        .flags = vk::DeviceDiagnosticsConfigFlagBitsNV::eEnableShaderDebugInfo |
+                 vk::DeviceDiagnosticsConfigFlagBitsNV::eEnableResourceTracking |
+                 vk::DeviceDiagnosticsConfigFlagBitsNV::eEnableAutomaticCheckpoints,
+    };
+    if (d.driver_diagnostics) {
+        diagnostics.pNext = info.pNext;
+        info.pNext = &diagnostics;
+    }
     const auto [result, device] = d.gpu.createDevice(info, nullptr, d.dispatch);
     if (result != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: no device: {}", vk::to_string(result));
@@ -340,6 +371,9 @@ bool CreateDevice(SDL_Window* window, Device& d) {
              properties.deviceName.data(), d.queue_family, d.checkpoints, d.device_fault,
              d.dynamic_blend, driver.driverName.data(), driver.driverInfo.data());
     GraphicsMenu::SetGpuVendor(properties.vendorID);
+    if (Catcher::On) {
+        Catcher::LogDevice(d);
+    }
     LoadPipelineCache(d);
     return true;
 }

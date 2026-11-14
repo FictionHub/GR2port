@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdlib>
@@ -20,6 +21,8 @@
 #include <immintrin.h>
 
 #include "common/logging/log.h"
+#include "common/path_util.h"
+#include "graphics/gr2port/catcher.h"
 #include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/scene.h"
@@ -52,6 +55,23 @@ constexpr u32 KeptFreed = 16384;
 // Bad addresses logged in full; the rest are counted.
 constexpr u32 LoggedAddresses = 32;
 constexpr std::string_view LossLine = "GR2port: the device is lost";
+// A report's lines in a log come from this file and the catcher's, as errors.
+constexpr std::array<std::string_view, 2> ReportSources{"device_lost.cpp:", "catcher.cpp:"};
+constexpr std::string_view ReportLevel = "<Error>";
+// The lines of a run's log that say what it ran on, kept with its report: the last of each.
+constexpr std::array<std::string_view, 4> ContextLines{
+    "GR2port build ",
+    "GR2port: renderer device ",
+    "GR2port upscaler: ",
+    "GR2port: the GPU trace is on",
+};
+// A log repeats the report of a run that lost the device: a line that counts the starts since
+// that run, then the report's lines, each after KeptLine.
+constexpr std::string_view KeptHeader = "GR2port: the device was lost ";
+constexpr std::string_view KeptLine = "GR2port: lost run: ";
+// The lines of a report kept at most, and the starts it is kept for.
+constexpr size_t MaxKeptLines = Catcher::On ? 640 : 256;
+constexpr u32 MaxKeptStarts = 16;
 constexpr u64 NoGuard = ~u64{0};
 constexpr u32 MaxFields = 16;
 
@@ -96,6 +116,9 @@ std::atomic<u64> g_frame{0};
 bool g_reported = false;
 bool g_armed = false;
 std::string g_reason;
+// The report of a run that lost the device, for this run's log, and the starts since that run.
+std::vector<std::string> g_kept;
+u32 g_kept_starts = 0;
 // GR2PORT_CHECK_ADDRESSES in the environment checks every frame's addresses as it is recorded.
 bool g_check_frames = false;
 u32 g_frames_in_flight = 1;
@@ -440,10 +463,12 @@ void ReportFault(const Device& d) {
         .pAddressInfos = addresses.data(),
         .pVendorInfos = vendors.data(),
     };
-    // The vendor's binary is not asked for, so a driver that has one answers incomplete and
-    // still fills in the rest.
+    // Without the fault's binary the vendor's is not asked for, so a driver that has one answers
+    // incomplete and still fills in the rest.
     const u64 binary_bytes = counts.vendorBinarySize;
-    counts.vendorBinarySize = 0;
+    std::vector<u8> binary(d.fault_binary ? binary_bytes : 0);
+    counts.vendorBinarySize = binary.size();
+    info.pVendorBinaryData = binary.empty() ? nullptr : binary.data();
     if (const VkResult result = dl.vkGetDeviceFaultInfoEXT(d.device, &counts, &info);
         result != VK_SUCCESS && result != VK_INCOMPLETE) {
         LOG_ERROR(Render_Vulkan, "GR2port: the fault's information failed: {}",
@@ -455,6 +480,19 @@ void ReportFault(const Device& d) {
     LOG_ERROR(Render_Vulkan,
               "GR2port: fault \"{}\", {} addresses, {} vendor records, a vendor binary of {} bytes",
               info.description, addresses.size(), vendors.size(), binary_bytes);
+    if (!binary.empty()) {
+        // The driver's own record of the fault, which the vendor's tools read.
+        const auto path =
+            Common::FS::GetUserPath(Common::FS::PathType::LogDir) / "device_lost_fault.bin";
+        std::ofstream file{path, std::ios::binary | std::ios::trunc};
+        const u64 bytes = std::min<u64>(binary.size(), counts.vendorBinarySize);
+        file.write(reinterpret_cast<const char*>(binary.data()),
+                   static_cast<std::streamsize>(bytes));
+        LOG_ERROR(Render_Vulkan,
+                  "GR2port: the driver's record of the fault, {} bytes, is in the file "
+                  "device_lost_fault.bin beside this log: send it with the log",
+                  bytes);
+    }
     {
         const std::scoped_lock lock{g_buffers_mutex};
         for (const VkDeviceFaultAddressInfoEXT& address : addresses) {
@@ -479,8 +517,8 @@ void ReportFault(const Device& d) {
 void ReportCrumbs(u64 frame) {
     if (!g_armed) {
         LOG_ERROR(Render_Vulkan,
-                  "GR2port: the GPU trace was off; the next start turns it on, and its log names "
-                  "the pass the GPU was in");
+                  "GR2port: the GPU trace was off; the next starts have it on and repeat this "
+                  "report, and the log of the next loss names the pass the GPU was in");
         return;
     }
     std::array<u32, static_cast<u32>(Pass::Count)> crumbs{};
@@ -527,30 +565,83 @@ void Arm(std::string_view reason) {
     g_reason = reason;
 }
 
-bool LastRunLost(const std::filesystem::path& path) {
-    std::ifstream file{path, std::ios::binary};
-    std::vector<char> chunk(1 << 20);
-    // The end of each chunk stays for a line that spans two.
-    std::string window;
-    while (file) {
-        file.read(chunk.data(), static_cast<std::streamsize>(chunk.size()));
-        const std::streamsize got = file.gcount();
-        if (got <= 0) {
-            break;
-        }
-        window.append(chunk.data(), static_cast<size_t>(got));
-        if (window.find(LossLine) != std::string::npos) {
-            return true;
-        }
-        window.erase(0, window.size() - std::min(window.size(), LossLine.size() - 1));
+const char* Name(Pass pass) {
+    return PassNames[static_cast<u32>(pass)];
+}
+
+u64 Frame() {
+    return g_frame.load(std::memory_order_relaxed);
+}
+
+bool Crumbs(std::array<u32, static_cast<u32>(Pass::Count)>& crumbs) {
+    if (!g_armed || g_crumbs.mapped == nullptr) {
+        return false;
     }
-    return false;
+    std::memcpy(crumbs.data(), g_crumbs.mapped, sizeof(crumbs));
+    return true;
+}
+
+bool KeepLastReport(const std::filesystem::path& path) {
+    std::ifstream file{path, std::ios::binary};
+    std::array<std::string, ContextLines.size()> context;
+    std::vector<std::string> report;
+    std::vector<std::string> kept;
+    u32 kept_starts = 0;
+    bool lost = false;
+    std::string line;
+    while (std::getline(file, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        const std::string_view text{line};
+        if (const size_t at = text.find(KeptLine); at != std::string_view::npos) {
+            if (kept.size() < MaxKeptLines) {
+                kept.emplace_back(text.substr(at + KeptLine.size()));
+            }
+        } else if (const size_t header = text.find(KeptHeader); header != std::string_view::npos) {
+            const std::string_view count = text.substr(header + KeptHeader.size());
+            std::from_chars(count.data(), count.data() + count.size(), kept_starts);
+        } else if (text.find(ReportLevel) != std::string_view::npos &&
+                   std::ranges::any_of(ReportSources, [&](std::string_view source) {
+                       return text.find(source) != std::string_view::npos;
+                   })) {
+            lost = lost || text.find(LossLine) != std::string_view::npos;
+            if (report.size() < MaxKeptLines) {
+                report.push_back(line);
+            }
+        } else {
+            for (size_t i = 0; i < ContextLines.size(); i++) {
+                if (text.find(ContextLines[i]) != std::string_view::npos) {
+                    context[i] = line;
+                    break;
+                }
+            }
+        }
+    }
+    if (lost) {
+        g_kept.clear();
+        std::ranges::copy_if(context, std::back_inserter(g_kept),
+                             [](const std::string& kept_line) { return !kept_line.empty(); });
+        g_kept.insert(g_kept.end(), report.begin(), report.end());
+        g_kept_starts = 1;
+    } else if (!kept.empty() && (Catcher::On || kept_starts < MaxKeptStarts)) {
+        g_kept = std::move(kept);
+        g_kept_starts = kept_starts + 1;
+    }
+    return !g_kept.empty();
 }
 
 void Start(const Device& device, Memory& memory, u32 frames_in_flight) {
     g_memory = &memory;
     g_frames_in_flight = frames_in_flight;
     g_check_frames = std::getenv("GR2PORT_CHECK_ADDRESSES") != nullptr;
+    if (!g_kept.empty()) {
+        LOG_INFO(Render_Vulkan, "{}{} start{} ago; that run's report follows", KeptHeader,
+                 g_kept_starts, g_kept_starts == 1 ? "" : "s");
+        for (const std::string& line : g_kept) {
+            LOG_INFO(Render_Vulkan, "{}{}", KeptLine, line);
+        }
+    }
     if (!g_armed) {
         return;
     }
@@ -666,6 +757,9 @@ void Check(const Device& device, vk::Result result, std::string_view call) {
     ReportCheckpoints(device);
     ReportFault(device);
     ReportCrumbs(frame);
+    if (Catcher::On) {
+        Catcher::ReportLoss(device);
+    }
     // The packets are read last, from memory the lost device maps.
     Common::Log::Flush();
     ReportPackets(frame);
