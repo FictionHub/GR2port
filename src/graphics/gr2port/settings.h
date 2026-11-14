@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -295,5 +296,9 @@ Values Get();
 
 /// Any thread: stores the settings and writes them to config.json, keeping its other sections.
 bool Set(const Values& values);
+
+/// Any thread: changes the stored settings with change, under the lock that Get and Set take, and
+/// writes them to config.json.
+bool Update(const std::function<void(Values&)>& change);
 
 } // namespace Gr2Port::Settings

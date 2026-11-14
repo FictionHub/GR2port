@@ -315,11 +315,24 @@ bool Write(const Values& values) {
         root[ForkSection] = json::object();
     }
     root[ForkSection][HalloweenKey] = values.game.halloween_items;
-    std::ofstream out{ConfigPath(), std::ios::trunc};
-    out << root.dump(4);
-    if (!out.good()) {
-        LOG_ERROR(Config, "GR2port: could not write {}",
-                  Common::FS::PathToUTF8String(ConfigPath()));
+    // The file is written beside config.json and then takes its name, so a quit while it is
+    // written leaves the old file whole.
+    std::filesystem::path written = ConfigPath();
+    written += ".new";
+    {
+        std::ofstream out{written, std::ios::trunc};
+        out << root.dump(4);
+        out.flush();
+        if (!out.good()) {
+            LOG_ERROR(Config, "GR2port: could not write {}", Common::FS::PathToUTF8String(written));
+            return false;
+        }
+    }
+    std::error_code error;
+    std::filesystem::rename(written, ConfigPath(), error);
+    if (error) {
+        LOG_ERROR(Config, "GR2port: could not replace {}: {}",
+                  Common::FS::PathToUTF8String(ConfigPath()), error.message());
         return false;
     }
     return true;
@@ -379,6 +392,13 @@ Values Get() {
 
 bool Set(const Values& values) {
     std::scoped_lock lock{g_mutex};
+    return Write(values);
+}
+
+bool Update(const std::function<void(Values&)>& change) {
+    std::scoped_lock lock{g_mutex};
+    Values values = Loaded();
+    change(values);
     return Write(values);
 }
 
