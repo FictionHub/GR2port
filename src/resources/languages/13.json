@@ -293,6 +293,8 @@
     "Update": "Uppdatera",
     "Not Now": "Inte nu",
     "Downloading the update...": "Hämtar uppdateringen...",
-    "The update could not be installed.": "Uppdateringen kunde inte installeras."
+    "The update could not be installed.": "Uppdateringen kunde inte installeras.",
+    "Graphics Settings": "Grafikinställningar",
+    "Some changes take effect the next time the game starts.": "Vissa ändringar träder i kraft nästa gång spelet startas."
   }
 }

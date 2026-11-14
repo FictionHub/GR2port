@@ -293,6 +293,8 @@
     "Update": "Güncelle",
     "Not Now": "Şimdi Değil",
     "Downloading the update...": "Güncelleme indiriliyor...",
-    "The update could not be installed.": "Güncelleme yüklenemedi."
+    "The update could not be installed.": "Güncelleme yüklenemedi.",
+    "Graphics Settings": "Grafik Ayarları",
+    "Some changes take effect the next time the game starts.": "Bazı değişiklikler oyun bir sonraki başlatıldığında geçerli olacak."
   }
 }

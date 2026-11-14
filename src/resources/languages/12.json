@@ -293,6 +293,8 @@
     "Update": "Päivitä",
     "Not Now": "Ei nyt",
     "Downloading the update...": "Ladataan päivitystä...",
-    "The update could not be installed.": "Päivitystä ei voitu asentaa."
+    "The update could not be installed.": "Päivitystä ei voitu asentaa.",
+    "Graphics Settings": "Grafiikka-asetukset",
+    "Some changes take effect the next time the game starts.": "Osa muutoksista tulee voimaan, kun peli käynnistetään seuraavan kerran."
   }
 }

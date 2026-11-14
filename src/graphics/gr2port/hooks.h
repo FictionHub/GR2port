@@ -28,6 +28,9 @@ struct Entry {
     std::array<u8, 11> bytes;
 };
 
+/// The most bytes of the stub area one hook takes: its longest stub and trampoline.
+inline constexpr size_t MaxStubBytes = 192;
+
 /// push rbp; mov rbp, rsp; push r15.
 inline constexpr std::array<u8, 11> FramePrologue{0x55, 0x48, 0x89, 0xe5, 0x41, 0x57};
 /// push rbp; mov rbp, rsp; push r14.

@@ -293,6 +293,8 @@
     "Update": "업데이트",
     "Not Now": "나중에",
     "Downloading the update...": "업데이트 다운로드 중...",
-    "The update could not be installed.": "업데이트를 설치할 수 없습니다."
+    "The update could not be installed.": "업데이트를 설치할 수 없습니다.",
+    "Graphics Settings": "그래픽 설정",
+    "Some changes take effect the next time the game starts.": "일부 변경 사항은 다음에 게임을 시작할 때 적용됩니다."
   }
 }

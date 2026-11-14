@@ -16,8 +16,6 @@ namespace {
 constexpr u64 CodeBase = 0x400000;
 constexpr u32 JmpSize = 5;
 constexpr u8 ReturnOpcode = 0xc3;
-// The longest stub and trampoline.
-constexpr size_t MaxStubBytes = 192;
 
 struct Site {
     u8* entry;

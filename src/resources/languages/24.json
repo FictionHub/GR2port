@@ -293,6 +293,8 @@
     "Update": "Frissítés",
     "Not Now": "Most nem",
     "Downloading the update...": "Frissítés letöltése...",
-    "The update could not be installed.": "A frissítést nem sikerült telepíteni."
+    "The update could not be installed.": "A frissítést nem sikerült telepíteni.",
+    "Graphics Settings": "Grafikai beállítások",
+    "Some changes take effect the next time the game starts.": "Egyes módosítások csak a játék következő indításakor lépnek életbe."
   }
 }

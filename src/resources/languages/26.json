@@ -293,6 +293,8 @@
     "Update": "Actualizează",
     "Not Now": "Nu acum",
     "Downloading the update...": "Se descarcă actualizarea...",
-    "The update could not be installed.": "Actualizarea nu a putut fi instalată."
+    "The update could not be installed.": "Actualizarea nu a putut fi instalată.",
+    "Graphics Settings": "Setări grafice",
+    "Some changes take effect the next time the game starts.": "Unele modificări vor intra în vigoare la următoarea pornire a jocului."
   }
 }

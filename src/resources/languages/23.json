@@ -293,6 +293,8 @@
     "Update": "Aktualizovat",
     "Not Now": "Teď ne",
     "Downloading the update...": "Stahování aktualizace...",
-    "The update could not be installed.": "Aktualizaci se nepodařilo nainstalovat."
+    "The update could not be installed.": "Aktualizaci se nepodařilo nainstalovat.",
+    "Graphics Settings": "Nastavení grafiky",
+    "Some changes take effect the next time the game starts.": "Některé změny se projeví až při příštím spuštění hry."
   }
 }

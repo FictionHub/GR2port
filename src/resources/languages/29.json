@@ -293,6 +293,8 @@
     "Update": "Perbarui",
     "Not Now": "Nanti Saja",
     "Downloading the update...": "Mengunduh pembaruan...",
-    "The update could not be installed.": "Pembaruan tidak dapat dipasang."
+    "The update could not be installed.": "Pembaruan tidak dapat dipasang.",
+    "Graphics Settings": "Pengaturan Grafis",
+    "Some changes take effect the next time the game starts.": "Beberapa perubahan akan berlaku saat game dimulai berikutnya."
   }
 }

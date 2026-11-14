@@ -293,6 +293,8 @@
     "Update": "Ενημέρωση",
     "Not Now": "Όχι τώρα",
     "Downloading the update...": "Λήψη της ενημέρωσης...",
-    "The update could not be installed.": "Δεν ήταν δυνατή η εγκατάσταση της ενημέρωσης."
+    "The update could not be installed.": "Δεν ήταν δυνατή η εγκατάσταση της ενημέρωσης.",
+    "Graphics Settings": "Ρυθμίσεις γραφικών",
+    "Some changes take effect the next time the game starts.": "Ορισμένες αλλαγές θα ισχύσουν την επόμενη φορά που θα ξεκινήσει το παιχνίδι."
   }
 }

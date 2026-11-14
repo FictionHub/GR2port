@@ -293,6 +293,8 @@
     "Update": "Оновити",
     "Not Now": "Не зараз",
     "Downloading the update...": "Завантаження оновлення...",
-    "The update could not be installed.": "Не вдалося встановити оновлення."
+    "The update could not be installed.": "Не вдалося встановити оновлення.",
+    "Graphics Settings": "Налаштування графіки",
+    "Some changes take effect the next time the game starts.": "Деякі зміни наберуть чинності під час наступного запуску гри."
   }
 }

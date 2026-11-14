@@ -293,6 +293,8 @@
     "Update": "Обновить",
     "Not Now": "Не сейчас",
     "Downloading the update...": "Загрузка обновления...",
-    "The update could not be installed.": "Не удалось установить обновление."
+    "The update could not be installed.": "Не удалось установить обновление.",
+    "Graphics Settings": "Настройки графики",
+    "Some changes take effect the next time the game starts.": "Некоторые изменения вступят в силу при следующем запуске игры."
   }
 }

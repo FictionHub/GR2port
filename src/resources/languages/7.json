@@ -122,6 +122,8 @@
     "User Data Folder": "Pasta de dados do utilizador",
     "The launcher restarts when Ok saves a change on this tab.": "O launcher reinicia quando uma alteração neste separador é guardada.",
     "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Não foi possível mover a pasta para\n{0}\nO jogo continua a usar\n{1}",
-    "Downloading the update...": "A transferir a atualização..."
+    "Downloading the update...": "A transferir a atualização...",
+    "Graphics Settings": "Definições gráficas",
+    "Some changes take effect the next time the game starts.": "Algumas alterações só terão efeito no próximo arranque do jogo."
   }
 }

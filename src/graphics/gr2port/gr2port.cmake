@@ -35,6 +35,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/glass.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.h
+    ${CMAKE_CURRENT_LIST_DIR}/graphics_menu.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/graphics_menu.h
     ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
     ${CMAKE_CURRENT_LIST_DIR}/hooks.h
     ${CMAKE_CURRENT_LIST_DIR}/imgui_relay.cpp

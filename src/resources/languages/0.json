@@ -293,6 +293,8 @@
     "Update": "アップデート",
     "Not Now": "後で",
     "Downloading the update...": "アップデートをダウンロード中...",
-    "The update could not be installed.": "アップデートをインストールできませんでした。"
+    "The update could not be installed.": "アップデートをインストールできませんでした。",
+    "Graphics Settings": "グラフィック設定",
+    "Some changes take effect the next time the game starts.": "一部の変更は次回ゲーム起動時に反映されます。"
   }
 }

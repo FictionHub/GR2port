@@ -293,6 +293,8 @@
     "Update": "更新",
     "Not Now": "稍後",
     "Downloading the update...": "正在下載更新...",
-    "The update could not be installed.": "無法安裝更新。"
+    "The update could not be installed.": "無法安裝更新。",
+    "Graphics Settings": "圖形設定",
+    "Some changes take effect the next time the game starts.": "部分變更將在下次啟動遊戲時生效。"
   }
 }

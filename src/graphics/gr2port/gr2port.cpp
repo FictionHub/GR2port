@@ -17,6 +17,7 @@
 #include "graphics/gr2port/float_spin.h"
 #include "graphics/gr2port/frame_graph_draws.h"
 #include "graphics/gr2port/gr2port.h"
+#include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/gravity_kick.h"
 #include "graphics/gr2port/gravity_slide.h"
 #include "graphics/gr2port/hair_flutter.h"
@@ -120,7 +121,9 @@ void Install(VAddr module_base) {
     CameraReach::Install(module_base, c, StubAreaSize);
     Timeline::Install(module_base, c, StubAreaSize);
     PlayerControl::Install(module_base, c, StubAreaSize);
-    ExitRows::Install(module_base, c, StubAreaSize);
+    if (ExitRows::Install(module_base, c, StubAreaSize)) {
+        GraphicsMenu::Install(module_base, c, StubAreaSize);
+    }
     MobFloat::Install(module_base, c, StubAreaSize);
     HairFlutter::Install(module_base, c, StubAreaSize);
     GravityKick::Install(module_base, c, StubAreaSize);

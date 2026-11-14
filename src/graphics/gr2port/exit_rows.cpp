@@ -15,6 +15,7 @@
 #include "core/language/language.h"
 
 #include "graphics/gr2port/exit_rows.h"
+#include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/menu_kit.h"
 
@@ -237,6 +238,10 @@ std::mutex g_records_mutex;
 std::array<std::vector<u8>, Records.size()> g_records;
 
 u64 PS4_SYSV_ABI OnFindText(u64 texts, const char* key) {
+    if (key != nullptr &&
+        std::strncmp(key, GraphicsMenu::KeyPrefix, sizeof(GraphicsMenu::KeyPrefix) - 1) == 0) {
+        return GraphicsMenu::FindText(texts, key, g_find_text);
+    }
     if (key == nullptr || std::strncmp(key, KeyPrefix, sizeof(KeyPrefix) - 1) != 0) {
         return g_find_text(texts, key);
     }
@@ -393,6 +398,7 @@ void PS4_SYSV_ABI OnTickButton(Button* button) {
 
 void PS4_SYSV_ABI OnDrawClip(u64 handle, u64 context) {
     g_draw_clip(handle, context);
+    GraphicsMenu::AfterDrawClip(handle, context, g_draw_clip);
     for (const Row* const row : {&g_page, &g_title}) {
         if (row->made && row->anchor != nullptr && handle == row->anchor->handle &&
             row->button.state != ButtonLoading && row->button.state != ButtonHidden) {

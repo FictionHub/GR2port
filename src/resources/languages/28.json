@@ -293,6 +293,8 @@
     "Update": "Cập nhật",
     "Not Now": "Để sau",
     "Downloading the update...": "Đang tải bản cập nhật...",
-    "The update could not be installed.": "Không thể cài đặt bản cập nhật."
+    "The update could not be installed.": "Không thể cài đặt bản cập nhật.",
+    "Graphics Settings": "Cài đặt đồ họa",
+    "Some changes take effect the next time the game starts.": "Một số thay đổi sẽ có hiệu lực vào lần khởi động trò chơi tiếp theo."
   }
 }

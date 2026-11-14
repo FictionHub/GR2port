@@ -293,6 +293,8 @@
     "Update": "Updaten",
     "Not Now": "Niet nu",
     "Downloading the update...": "Update downloaden...",
-    "The update could not be installed.": "De update kon niet worden geïnstalleerd."
+    "The update could not be installed.": "De update kon niet worden geïnstalleerd.",
+    "Graphics Settings": "Grafische instellingen",
+    "Some changes take effect the next time the game starts.": "Sommige wijzigingen gaan pas in wanneer de game opnieuw start."
   }
 }

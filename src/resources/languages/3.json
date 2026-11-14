@@ -293,6 +293,8 @@
     "Update": "Actualizar",
     "Not Now": "Ahora no",
     "Downloading the update...": "Descargando la actualización...",
-    "The update could not be installed.": "No se pudo instalar la actualización."
+    "The update could not be installed.": "No se pudo instalar la actualización.",
+    "Graphics Settings": "Ajustes gráficos",
+    "Some changes take effect the next time the game starts.": "Algunos cambios se aplicarán la próxima vez que se inicie el juego."
   }
 }

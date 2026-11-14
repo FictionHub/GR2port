@@ -14,6 +14,7 @@
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/device.h"
+#include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/upscaler.h"
 
@@ -338,6 +339,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
              "dynamic blend {}, driver {} {}",
              properties.deviceName.data(), d.queue_family, d.checkpoints, d.device_fault,
              d.dynamic_blend, driver.driverName.data(), driver.driverInfo.data());
+    GraphicsMenu::SetGpuVendor(properties.vendorID);
     LoadPipelineCache(d);
     return true;
 }

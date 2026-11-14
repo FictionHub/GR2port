@@ -293,6 +293,8 @@
     "Update": "อัปเดต",
     "Not Now": "ไว้ทีหลัง",
     "Downloading the update...": "กำลังดาวน์โหลดอัปเดต...",
-    "The update could not be installed.": "ไม่สามารถติดตั้งอัปเดตได้"
+    "The update could not be installed.": "ไม่สามารถติดตั้งอัปเดตได้",
+    "Graphics Settings": "การตั้งค่ากราฟิก",
+    "Some changes take effect the next time the game starts.": "การเปลี่ยนแปลงบางอย่างจะมีผลเมื่อเริ่มเกมครั้งถัดไป"
   }
 }
