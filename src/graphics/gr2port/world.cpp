@@ -353,18 +353,16 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
                            CreateSurfacePipeline(device, depth_format, WORLD_ALPHA_FRAG, Back),
                            CreateSurfacePipeline(device, depth_format, WORLD_ALPHA_FRAG, None)};
     const std::array decal_sets{Textures::SetLayout(), g_set_layout};
-    if (g_draw_decals) {
-        g_decals = CreateGraphicsPipeline(device, {
-                                                      .vertex = WORLD_DECAL_VERT,
-                                                      .fragment = WORLD_DECAL_FRAG,
-                                                      .colors = SurfaceFormats,
-                                                      .cull = vk::CullModeFlagBits::eFront,
-                                                      .alpha_blend = true,
-                                                      .keep_target_alpha = true,
-                                                      .push_constant_bytes = sizeof(DecalPush),
-                                                      .set_layouts = decal_sets,
-                                                  });
-    }
+    g_decals = CreateGraphicsPipeline(device, {
+                                                  .vertex = WORLD_DECAL_VERT,
+                                                  .fragment = WORLD_DECAL_FRAG,
+                                                  .colors = SurfaceFormats,
+                                                  .cull = vk::CullModeFlagBits::eFront,
+                                                  .alpha_blend = true,
+                                                  .keep_target_alpha = true,
+                                                  .push_constant_bytes = sizeof(DecalPush),
+                                                  .set_layouts = decal_sets,
+                                              });
     const std::array light_sets{Textures::SetLayout(), Shadows::SetLayout(), g_set_layout};
     g_light = CreateGraphicsPipeline(device, {
                                                  .vertex = FULLSCREEN_VERT,
@@ -393,9 +391,17 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
         CreateComputePipeline(device, OCCLUSION_DEPTH_COMP, sizeof(s32), depth_level_sets);
     return std::ranges::all_of(g_surface_pipelines,
                                [](const Pipeline& pipeline) { return !!pipeline.pipeline; }) &&
-           (g_decals.pipeline || !g_draw_decals) && g_light.pipeline && g_lines_pipeline.pipeline &&
+           g_decals.pipeline && g_light.pipeline && g_lines_pipeline.pipeline &&
            g_occlusion_pipeline.pipeline && g_depth_level_pipeline.pipeline &&
            Metaballs::Start(device, memory, depth_format);
+}
+
+void Choose(bool decals) {
+    g_draw_decals = decals;
+}
+
+void ClearHistories() {
+    g_lines_cleared = false;
 }
 
 bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_depth) {

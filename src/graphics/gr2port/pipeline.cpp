@@ -43,7 +43,7 @@ constexpr std::chrono::seconds ReportPeriod{30};
 constexpr std::chrono::seconds LongBuild{10};
 // The pipelines a start makes before the game runs, for the splash's percentage. The line "the
 // game starts after ... pipelines" of a log gives the number to keep here.
-constexpr u32 ExpectedPipelines = 335;
+constexpr u32 ExpectedPipelines = 338;
 
 vk::ShaderModule CreateModule(const Device& d, std::span<const u32> code) {
     const vk::ShaderModuleCreateInfo info{

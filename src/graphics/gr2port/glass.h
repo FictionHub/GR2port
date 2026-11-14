@@ -16,9 +16,12 @@ struct Image;
 // Without glass refraction the panes blend over the scene in two passes and read no copy.
 namespace Gr2Port::Glass {
 
-/// After Textures::Start and Shadows::Start: creates the pipelines the glass refraction setting
-/// chooses.
+/// After Textures::Start and Shadows::Start: creates the pipelines with glass refraction and
+/// without, and takes the setting's choice.
 bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Format depth_format);
+
+/// Render thread, between frames: whether the panes refract the scene's copy.
+void Choose(bool refraction);
 
 /// With the GPU idle: creates the scene's copy at extent.
 bool Resize(vk::Extent2D extent);

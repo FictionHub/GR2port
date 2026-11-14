@@ -49,7 +49,9 @@ std::array<vk::DescriptorSet, 2> g_blur_sets;
 Pipeline g_compress;
 Pipeline g_tile;
 Pipeline g_neighbor;
+// The reconstruction, and the one of motion blur Low.
 Pipeline g_blur;
+Pipeline g_blur_low;
 Image g_compressed;
 Image g_tile_max;
 Image g_neighbor_max;
@@ -136,9 +138,10 @@ void Reconstruct(vk::CommandBuffer cmd, vk::DescriptorSet set, vk::ImageView tar
                     dl);
     cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
     const u64 constants = address + Scene::MotionBlurOffset + BlurConstantsOffset;
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_blur.pipeline, dl);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_blur.layout, 0, set, {}, dl);
-    cmd.pushConstants(g_blur.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(constants),
+    const Pipeline& blur = g_low ? g_blur_low : g_blur;
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, blur.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, blur.layout, 0, set, {}, dl);
+    cmd.pushConstants(blur.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(constants),
                       &constants, dl);
     cmd.draw(3, 1, 0, 0, dl);
     cmd.endRendering(dl);
@@ -224,24 +227,27 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     g_tile = CreateComputePipeline(device, MOTION_BLUR_TILE_COMP, sizeof(u64), max_sets);
     g_neighbor = CreateComputePipeline(device, MOTION_BLUR_NEIGHBOR_COMP, 0, max_sets);
     g_low = Settings::Get().graphics.motion_blur == Settings::Quality::Low;
-    std::vector<u32> low_code;
-    if (g_low) {
-        // The reconstruction's constant id 0, DoubleStep.
-        low_code = WithConstantTrue(MOTION_BLUR_FRAG, 0);
-        if (low_code.empty()) {
-            return false;
-        }
+    // The reconstruction's constant id 0, DoubleStep.
+    const std::vector<u32> low_code = WithConstantTrue(MOTION_BLUR_FRAG, 0);
+    if (low_code.empty()) {
+        return false;
     }
-    const std::span<const u32> fragment =
-        g_low ? std::span<const u32>{low_code} : std::span<const u32>{MOTION_BLUR_FRAG};
-    g_blur = CreateGraphicsPipeline(device, {
-                                                .vertex = MOTION_BLUR_VERT,
-                                                .fragment = fragment,
-                                                .color = scene_format,
-                                                .push_constant_bytes = sizeof(u64),
-                                                .set_layouts = blur_sets,
-                                            });
-    return g_compress.pipeline && g_tile.pipeline && g_neighbor.pipeline && g_blur.pipeline;
+    GraphicsPipelineInfo info{
+        .vertex = MOTION_BLUR_VERT,
+        .fragment = MOTION_BLUR_FRAG,
+        .color = scene_format,
+        .push_constant_bytes = sizeof(u64),
+        .set_layouts = blur_sets,
+    };
+    g_blur = CreateGraphicsPipeline(device, info);
+    info.fragment = low_code;
+    g_blur_low = CreateGraphicsPipeline(device, info);
+    return g_compress.pipeline && g_tile.pipeline && g_neighbor.pipeline && g_blur.pipeline &&
+           g_blur_low.pipeline;
+}
+
+void Choose(bool low) {
+    g_low = low;
 }
 
 bool Resize(vk::Extent2D extent, vk::ImageView velocity, vk::ImageView depth,
@@ -254,12 +260,12 @@ bool Resize(vk::Extent2D extent, vk::ImageView velocity, vk::ImageView depth,
     g_compressed = g_memory->CreateImage(WorkFormat, extent, Work, Color);
     g_tile_max = g_memory->CreateImage(WorkFormat, Tiles, Work, Color);
     g_neighbor_max = g_memory->CreateImage(WorkFormat, Tiles, Work, Color);
-    vk::ImageUsageFlags second_usage =
-        vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
-    if (g_low) {
-        second_usage |= vk::ImageUsageFlagBits::eTransferDst;
-    }
-    g_second = g_memory->CreateImage(g_scene_format, extent, second_usage, Color);
+    // The reconstruction draws into the second image; motion blur Low copies the scene into it.
+    g_second = g_memory->CreateImage(g_scene_format, extent,
+                                     vk::ImageUsageFlagBits::eColorAttachment |
+                                         vk::ImageUsageFlagBits::eSampled |
+                                         vk::ImageUsageFlagBits::eTransferDst,
+                                     Color);
     if (!g_compressed.image || !g_tile_max.image || !g_neighbor_max.image || !g_second.image) {
         return false;
     }

@@ -16,6 +16,9 @@ namespace Gr2Port::MotionBlur {
 /// one reconstruction from a copy of the scene, its taps twice as far apart, replaces the two.
 bool Start(const Device& device, Memory& memory, vk::Format scene_format);
 
+/// Render thread, between frames: whether the blur is motion blur Low's.
+void Choose(bool low);
+
 /// With the GPU idle: creates the images at extent. velocity is read in the general layout, the
 /// scene's and the characters' depth in the depth read-only layout; scene is the colour it blurs.
 bool Resize(vk::Extent2D extent, vk::ImageView velocity, vk::ImageView depth,

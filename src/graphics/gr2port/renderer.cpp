@@ -266,6 +266,7 @@ private:
     bool Recreate();
     bool ResizeScene(vk::Extent2D extent);
     bool SizeScene(const Scene::Header& header, const u8* packet);
+    void TakeSettings();
 
     Device d;
     std::unique_ptr<Memory> memory;
@@ -311,9 +312,15 @@ private:
     bool needs_swapchain = false;
     Stats stats;
     Published published;
-    // The launcher's graphics settings, read once at start.
-    Settings::Graphics graphics = Settings::Get().graphics;
+    // The settings the game started with, and what the passes run with: the stored settings
+    // where they change while the game runs.
+    const Settings::Values started = Settings::Get();
+    Settings::Graphics graphics = started.graphics;
+    Settings::VSync vsync = started.display.vsync;
 };
+
+// Set when the stored settings changed; the render thread takes them before its next frame.
+std::atomic<bool> g_settings_changed{false};
 
 void Barrier(const Device& d, vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from,
              vk::ImageLayout to, vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
@@ -526,6 +533,42 @@ bool Thread::Recreate() {
         SavePipelineCache(d);
     }
     return !needs_swapchain;
+}
+
+// Takes the stored settings where they change while the game runs. The GPU is idle meanwhile:
+// the frames in flight drew with the earlier ones.
+void Thread::TakeSettings() {
+    const Settings::Values live = Live(started, Settings::Get());
+    if (d.device.waitIdle(d.dispatch) != vk::Result::eSuccess) {
+        return;
+    }
+    Settings::Graphics now = live.graphics;
+    if (!Shadows::Choose(now.shadows)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: no memory for the shadow maps of the chosen quality");
+        now.shadows = graphics.shadows;
+    }
+    if (now.anisotropic_filtering != graphics.anisotropic_filtering &&
+        !Textures::SetAnisotropy(now.anisotropic_filtering)) {
+        now.anisotropic_filtering = graphics.anisotropic_filtering;
+    }
+    Look::Choose(now.bloom, now.antialiasing);
+    World::Choose(now.decals);
+    // The light reads the last lines and the last occlusion.
+    constexpr auto Off = Settings::Quality::Off;
+    if ((graphics.outlines && !now.outlines) ||
+        (graphics.ambient_occlusion != Off && now.ambient_occlusion == Off)) {
+        World::ClearHistories();
+    }
+    Glass::Choose(now.glass_refraction);
+    Fog::Choose(now.fog_shadows);
+    MotionBlur::Choose(now.motion_blur == Settings::Quality::Low);
+    memory->CapBudget(now.texture_streaming_mb);
+    if (live.display.vsync != vsync) {
+        vsync = live.display.vsync;
+        needs_swapchain = true;
+    }
+    graphics = now;
+    LOG_INFO(Render_Vulkan, "GR2port: the renderer took the graphics settings");
 }
 
 // Makes the scene's images for a picture of output. When one is not made, the scene has none.
@@ -1419,6 +1462,9 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     // One read of the header: the packet is write-combined.
     Scene::Header header;
     std::memcpy(&header, packet.data, sizeof(header));
+    if (g_settings_changed.exchange(false, std::memory_order_acquire)) {
+        TakeSettings();
+    }
     if ((needs_swapchain && !Recreate()) || !SizeScene(header, packet.data)) {
         SceneRing::Release(packet.slot);
         return;
@@ -1774,6 +1820,37 @@ void Thread::Run() {
 }
 
 } // namespace
+
+Settings::Values Live(const Settings::Values& started, const Settings::Values& wanted) {
+    Settings::Values live = started;
+    Settings::Graphics& to = live.graphics;
+    const Settings::Graphics& from = wanted.graphics;
+    to.shadows = from.shadows;
+    to.fog_shadows = from.fog_shadows;
+    // The occlusion's images and its pipeline keep the size the game started with: the scene's
+    // for Original, half of it for the others.
+    if (from.ambient_occlusion == Settings::Quality::Off) {
+        to.ambient_occlusion = Settings::Quality::Off;
+    } else {
+        to.ambient_occlusion = started.graphics.ambient_occlusion == Settings::Quality::Original
+                                   ? Settings::Quality::Original
+                                   : Settings::Quality::Medium;
+    }
+    to.motion_blur = from.motion_blur;
+    to.antialiasing = from.antialiasing;
+    to.bloom = from.bloom;
+    to.outlines = from.outlines;
+    to.decals = from.decals;
+    to.glass_refraction = from.glass_refraction;
+    to.anisotropic_filtering = from.anisotropic_filtering;
+    to.texture_streaming_mb = from.texture_streaming_mb;
+    live.display.vsync = wanted.display.vsync;
+    return live;
+}
+
+void SettingsChanged() {
+    g_settings_changed.store(true, std::memory_order_release);
+}
 
 void Start() {
     // The game starts once Init has built its pipelines.

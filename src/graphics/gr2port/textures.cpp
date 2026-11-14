@@ -904,6 +904,60 @@ bool CreateDetile(const Device& d) {
     return true;
 }
 
+} // namespace
+
+bool SetAnisotropy(u32 anisotropy) {
+    const Device& d = *g_device;
+    const auto& dl = d.dispatch;
+    vk::SamplerCreateInfo sampler_info{
+        .magFilter = vk::Filter::eLinear,
+        .minFilter = vk::Filter::eLinear,
+        .mipmapMode = vk::SamplerMipmapMode::eLinear,
+        .addressModeU = vk::SamplerAddressMode::eRepeat,
+        .addressModeV = vk::SamplerAddressMode::eRepeat,
+        .addressModeW = vk::SamplerAddressMode::eRepeat,
+        // The game's loader sets this bias and ratio on every texture it loads. A scene drawn
+        // below the picture's size for the upscaler takes the upscaler's bias too.
+        .mipLodBias = -51.0f / 256.0f + Upscaler::LodBias(),
+        // The game's ratio is 2; the graphics settings choose another or none.
+        .anisotropyEnable = anisotropy != 0,
+        .maxAnisotropy = std::min(static_cast<float>(anisotropy),
+                                  d.gpu.getProperties(dl).limits.maxSamplerAnisotropy),
+        .maxLod = VK_LOD_CLAMP_NONE,
+    };
+    const vk::Sampler sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
+    // The game clamps its decal textures and cube maps to their edges.
+    sampler_info.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+    sampler_info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+    sampler_info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+    const vk::Sampler clamp_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
+    if (!sampler || !clamp_sampler) {
+        d.device.destroySampler(sampler, nullptr, dl);
+        d.device.destroySampler(clamp_sampler, nullptr, dl);
+        return false;
+    }
+    d.device.destroySampler(g_sampler, nullptr, dl);
+    d.device.destroySampler(g_clamp_sampler, nullptr, dl);
+    g_sampler = sampler;
+    g_clamp_sampler = clamp_sampler;
+    const std::array<vk::DescriptorImageInfo, 2> infos{
+        {{.sampler = g_sampler}, {.sampler = g_clamp_sampler}}};
+    std::array<vk::WriteDescriptorSet, 2> writes;
+    for (u32 i = 0; i < writes.size(); i++) {
+        writes[i] = {
+            .dstSet = g_set,
+            .dstBinding = 1 + i,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eSampler,
+            .pImageInfo = &infos[i],
+        };
+    }
+    d.device.updateDescriptorSets(writes, {}, dl);
+    return true;
+}
+
+namespace {
+
 bool CreateSet(const Device& d) {
     const auto& dl = d.dispatch;
     const auto properties =
@@ -923,36 +977,13 @@ bool CreateSet(const Device& d) {
                     Descriptors);
     }
     const u32 descriptors = g_streaming ? Descriptors : Capacity;
-    const u32 anisotropy = Settings::Get().graphics.anisotropic_filtering;
-    vk::SamplerCreateInfo sampler_info{
-        .magFilter = vk::Filter::eLinear,
-        .minFilter = vk::Filter::eLinear,
-        .mipmapMode = vk::SamplerMipmapMode::eLinear,
-        .addressModeU = vk::SamplerAddressMode::eRepeat,
-        .addressModeV = vk::SamplerAddressMode::eRepeat,
-        .addressModeW = vk::SamplerAddressMode::eRepeat,
-        // The game's loader sets this bias and ratio on every texture it loads. A scene drawn
-        // below the picture's size for the upscaler takes the upscaler's bias too.
-        .mipLodBias = -51.0f / 256.0f + Upscaler::LodBias(),
-        // The game's ratio is 2; the graphics settings choose another or none.
-        .anisotropyEnable = anisotropy != 0,
-        .maxAnisotropy = std::min(static_cast<float>(anisotropy),
-                                  d.gpu.getProperties(dl).limits.maxSamplerAnisotropy),
-        .maxLod = VK_LOD_CLAMP_NONE,
-    };
-    g_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
-    // The game clamps its decal textures and cube maps to their edges.
-    sampler_info.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-    sampler_info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-    sampler_info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-    g_clamp_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
     constexpr vk::ShaderStageFlags Stages = vk::ShaderStageFlagBits::eVertex |
                                             vk::ShaderStageFlagBits::eFragment |
                                             vk::ShaderStageFlagBits::eCompute;
     const std::array<vk::DescriptorSetLayoutBinding, 3> bindings{{
         {0, vk::DescriptorType::eSampledImage, descriptors, Stages},
-        {1, vk::DescriptorType::eSampler, 1, Stages, &g_sampler},
-        {2, vk::DescriptorType::eSampler, 1, Stages, &g_clamp_sampler},
+        {1, vk::DescriptorType::eSampler, 1, Stages},
+        {2, vk::DescriptorType::eSampler, 1, Stages},
     }};
     const std::array<vk::DescriptorBindingFlags, 3> binding_flags{
         vk::DescriptorBindingFlagBits::ePartiallyBound |
@@ -984,7 +1015,7 @@ bool CreateSet(const Device& d) {
                                         .pPoolSizes = sizes.data()},
                                        nullptr, dl)
                  .value;
-    if (!g_sampler || !g_clamp_sampler || !g_set_layout || !g_pool) {
+    if (!g_set_layout || !g_pool) {
         return false;
     }
     const auto [result, sets] = d.device.allocateDescriptorSets(
@@ -993,7 +1024,7 @@ bool CreateSet(const Device& d) {
         return false;
     }
     g_set = sets.front();
-    return true;
+    return SetAnisotropy(Settings::Get().graphics.anisotropic_filtering);
 }
 
 // Clears the white texture once, in the first frame.

@@ -62,6 +62,9 @@ public:
         u64 budget;
         u64 own;
     };
+    /// Render thread: caps the budget as the Texture Streaming setting of megabytes does, from
+    /// the next Refresh on.
+    void CapBudget(u64 megabytes);
     /// Render thread, once per frame: reads the budget again.
     void Refresh(u64 frame);
     Budget DeviceBudget() const {

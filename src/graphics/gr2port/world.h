@@ -33,6 +33,13 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
 /// light pass to sample; character_depth holds the characters' depth alone, for the occlusion.
 bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_depth);
 
+/// Render thread, between frames: whether the decals draw.
+void Choose(bool decals);
+
+/// Render thread, between frames: the next frame starts from clear lines and occlusion, as the
+/// first frame after Resize does. The light reads both, so a pass that stops leaves them clear.
+void ClearHistories();
+
 /// After Resize: the view of the albedo surface.
 vk::ImageView AlbedoView();
 

@@ -80,6 +80,8 @@ Buffer g_staging;
 // The guest addresses the noise volumes came from; 0 until copied.
 std::array<u64, Noises> g_noise_source{};
 bool g_cleared = false;
+// False until the frame after the sun's shadow pass stopped clears its volumes.
+bool g_shadow_cleared = true;
 // Without the sun shadow setting the shadow pass never runs: the scattering reads shadow volume 0,
 // which the first clear leaves all sunlit.
 bool g_sun_shadow = true;
@@ -338,6 +340,28 @@ void Clear(vk::CommandBuffer cmd) {
                        vk::PipelineStageFlagBits2::eFragmentShader);
 }
 
+// Leaves the sun's shadow of every cell clear: all sunlit.
+void ClearShadow(vk::CommandBuffer cmd) {
+    const auto& dl = g_device->dispatch;
+    const vk::MemoryBarrier2 read{
+        .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader |
+                        vk::PipelineStageFlagBits2::eFragmentShader,
+        .srcAccessMask = vk::AccessFlagBits2::eNone,
+        .dstStageMask = vk::PipelineStageFlagBits2::eClear,
+        .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &read}, dl);
+    const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+    for (const Image& image : g_shadow) {
+        cmd.clearColorImage(image.image, vk::ImageLayout::eGeneral,
+                            vk::ClearColorValue{.float32 = std::array{1.0f, 1.0f, 1.0f, 1.0f}},
+                            range, dl);
+    }
+    ComputeBarrier(cmd, vk::PipelineStageFlagBits2::eClear, vk::AccessFlagBits2::eTransferWrite,
+                   vk::PipelineStageFlagBits2::eComputeShader |
+                       vk::PipelineStageFlagBits2::eFragmentShader);
+}
+
 // Copies the game's noise volumes once they exist; their bytes stay as the constructor made them.
 void CopyNoise(vk::CommandBuffer cmd, const Scene::Header& header) {
     bool copied = false;
@@ -470,10 +494,8 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     };
     g_cells_pipeline =
         CreateComputePipeline(device, FOG_DENSITY_COMP, sizeof(CellPush), cell_sets, &grid_info);
-    if (g_sun_shadow) {
-        g_shadow_pipeline = CreateComputePipeline(device, FOG_SHADOW_COMP, sizeof(CellPush),
-                                                  shadow_sets, &grid_info);
-    }
+    g_shadow_pipeline =
+        CreateComputePipeline(device, FOG_SHADOW_COMP, sizeof(CellPush), shadow_sets, &grid_info);
     g_scatter =
         CreateComputePipeline(device, FOG_SCATTER_COMP, sizeof(FogPush), scatter_sets, &grid_info);
     g_apply = CreateGraphicsPipeline(device, {
@@ -485,8 +507,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
                                                  .set_layouts = apply_sets,
                                              });
     g_enabled = g_bake.pipeline && g_darkness_pipeline.pipeline && g_cells_pipeline.pipeline &&
-                (!g_sun_shadow || g_shadow_pipeline.pipeline) && g_scatter.pipeline &&
-                g_apply.pipeline;
+                g_shadow_pipeline.pipeline && g_scatter.pipeline && g_apply.pipeline;
     return g_enabled;
 }
 
@@ -499,6 +520,14 @@ void Resize(vk::ImageView depth) {
           vk::ImageLayout::eDepthStencilReadOnlyOptimal);
 }
 
+void Choose(bool sun_shadow) {
+    // The scatter reads the last shadow, so a shadow pass that stops leaves every cell sunlit.
+    if (g_sun_shadow && !sun_shadow) {
+        g_shadow_cleared = false;
+    }
+    g_sun_shadow = sun_shadow;
+}
+
 void RecordVolumes(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
     if (!g_enabled) {
         return;
@@ -507,7 +536,12 @@ void RecordVolumes(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
     const auto compute = vk::PipelineBindPoint::eCompute;
     if (!g_cleared) {
         g_cleared = true;
+        g_shadow_cleared = true;
         Clear(cmd);
+    }
+    if (!g_shadow_cleared) {
+        g_shadow_cleared = true;
+        ClearShadow(cmd);
     }
     // The last frame's passes read what this frame's write.
     ComputeBarrier(cmd,

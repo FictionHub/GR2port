@@ -42,6 +42,9 @@ using GlowDraws = std::function<void(vk::CommandBuffer cmd, vk::Extent2D extent)
 /// After Textures::Start: creates the pipelines and the meter. depth_format is the scene's.
 bool Start(const Device& device, Memory& memory, vk::Format depth_format);
 
+/// Render thread, between frames: whether the bloom and the antialiasing run.
+void Choose(bool bloom, bool antialiasing);
+
 /// With the GPU idle: creates the scene's colour image at extent, the bloom's images, the
 /// antialias images at output, and the picture's pipeline for picture_format. depth is the scene's
 /// depth, for the bloom to read. output differs from extent only with an upscaler, after its

@@ -41,6 +41,7 @@ struct PushConstants {
 };
 
 const Device* g_device = nullptr;
+Memory* g_memory = nullptr;
 // The first two cascades' layers, and the last cascade's map.
 Image g_maps;
 Image g_last_map;
@@ -121,6 +122,11 @@ bool CreateSet(const Device& d) {
         return false;
     }
     g_set = sets.front();
+    return true;
+}
+
+// Points the set at the maps.
+void WriteSet(const Device& d) {
     const vk::DescriptorImageInfo array_info{
         .imageView = g_maps.view,
         .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
@@ -139,8 +145,7 @@ bool CreateSet(const Device& d) {
             .pImageInfo = b < 2 ? &array_info : &last_info,
         };
     }
-    d.device.updateDescriptorSets(writes, {}, dl);
-    return true;
+    d.device.updateDescriptorSets(writes, {}, d.dispatch);
 }
 
 void Transition(vk::CommandBuffer cmd, vk::ImageLayout from, vk::ImageLayout to,
@@ -173,23 +178,39 @@ void MarkPart(vk::CommandBuffer cmd, u32 cascade, u32 part) {
 
 } // namespace
 
-bool Start(const Device& device, Memory& memory) {
-    g_device = &device;
-    const auto& dl = device.dispatch;
-    const Settings::Quality quality = Settings::Get().graphics.shadows;
+bool Choose(Settings::Quality quality) {
+    const Device& d = *g_device;
+    const auto& dl = d.dispatch;
+    const bool casters = quality != Settings::Quality::Off;
     const auto& sides = MapSides[std::min(static_cast<u32>(quality), 2u)];
-    g_array_size = sides[0];
-    g_last_size = sides[1];
-    g_draw_casters = quality != Settings::Quality::Off;
+    // Without casters the maps only clear, at the sizes they have.
+    if (g_maps.image && (!casters || (sides[0] == g_array_size && sides[1] == g_last_size))) {
+        g_draw_casters = casters;
+        return true;
+    }
     const vk::ImageUsageFlags usage =
         vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
-    g_maps = memory.CreateImage(DepthFormat, vk::Extent2D{g_array_size, g_array_size}, usage,
-                                vk::ImageAspectFlagBits::eDepth, LastCascade);
-    g_last_map = memory.CreateImage(DepthFormat, vk::Extent2D{g_last_size, g_last_size}, usage,
-                                    vk::ImageAspectFlagBits::eDepth);
-    if (!g_maps.image || !g_last_map.image) {
+    Image maps = g_memory->CreateImage(DepthFormat, vk::Extent2D{sides[0], sides[0]}, usage,
+                                       vk::ImageAspectFlagBits::eDepth, LastCascade);
+    Image last_map = g_memory->CreateImage(DepthFormat, vk::Extent2D{sides[1], sides[1]}, usage,
+                                           vk::ImageAspectFlagBits::eDepth);
+    if (!maps.image || !last_map.image) {
+        g_memory->Destroy(maps);
+        g_memory->Destroy(last_map);
         return false;
     }
+    for (u32 c = 0; c < LastCascade; c++) {
+        if (g_layers[c]) {
+            d.device.destroyImageView(g_layers[c], nullptr, dl);
+        }
+    }
+    g_memory->Destroy(g_maps);
+    g_memory->Destroy(g_last_map);
+    g_maps = maps;
+    g_last_map = last_map;
+    g_array_size = sides[0];
+    g_last_size = sides[1];
+    g_draw_casters = casters;
     g_layers[LastCascade] = g_last_map.view;
     for (u32 c = 0; c < LastCascade; c++) {
         const vk::ImageViewCreateInfo info{
@@ -198,10 +219,17 @@ bool Start(const Device& device, Memory& memory) {
             .format = DepthFormat,
             .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, c, 1},
         };
-        g_layers[c] = device.device.createImageView(info, nullptr, dl).value;
+        g_layers[c] = d.device.createImageView(info, nullptr, dl).value;
     }
-    if (!CreateSet(device)) {
-        LOG_ERROR(Render_Vulkan, "GR2port: the shadow cascades' set failed");
+    WriteSet(d);
+    return true;
+}
+
+bool Start(const Device& device, Memory& memory) {
+    g_device = &device;
+    g_memory = &memory;
+    if (!CreateSet(device) || !Choose(Settings::Get().graphics.shadows)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the shadow cascades' set or maps failed");
         return false;
     }
     const std::array texture_set{Textures::SetLayout()};

@@ -64,8 +64,8 @@ vk::DescriptorSet g_set;
 // With refraction, one pass over the copy; without, the pass that multiplies the scene by what
 // shows through, then the one that adds the panes' light.
 bool g_refraction = true;
-std::array<Pipeline, 2> g_pipelines;
-u32 g_passes = 0;
+Pipeline g_refracting;
+std::array<Pipeline, 2> g_blending;
 
 // The program with its constant id 0 set to value, as a specialization sets it; the graphics
 // pipeline helper takes none. Empty when the program has no such 32-bit constant.
@@ -143,11 +143,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
         .set_layouts = set_layouts,
     };
     g_refraction = Settings::Get().graphics.glass_refraction;
-    if (g_refraction) {
-        g_pipelines[0] = CreateGraphicsPipeline(device, info);
-        g_passes = 1;
-        return !!g_pipelines[0].pipeline;
-    }
+    g_refracting = CreateGraphicsPipeline(device, info);
     // Without refraction the scene in the target is what shows through: the first pass multiplies
     // it by the panes' share and writes their depth, the second adds their light on that depth.
     const std::vector<u32> through = Specialized(GLASS_FRAG, ThroughOutput);
@@ -171,14 +167,17 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
     add.dstColorBlendFactor = vk::BlendFactor::eOne;
     info.fragment = through;
     info.blend = &multiply;
-    g_pipelines[0] = CreateGraphicsPipeline(device, info);
+    g_blending[0] = CreateGraphicsPipeline(device, info);
     info.fragment = light;
     info.blend = &add;
     info.depth_write = false;
     info.depth_compare = vk::CompareOp::eGreaterOrEqual;
-    g_pipelines[1] = CreateGraphicsPipeline(device, info);
-    g_passes = 2;
-    return g_pipelines[0].pipeline && g_pipelines[1].pipeline;
+    g_blending[1] = CreateGraphicsPipeline(device, info);
+    return g_refracting.pipeline && g_blending[0].pipeline && g_blending[1].pipeline;
+}
+
+void Choose(bool refraction) {
+    g_refraction = refraction;
 }
 
 bool Resize(vk::Extent2D extent) {
@@ -402,8 +401,10 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
     };
     const u64 commands = offset + Scene::CommandsOffset() +
                          u64{Scene::FirstCommand(header, List)} * sizeof(Scene::Command);
-    for (u32 pass = 0; pass < g_passes; pass++) {
-        const Pipeline& pipeline = g_pipelines[pass];
+    const std::span<const Pipeline> passes = g_refraction
+                                                 ? std::span<const Pipeline>{&g_refracting, 1}
+                                                 : std::span<const Pipeline>{g_blending};
+    for (const Pipeline& pipeline : passes) {
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {}, dl);
         cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),

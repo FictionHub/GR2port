@@ -454,14 +454,22 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format) {
     g_antialias = CreateComputePipeline(device, ANTIALIAS_COMP, sizeof(u64), antialias_set);
     g_antialias_off = CreateComputePipeline(device, ANTIALIAS_OFF_COMP, 0, antialias_set);
     const Settings::Graphics& graphics = Settings::Get().graphics;
-    g_bloom_enabled = graphics.bloom;
-    g_antialias_enabled = graphics.antialiasing;
+    Choose(graphics.bloom, graphics.antialiasing);
     g_antialias_constants = memory.CreateBuffer(
         sizeof(AntialiasConstants), vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
     return g_sky.pipeline && g_luminance.pipeline && g_exposure.pipeline && g_extract.pipeline &&
            g_blur.pipeline && g_tonemap.pipeline && g_antialias.pipeline &&
            g_antialias_off.pipeline && g_glow_depth_copy.pipeline && g_glow.pipeline &&
            g_antialias_constants.mapped != nullptr;
+}
+
+void Choose(bool bloom, bool antialiasing) {
+    // The tonemap adds the last bloom, so a bloom that stops leaves its images clear.
+    if (g_bloom_enabled && !bloom) {
+        g_bloom_cleared = false;
+    }
+    g_bloom_enabled = bloom;
+    g_antialias_enabled = antialiasing;
 }
 
 bool Resize(vk::Extent2D extent, vk::Extent2D output, vk::Format picture_format,

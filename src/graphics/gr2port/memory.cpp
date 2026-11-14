@@ -105,11 +105,6 @@ bool Memory::Create() {
         LOG_ERROR(Render_Vulkan, "GR2port: no memory allocator");
         return false;
     }
-    // The Texture Streaming setting, or GR2PORT_VRAM_MB in the environment, which tests set.
-    u64 megabytes = Settings::Get().graphics.texture_streaming_mb;
-    if (const char* forced = std::getenv("GR2PORT_VRAM_MB"); forced != nullptr) {
-        megabytes = std::strtoull(forced, nullptr, 10);
-    }
     const vk::PhysicalDeviceProperties gpu = d.gpu.getProperties(d.dispatch);
     integrated = gpu.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
     allocation_limit = gpu.limits.maxMemoryAllocationCount;
@@ -125,18 +120,35 @@ bool Memory::Create() {
             side_types |= 1u << i;
         }
     }
+    CapBudget(Settings::Get().graphics.texture_streaming_mb);
+    return true;
+}
+
+void Memory::CapBudget(u64 megabytes) {
+    // GR2PORT_VRAM_MB in the environment, which tests set, replaces the setting.
+    if (const char* forced = std::getenv("GR2PORT_VRAM_MB"); forced != nullptr) {
+        megabytes = std::strtoull(forced, nullptr, 10);
+    }
+    u64 budget = ~u64{0};
     if (megabytes != 0) {
-        forced_budget = megabytes << 20;
+        budget = megabytes << 20;
+    } else if (integrated) {
+        budget = Settings::RamShare(InstalledRam());
+    }
+    if (budget == forced_budget) {
+        return;
+    }
+    forced_budget = budget;
+    if (megabytes != 0) {
         LOG_INFO(Render_Vulkan, "GR2port memory: device-local budget capped at {} MB", megabytes);
     } else if (integrated) {
-        const u64 installed = InstalledRam();
-        forced_budget = Settings::RamShare(installed);
         LOG_INFO(Render_Vulkan,
                  "GR2port memory: an integrated GPU draws from every heap, at most {} MB of the "
                  "{} MB of RAM",
-                 forced_budget >> 20, installed >> 20);
+                 forced_budget >> 20, InstalledRam() >> 20);
+    } else {
+        LOG_INFO(Render_Vulkan, "GR2port memory: device-local budget as the driver gives it");
     }
-    return true;
 }
 
 Buffer Memory::CreateBuffer(u64 size, vk::BufferUsageFlags usage, Placement placement,

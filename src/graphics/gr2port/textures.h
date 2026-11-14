@@ -48,6 +48,11 @@ void Prefetch(const VAddr* objects, u32 count);
 /// Any thread, once what Prefetch asked for has come: asks for what Get reads next of each.
 void PrefetchRecords(const VAddr* objects, u32 count);
 
+/// Render thread, with the GPU idle: gives the material textures' two samplers the anisotropic
+/// filtering of the setting's value: 0 for none, else the most samples. False when the samplers
+/// could not be made; the earlier ones then stay.
+bool SetAnisotropy(u32 anisotropy);
+
 /// Draw thread: the descriptor of the 2D texture a T# of 8 words describes, when it is ready, else
 /// 0. A T# of no texture object the hooks saw gets a texture of its own, converted like the others;
 /// dynamic says whether it is linear, as the textures the CPU writes each frame are, and needs

@@ -5,6 +5,7 @@
 
 #include "graphics/gr2port/device.h"
 #include "graphics/gr2port/scene.h"
+#include "graphics/gr2port/settings.h"
 
 namespace Gr2Port {
 class Memory;
@@ -19,6 +20,11 @@ inline constexpr vk::Format DepthFormat = vk::Format::eD16Unorm;
 
 /// Render thread: creates the cascade maps, their sampler and set, and the caster pipelines.
 bool Start(const Device& device, Memory& memory);
+
+/// Render thread, with the GPU idle: takes a shadow quality. Its casters draw unless it is Off,
+/// into maps of its sizes, made again when they differ. False when the maps have no memory; the
+/// cascades then stay as they were.
+bool Choose(Settings::Quality quality);
 
 /// Render thread, outside rendering: draws the casters of the packet at address into the
 /// cascades and leaves them for fragment and compute shaders to sample. The packet is at offset in
