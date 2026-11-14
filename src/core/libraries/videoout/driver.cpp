@@ -13,6 +13,7 @@
 #include "imgui/renderer/imgui_core.h"
 
 #include "graphics/gr2port/presenter.h"
+#include "graphics/gr2port/vblank.h"
 
 extern std::unique_ptr<Gr2Port::Presenter> presenter;
 
@@ -329,8 +330,8 @@ void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_
 }
 
 void VideoOutDriver::PresentThread(std::stop_token token) {
-    const std::chrono::nanoseconds vblank_period(1000000000 /
-                                                 EmulatorSettings.GetVblankFrequency());
+    const u32 frame_rate = EmulatorSettings.GetVblankFrequency();
+    std::chrono::nanoseconds vblank_period = Gr2Port::Vblank::Period(frame_rate);
 
     Common::SetCurrentThreadName("GR2port:PresentThread");
     Common::SetCurrentThreadRealtime(vblank_period);
@@ -348,6 +349,11 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
     };
 
     while (!token.stop_requested()) {
+        // GR2port: the period follows the monitor's refresh rate while presents wait for it.
+        if (const auto period = Gr2Port::Vblank::Period(frame_rate); period != vblank_period) {
+            vblank_period = period;
+            timer = Common::AccurateTimer{period};
+        }
         timer.Start();
 
         if (DebugState.IsGuestThreadsPaused()) {
