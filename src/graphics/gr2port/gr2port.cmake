@@ -43,6 +43,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/look.h
     ${CMAKE_CURRENT_LIST_DIR}/memory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/memory.h
+    ${CMAKE_CURRENT_LIST_DIR}/menu_kit.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/menu_kit.h
     ${CMAKE_CURRENT_LIST_DIR}/meshes.cpp
     ${CMAKE_CURRENT_LIST_DIR}/meshes.h
     ${CMAKE_CURRENT_LIST_DIR}/metaballs.cpp

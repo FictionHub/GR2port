@@ -16,12 +16,13 @@
 
 #include "graphics/gr2port/exit_rows.h"
 #include "graphics/gr2port/hooks.h"
+#include "graphics/gr2port/menu_kit.h"
 
 namespace Gr2Port::ExitRows {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
+using namespace MenuKit;
 
 // u64 FUN_015165c0(texts, key): the record of a text key in the language's bank, or 0.
 constexpr Hooks::Entry FindText{0x15165c0, 6, Hooks::FramePrologue};
@@ -52,17 +53,11 @@ constexpr VAddr TitleMakerEnd = 0x13775e0 + 5208;
 constexpr VAddr SlideIn = 0x1244810;
 // void FUN_01244920(button, char selected)
 constexpr VAddr Select = 0x1244920;
-// void FUN_013e0e20(float speed, float start, clip, u32 node, u32 animation)
-constexpr VAddr Play = 0x13e0e20;
 // void FUN_01394ed0(handle): ends a clip handle, which the heap then frees.
 constexpr VAddr EndClip = 0x1394ed0;
 constexpr VAddr HeapFree = 0x17f56b0;
 constexpr VAddr MutexLock = 0x17f6000;
 constexpr VAddr MutexUnlock = 0x17f6010;
-// void FUN_011e09b0(key, int kind, int choice): opens a dialog; kind 1 has Yes and No.
-constexpr VAddr OpenDialog = 0x11e09b0;
-// void FUN_014e0ea0(float volume, u32 sound, 0)
-constexpr VAddr PlaySound = 0x14e0ea0;
 // void FUN_0150cbd0(float* width, float* height, style, key): a text's size in the default style.
 constexpr VAddr MeasureText = 0x150cbd0;
 // void FUN_012f31e0(page): slides the page's rows and background out.
@@ -82,26 +77,6 @@ constexpr VAddr LiveObjects = 0x1ee2c88;
 constexpr u64 LiveFirst = 0x08;
 constexpr u64 LiveLast = 0x10;
 constexpr u64 LiveMutex = 0x20;
-// The open dialog's answer: -1 while it is open, then 0 for Yes and 1 for No.
-constexpr VAddr Dialog = 0x1eed678;
-constexpr u64 DialogAnswer = 0x10;
-// The pause menu, which holds the input its pages read.
-constexpr VAddr PauseMenu = 0x1eee178;
-constexpr u64 PauseMenuInput = 0xd0;
-// The bit numbers of the buttons that decide and cancel.
-constexpr VAddr DecideButton = 0x1c81b70;
-constexpr VAddr CancelButton = 0x1c81b74;
-// The code of the language the game shows, such as "EN" or "BP".
-constexpr VAddr LanguageCode = 0x1cdf800;
-
-// A menu's input: the buttons pressed this frame, the ones that repeat while held, and whether
-// the menu reads them.
-constexpr u64 InputPressed = 0x08;
-constexpr u64 InputRepeated = 0x80;
-constexpr u64 InputEnabled = 0x18c;
-constexpr u32 OptionsButton = 0x4000;
-constexpr u32 UpButtons = 0x800400;
-constexpr u32 DownButtons = 0x1001000;
 
 // The Save / Load page: its state, its three rows and the count of rows it slid in.
 constexpr u64 PageState = 0x08;
@@ -141,8 +116,6 @@ constexpr u32 TitleDecideSound = 0xd8755a48;
 constexpr u32 TitleUpSound = 0x031abbf8;
 constexpr u32 TitleDownSound = 0x7afe0797;
 
-constexpr u32 NoNode = 0x8cde0001;
-
 // A menu button, 0x20 bytes that FUN_01243cb0 fills.
 struct Button {
     u64 handle;
@@ -174,50 +147,9 @@ constexpr size_t LookSelected = 1;
 constexpr size_t LookPressed = 4;
 constexpr size_t PressTrack = 3;
 
-// One track of a clip handle: the index of its animation that plays, its node and its animations.
-struct Track {
-    u32 current;
-    u32 node;
-    u8 reversed;
-    u8 unused[15];
-    const u32* first;
-    const u32* last;
-    u64 capacity;
-};
-static_assert(sizeof(Track) == 0x30);
-
-// A clip handle: the clip, its tracks and the texts attached to its nodes.
-constexpr u64 HandleClip = 0x00;
-constexpr u64 HandleFirstTrack = 0x10;
-constexpr u64 HandleLastTrack = 0x18;
-constexpr u64 HandleFirstText = 0x30;
-constexpr u64 HandleLastText = 0x38;
-
-// An attached text: its node, its number among the node's texts, then the text, which has its
-// scale and whether it is hidden.
-struct AttachedText {
-    u32 node;
-    u32 index;
-    u64 text;
-};
-static_assert(sizeof(AttachedText) == 0x10);
+// An attached text's scale and whether it is hidden.
 constexpr u64 TextScale = 0x120;
 constexpr u64 TextHidden = 0x160;
-
-// A clip: the node it hangs from, and its own nodes.
-constexpr u64 ClipParent = 0xb0;
-constexpr u64 ClipNodes = 0x100;
-
-// A clip's node. A clip that hangs from a node takes the node's world matrix, four rows of four
-// floats with the translation last, and, in a draw that asks for it, the node's opacity.
-struct alignas(32) Node {
-    u8 head[0x80];
-    std::array<float, 16> world;
-    u8 pad[8];
-    float opacity;
-    u8 tail[0x14];
-};
-static_assert(sizeof(Node) == 0xe0);
 
 using FindTextFunction = u64 PS4_SYSV_ABI (*)(u64 texts, const char* key);
 using MakeButtonFunction = void PS4_SYSV_ABI (*)(float width, float left, float right,
@@ -228,11 +160,7 @@ using ButtonFunction = void PS4_SYSV_ABI (*)(Button* button);
 using SelectFunction = void PS4_SYSV_ABI (*)(Button* button, char selected);
 using DrawFunction = void PS4_SYSV_ABI (*)(u64 handle, u64 context);
 using ObjectFunction = u64 PS4_SYSV_ABI (*)(u64 object);
-using PlayFunction = void PS4_SYSV_ABI (*)(float speed, float start, u64 clip, u32 node,
-                                           u32 animation);
 using HeapFreeFunction = void PS4_SYSV_ABI (*)(u64 heap, u64 block);
-using DialogFunction = void PS4_SYSV_ABI (*)(const char* key, s32 kind, s32 choice);
-using SoundFunction = void PS4_SYSV_ABI (*)(float volume, u32 sound, u64 unused);
 using MeasureFunction = void PS4_SYSV_ABI (*)(float* width, float* height, u64 style,
                                               const char* key);
 using MoveNodeFunction = void PS4_SYSV_ABI (*)(u64 clip, u32 node, const float* offset);
@@ -290,7 +218,6 @@ struct Row {
     const Node* to = nullptr;
 };
 
-VAddr g_base = 0;
 FindTextFunction g_find_text = nullptr;
 MakeButtonFunction g_make_button = nullptr;
 ButtonFunction g_tick_button = nullptr;
@@ -308,84 +235,6 @@ Row g_title{{"gr2port_exit_title_1", "gr2port_exit_title_2"}, "ui_tt_menu_select
 
 std::mutex g_records_mutex;
 std::array<std::vector<u8>, Records.size()> g_records;
-
-VAddr Game(VAddr address) {
-    return g_base + address - GoldHenBase;
-}
-
-template <typename T>
-T Read(VAddr address) {
-    T value;
-    std::memcpy(&value, reinterpret_cast<const void*>(address), sizeof(T));
-    return value;
-}
-
-template <typename T>
-void Write(VAddr address, T value) {
-    std::memcpy(reinterpret_cast<void*>(address), &value, sizeof(T));
-}
-
-template <typename Function>
-Function Call(VAddr address) {
-    return reinterpret_cast<Function>(Game(address));
-}
-
-// A text record of the game's bank: a 0x1c byte header (the count of characters, the count of
-// bytes, the count of attributes, then the style), the UTF-8 text and its terminator padded to 4
-// bytes, then the attributes, 8 bytes each: a first character, an end character and four bytes
-// of style.
-constexpr size_t RecordHeader = 0x1c;
-constexpr size_t RecordAttribute = 8;
-
-// The record of text in the style of the game's record model.
-std::vector<u8> MakeRecord(u64 model, std::string_view text) {
-    const u16 characters = static_cast<u16>(
-        std::ranges::count_if(text, [](char byte) { return (byte & 0xc0) != 0x80; }));
-    const u16 bytes = static_cast<u16>(text.size());
-    const s16 attributes = Read<s16>(model + 4) > 0 ? 1 : 0;
-    const size_t attribute_offset = RecordHeader + ((text.size() + 4) & ~size_t{3});
-    std::vector<u8> record(attribute_offset + attributes * RecordAttribute);
-    std::memcpy(record.data(), reinterpret_cast<const void*>(model), RecordHeader);
-    std::memcpy(record.data(), &characters, sizeof(characters));
-    std::memcpy(record.data() + 2, &bytes, sizeof(bytes));
-    std::memcpy(record.data() + 4, &attributes, sizeof(attributes));
-    std::memcpy(record.data() + RecordHeader, text.data(), text.size());
-    if (attributes != 0) {
-        const u64 model_attribute = model + RecordHeader + ((Read<u16>(model + 2) + 4) & ~3);
-        u8* const attribute = record.data() + attribute_offset;
-        std::memcpy(attribute, reinterpret_cast<const void*>(model_attribute), RecordAttribute);
-        const u16 first = 0;
-        std::memcpy(attribute, &first, sizeof(first));
-        std::memcpy(attribute + 2, &characters, sizeof(characters));
-    }
-    return record;
-}
-
-// The console language of each language the game has text in, but its two Englishes.
-struct GameLanguage {
-    const char* code;
-    int console_language;
-};
-constexpr std::array GameLanguages{
-    GameLanguage{"JP", 0},  GameLanguage{"FR", 2},  GameLanguage{"ES", 3},  GameLanguage{"DE", 4},
-    GameLanguage{"IT", 5},  GameLanguage{"NL", 6},  GameLanguage{"PT", 7},  GameLanguage{"RU", 8},
-    GameLanguage{"KR", 9},  GameLanguage{"CT", 10}, GameLanguage{"CS", 11}, GameLanguage{"PL", 16},
-    GameLanguage{"BP", 17}, GameLanguage{"MX", 20}, GameLanguage{"CA", 22},
-};
-
-// The rows are in the language the game shows, which is not always the console's: a game that
-// lacks the console's language shows English or another regional form.
-std::string Shown(const char* english) {
-    const char* const code = Read<const char*>(Game(LanguageCode));
-    if (code != nullptr) {
-        for (const GameLanguage& language : GameLanguages) {
-            if (std::strcmp(code, language.code) == 0) {
-                return Language::TextIn(language.console_language, english);
-            }
-        }
-    }
-    return english;
-}
 
 u64 PS4_SYSV_ABI OnFindText(u64 texts, const char* key) {
     if (key == nullptr || std::strncmp(key, KeyPrefix, sizeof(KeyPrefix) - 1) != 0) {
@@ -410,23 +259,6 @@ u64 PS4_SYSV_ABI OnFindText(u64 texts, const char* key) {
 
 bool IsShown(const Button& button) {
     return button.state == ButtonSlidingIn || button.state == ButtonShown;
-}
-
-// Starts an animation of a clip handle's track.
-void PlayTrack(u64 handle, size_t track_index, size_t animation) {
-    Track* const first = Read<Track*>(handle + HandleFirstTrack);
-    const Track* const last = Read<const Track*>(handle + HandleLastTrack);
-    if (static_cast<size_t>(last - first) <= track_index) {
-        return;
-    }
-    Track& track = first[track_index];
-    if (static_cast<size_t>(track.last - track.first) <= animation) {
-        return;
-    }
-    Call<PlayFunction>(Play)(1.0f / 30.0f, 0.0f, Read<u64>(handle + HandleClip), track.node,
-                             track.first[animation]);
-    track.reversed = 0;
-    track.current = static_cast<u32>(animation);
 }
 
 void Slide(Button& button) {
@@ -455,28 +287,15 @@ void SetSelected(Button* button, bool selected) {
     Call<SelectFunction>(Select)(button, selected ? 1 : 0);
 }
 
-void Sound(u32 sound) {
-    Call<SoundFunction>(PlaySound)(1.0f, sound, 0);
-}
-
 void Ask(Row& row) {
-    Call<DialogFunction>(OpenDialog)(QuestionKey, 1, row.choice);
+    OpenDialog(QuestionKey, 1, row.choice);
     row.phase = Phase::Asking;
-}
-
-s32 Answer() {
-    return Read<s32>(Read<u64>(Game(Dialog)) + DialogAnswer);
 }
 
 void Quit() {
     SDL_Event event{};
     event.type = SDL_EVENT_QUIT;
     SDL_PushEvent(&event);
-}
-
-u32 ButtonBit(VAddr number) {
-    const u32 bit = Read<u32>(Game(number));
-    return bit < 0x1b ? 1u << bit : 0;
 }
 
 // The node a button's clip hangs from.
@@ -861,7 +680,7 @@ bool Replace(VAddr module_base, const Hooks::Entry& entry, Xbyak::CodeGenerator&
 } // namespace
 
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
-    g_base = module_base;
+    SetBase(module_base);
     if (!Replace(module_base, FindText, c, capacity, &OnFindText, g_find_text) ||
         !Replace(module_base, MakeButton, c, capacity, &OnMakeButton, g_make_button) ||
         !Replace(module_base, TickButton, c, capacity, &OnTickButton, g_tick_button) ||
