@@ -155,8 +155,9 @@ constexpr size_t PressSecondTrack = 4;
 
 // A clip's text bindings.
 constexpr u64 ClipBindings = 0x08;
-// An attached text: the canvas pixel it draws from, down from the top, and whether its next draw
-// shows it. Its clip handle's frame sets both from the text's node.
+// An attached text: the canvas pixel it draws from, from the left and down from the top, and
+// whether its next draw shows it. Its clip handle's frame sets them from the text's node.
+constexpr u64 TextCanvasX = 0xc0;
 constexpr u64 TextCanvasY = 0xc4;
 constexpr u64 TextShown = 0x167;
 // A load request: its references, its callback and the callback's argument.
@@ -725,8 +726,8 @@ void AttachTexts(OwnRow& row) {
 }
 
 // After a row's frame, which draws its texts from their nodes: lifts the row's value onto its
-// plate, and shows the value of the look the row has.
-void PlaceValue(const OwnRow& row) {
+// plate, shows the value of the look the row has, and keeps the caption over its plate's end.
+void PlaceTexts(const OwnRow& row) {
     const bool selected = Selected(Object(row));
     for (size_t i = 0; i < ValueTexts; ++i) {
         const u64 text = row.texts[i];
@@ -737,6 +738,11 @@ void PlaceValue(const OwnRow& row) {
         if ((i == 0) != selected) {
             Write<u8>(text + TextShown, 0);
         }
+    }
+    if (const u64 caption = row.texts[ValueTexts]; caption != 0) {
+        const float middle = 0.5f * CanvasWidth + row.place.world[12] * UnitPixels;
+        Write<float>(caption + TextCanvasX,
+                     middle + (Read<float>(caption + TextCanvasX) - middle) * g_plate_scale);
     }
 }
 
@@ -1217,7 +1223,7 @@ void Tick(u64 system) {
     for (const OwnRow& slot : g_slots) {
         if (Loaded(slot)) {
             tick(HandleOf(slot));
-            PlaceValue(slot);
+            PlaceTexts(slot);
         }
     }
     ShowBar();
