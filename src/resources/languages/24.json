@@ -286,7 +286,6 @@
     "The launcher restarts when Ok saves a change on this tab.": "Az indító újraindul, amikor ezen a lapon egy módosítás mentésre kerül.",
     "No game or update was found in\n{0}": "Nem található játék vagy frissítés itt:\n{0}",
     "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Már volt egy mappa itt:\n{0}\nA játék mostantól ezt használja. Az itt lévő mappa\n{1}\na helyén marad.",
-    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "A globális mappa nem található itt:\n{0}\nHelyette új hordozható userdata mappa jött létre.",
     "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "A mappát nem sikerült áthelyezni ide:\n{0}\nA játék továbbra is ezt használja:\n{1}",
     "Update Available": "Frissítés érhető el",
     "Do you want to update now?": "Szeretnél most frissíteni?",

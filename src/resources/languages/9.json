@@ -286,7 +286,6 @@
     "The launcher restarts when Ok saves a change on this tab.": "이 탭의 변경 사항을 저장하면 런처가 다시 시작됩니다.",
     "No game or update was found in\n{0}": "다음 위치에서 게임이나 업데이트를 찾을 수 없습니다\n{0}",
     "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "다음 위치에 이미 폴더가 있었습니다\n{0}\n이제 게임이 이 폴더를 사용합니다. 다음 위치의 폴더는\n{1}\n그대로 유지됩니다.",
-    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "다음 위치에서 전역 폴더를 찾을 수 없습니다\n{0}\n대신 새 포터블 userdata 폴더를 만들었습니다.",
     "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "폴더를 다음 위치로 옮길 수 없습니다\n{0}\n게임은 계속 다음 위치를 사용합니다\n{1}",
     "Update Available": "업데이트 가능",
     "Do you want to update now?": "지금 업데이트하시겠습니까?",

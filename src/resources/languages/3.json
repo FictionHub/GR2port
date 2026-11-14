@@ -286,7 +286,6 @@
     "The launcher restarts when Ok saves a change on this tab.": "El lanzador se reinicia al guardar un cambio de esta pestaña.",
     "No game or update was found in\n{0}": "No se encontró ningún juego ni actualización en\n{0}",
     "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Ya había una carpeta en\n{0}\nEl juego la usa a partir de ahora. La carpeta de\n{1}\nse queda donde está.",
-    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "No se encontró la carpeta global en\n{0}\nSe creó una nueva carpeta userdata portátil en su lugar.",
     "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "No se pudo mover la carpeta a\n{0}\nEl juego sigue usando\n{1}",
     "Update Available": "Actualización disponible",
     "Do you want to update now?": "¿Quieres actualizar ahora?",

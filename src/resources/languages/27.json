@@ -286,7 +286,6 @@
     "The launcher restarts when Ok saves a change on this tab.": "ตัวเปิดเกมจะเริ่มใหม่เมื่อบันทึกการเปลี่ยนแปลงในแท็บนี้",
     "No game or update was found in\n{0}": "ไม่พบเกมหรืออัปเดตใน\n{0}",
     "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "มีโฟลเดอร์อยู่แล้วที่\n{0}\nเกมจะใช้โฟลเดอร์นี้นับจากนี้ โฟลเดอร์ที่\n{1}\nจะอยู่ที่เดิม",
-    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "ไม่พบโฟลเดอร์ส่วนกลางที่\n{0}\nจึงสร้างโฟลเดอร์ userdata แบบพกพาใหม่แทน",
     "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "ไม่สามารถย้ายโฟลเดอร์ไปที่\n{0}\nเกมยังคงใช้\n{1}",
     "Update Available": "มีอัปเดตใหม่",
     "Do you want to update now?": "ต้องการอัปเดตตอนนี้หรือไม่",

@@ -286,7 +286,6 @@
     "The launcher restarts when Ok saves a change on this tab.": "Trình khởi chạy sẽ khởi động lại khi lưu thay đổi trong thẻ này.",
     "No game or update was found in\n{0}": "Không tìm thấy trò chơi hay bản cập nhật trong\n{0}",
     "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Đã có sẵn một thư mục tại\n{0}\nTừ giờ trò chơi dùng thư mục đó. Thư mục tại\n{1}\nvẫn ở nguyên chỗ cũ.",
-    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Không tìm thấy thư mục toàn cục tại\n{0}\nMột thư mục userdata di động mới đã được tạo thay thế.",
     "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Không thể chuyển thư mục đến\n{0}\nTrò chơi vẫn dùng\n{1}",
     "Update Available": "Có bản cập nhật",
     "Do you want to update now?": "Bạn có muốn cập nhật ngay không?",

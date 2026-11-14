@@ -150,7 +150,8 @@ fs::path GetGlobalUserFolder() {
 #endif
 }
 
-// The file beside the executable that tells the user folder is the global one.
+// The file in the global folder that tells the user folder is that one. A file of this name
+// beside the executable stands for it and moves there at start.
 constexpr auto GLOBAL_MARK = "global_userdata.txt";
 // RequestUserFolderMode's word to the executable's next start, in the environment.
 constexpr auto MODE_REQUEST = "GR2PORT_USER_FOLDER";
@@ -192,11 +193,30 @@ static bool MoveFolder(const fs::path& from, const fs::path& to) {
     return true;
 }
 
-// Whether the user folder is the global one, which the mark tells. A request for the other mode
-// is carried out first: the folder moves to the mode's place unless a folder is there already.
-static bool UseGlobalFolder(const fs::path& portable, const fs::path& global) {
-    const fs::path mark = GetExecutableDirectory() / GLOBAL_MARK;
+// Writes the mark into the global folder, which is made if missing. Returns whether it is there.
+static bool WriteGlobalMark(const fs::path& global) {
     std::error_code ec;
+    fs::create_directories(global, ec);
+    std::ofstream file{global / GLOBAL_MARK};
+    file << "GR2port keeps its files in this folder. The Paths tab of the launcher's Options "
+            "brings them back beside the game.\n";
+    return !file.flush().fail();
+}
+
+// Whether the user folder is the global one, which the mark in the global folder tells. A request
+// for the other mode is carried out first: the folder moves to the mode's place unless a folder
+// is there already.
+static bool UseGlobalFolder(const fs::path& portable, const fs::path& global) {
+    if (global.empty()) {
+        return false;
+    }
+    const fs::path mark = global / GLOBAL_MARK;
+    const fs::path beside = GetExecutableDirectory() / GLOBAL_MARK;
+    std::error_code ec;
+    // A mark beside the executable moves into the global folder.
+    if (fs::exists(beside, ec) && WriteGlobalMark(global)) {
+        fs::remove(beside, ec);
+    }
     const bool is_global = fs::exists(mark, ec);
     const char* const request = std::getenv(MODE_REQUEST);
     if (request == nullptr) {
@@ -211,21 +231,22 @@ static bool UseGlobalFolder(const fs::path& portable, const fs::path& global) {
     const fs::path& to = to_global ? global : portable;
     if (fs::exists(to, ec)) {
         g_user_folder_switch = UserFolderSwitch::Kept;
-    } else if (!fs::exists(from, ec)) {
-        // Nothing moves: the folder is made new, as at any start.
-        g_user_folder_switch = to_global ? UserFolderSwitch::None : UserFolderSwitch::GlobalMissing;
-    } else if (!MoveFolder(from, to)) {
+    } else if (fs::exists(from, ec) && !MoveFolder(from, to)) {
         g_user_folder_switch = UserFolderSwitch::Failed;
         return is_global;
     }
     if (to_global) {
-        std::ofstream{mark} << "GR2port keeps its files in the " << GLOBAL_DIR
-                            << " folder of this account's application data. The Paths tab of "
-                               "the launcher's Options brings them back beside the game.\n";
+        WriteGlobalMark(global);
     } else {
+        // The mark is in the portable folder when the global folder moved there.
         fs::remove(mark, ec);
+        fs::remove(portable / GLOBAL_MARK, ec);
     }
-    return to_global;
+    const bool now_global = fs::exists(mark, ec);
+    if (now_global != to_global) {
+        g_user_folder_switch = UserFolderSwitch::Failed;
+    }
+    return now_global;
 }
 
 static auto UserPaths = [] {

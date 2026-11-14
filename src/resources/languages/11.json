@@ -286,7 +286,6 @@
     "The launcher restarts when Ok saves a change on this tab.": "保存此选项卡的更改后，启动器将重新启动。",
     "No game or update was found in\n{0}": "在以下位置未找到游戏或更新\n{0}",
     "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "以下位置已有文件夹\n{0}\n游戏现在使用它。以下位置的文件夹\n{1}\n保留在原处。",
-    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "在以下位置未找到全局文件夹\n{0}\n已改为创建新的便携 userdata 文件夹。",
     "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "无法将文件夹移动到\n{0}\n游戏仍使用\n{1}",
     "Update Available": "有可用更新",
     "Do you want to update now?": "要立即更新吗？",

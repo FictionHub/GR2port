@@ -286,7 +286,6 @@
     "The launcher restarts when Ok saves a change on this tab.": "Το πρόγραμμα εκκίνησης επανεκκινείται όταν αποθηκεύεται μια αλλαγή σε αυτή την καρτέλα.",
     "No game or update was found in\n{0}": "Δεν βρέθηκε παιχνίδι ή ενημέρωση στο\n{0}",
     "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Υπήρχε ήδη φάκελος στο\n{0}\nΤο παιχνίδι τον χρησιμοποιεί πλέον. Ο φάκελος στο\n{1}\nμένει εκεί που είναι.",
-    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Ο καθολικός φάκελος δεν βρέθηκε στο\n{0}\nΣτη θέση του δημιουργήθηκε νέος φορητός φάκελος userdata.",
     "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Δεν ήταν δυνατή η μετακίνηση του φακέλου στο\n{0}\nΤο παιχνίδι εξακολουθεί να χρησιμοποιεί το\n{1}",
     "Update Available": "Διαθέσιμη ενημέρωση",
     "Do you want to update now?": "Θέλετε να γίνει ενημέρωση τώρα;",

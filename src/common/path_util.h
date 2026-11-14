@@ -25,7 +25,8 @@ enum class PathType {
 constexpr auto PORTABLE_DIR = "userdata";
 constexpr auto GLOBAL_DIR = "GR2port";
 
-/// Where GR2port keeps the user folder.
+/// Where GR2port keeps the user folder. A mark file in the global folder tells the mode, so
+/// every copy of the executable that the account starts is in the same one.
 enum class UserFolderMode {
     /// PORTABLE_DIR, beside the executable.
     Portable,
@@ -39,8 +40,6 @@ enum class UserFolderSwitch {
     None,
     /// The mode's place held a folder already. The game uses it, and the other stays in place.
     Kept,
-    /// No global folder to bring back was found, so a new portable folder was made.
-    GlobalMissing,
     /// The folder could not be moved, and the mode stays as it was.
     Failed,
 };

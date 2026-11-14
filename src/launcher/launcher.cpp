@@ -291,13 +291,6 @@ void ShowFolderNotice(HWND owner) {
                               L"at\n{1}\nstays where it is.",
                               folders);
         break;
-    case Common::FS::UserFolderSwitch::GlobalMissing: {
-        const std::array<std::wstring, 1> missing{global_folder};
-        text = Language::Text(L"The global folder was not found at\n{0}\nA new portable userdata "
-                              L"folder was created instead.",
-                              missing);
-        break;
-    }
     case Common::FS::UserFolderSwitch::Failed: {
         const std::array<std::wstring, 2> moved{folders[1], folders[0]};
         text = Language::Text(L"The folder could not be moved to\n{0}\nThe game still uses\n{1}",

@@ -117,11 +117,6 @@ void ShowFolderNotice(QWidget* owner) {
                   "where it is.",
                   {used.toStdString(), other.toStdString()});
         break;
-    case Common::FS::UserFolderSwitch::GlobalMissing:
-        text = Tr("The global folder was not found at\n{0}\nA new portable userdata folder was "
-                  "created instead.",
-                  {global_folder.toStdString()});
-        break;
     case Common::FS::UserFolderSwitch::Failed:
         text = Tr("The folder could not be moved to\n{0}\nThe game still uses\n{1}",
                   {other.toStdString(), used.toStdString()});
