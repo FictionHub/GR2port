@@ -62,8 +62,9 @@ struct Expected {
     std::string_view bytes;
 };
 
-// The v1.11 eboot.bin's bytes where some of the built-in patches and the detail settings write,
-// at their addresses, read from a good dump. The patches fit only an eboot.bin that holds them.
+// The v1.11 eboot.bin's bytes where some of the built-in patches, the detail settings and the
+// menus' bone pool patches write, at their addresses, read from a good dump. The patches fit only
+// an eboot.bin that holds them.
 constexpr std::array ExpectedBytes{
     Expected{0x0137a6d8, "75"},
     Expected{0x0137a738, "488b3d31529600"},
@@ -108,6 +109,9 @@ constexpr std::array ExpectedBytes{
     Expected{0x0141d889, "c7835c0b000000004000"},
     Expected{0x014e6705, "b9001c0000"},
     Expected{0x018a9878, "0000000a00000000"},
+    Expected{0x0119f917, "b900d80000"},
+    Expected{0x0119f928, "c7430800480000"},
+    Expected{0x018963c0, "00480000000000000090000000000000"},
 };
 
 enum class Form {

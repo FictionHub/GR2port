@@ -286,6 +286,30 @@ void QueuePhysicsWorld() {
                WordBytes(static_cast<u32>(heap)) + WordBytes(static_cast<u32>(heap >> 32)));
 }
 
+// The menus' plates are meshes that bones stretch. Each frame's bone matrices come out of one
+// pool: three blocks of MenuBoneBytes, one for each frame in flight. A mesh gets its matrices only
+// while the most that any frame has taken fits a block, so after one frame that takes more the
+// game draws every such mesh without bones until it closes. The System Menu takes 256 of a
+// block's 288 matrices and the Graphics Settings page all 288; a message box over the page takes
+// more. The pool's maker loads the three blocks' size, stores one block's size, and adds two words
+// of the executable to the first block's address for the other two.
+constexpr u64 MenuBoneBlocks = 0x0119f917;
+constexpr std::string_view BlocksLoaded = "b9";
+constexpr u64 MenuBoneBlock = 0x0119f928;
+constexpr std::string_view BlockStored = "c74308";
+constexpr u64 MenuBoneOffsets = 0x018963c0;
+constexpr u32 MenuBoneBytes = 0x4800;
+constexpr u32 MenuBoneGrowth = 4;
+
+// Queues the patches that grow the pool's blocks to MenuBoneGrowth times their size.
+void QueueMenuBones() {
+    const u32 block = MenuBoneBytes * MenuBoneGrowth;
+    QueueBytes(MenuBoneBlocks, std::string(BlocksLoaded) + WordBytes(block * 3));
+    QueueBytes(MenuBoneBlock, std::string(BlockStored) + WordBytes(block));
+    QueueBytes(MenuBoneOffsets,
+               WordBytes(block) + WordBytes(0) + WordBytes(block * 2) + WordBytes(0));
+}
+
 // A gravity slide kick that hits scales the slide's velocity once, by a factor of the gravity
 // style raised to the power of the game step times 30: at the PS4's 30 frames a second the power
 // is 1 and the factor itself results. Lunar's factor is -0.3, the kick's rebound, and at any other
@@ -359,6 +383,7 @@ void ApplySettings() {
     if (graphics.far_environment_detail >= Settings::FarDetailLevels.front()) {
         QueuePhysicsWorld();
     }
+    QueueMenuBones();
     QueueBytes(SlideKickPower, std::string(CallSkipped));
 }
 
