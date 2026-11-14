@@ -51,6 +51,13 @@ namespace {
 // it keeps; DestroyTexture FUN_016182a0(texture) frees the blob.
 constexpr Hooks::Entry Init{0x1618ca0, 6, Hooks::FramePrologue};
 constexpr Hooks::Entry Destroy{0x16182a0, 6, Hooks::FramePrologue};
+// The text job FUN_017c8be0(job) runs on a worker thread: it draws a text's glyphs into the
+// memory of the text's image, a linear texture of a byte per texel. Job: the image's width and
+// height at +0x88 and +0x8c, and at +0xd0 its texture, whose first field is its memory.
+constexpr Hooks::Entry TextJob{0x17c8be0, 6, Hooks::FramePrologue};
+constexpr u64 TextJobWidth = 0x88;
+constexpr u64 TextJobHeight = 0x8c;
+constexpr u64 TextJobTexture = 0xd0;
 
 // Texture object: T# at +0x30, the renderer's handle at +0x6c, the GNF blob at +0x70.
 constexpr u64 TextureSharp = 0x30;
@@ -328,6 +335,20 @@ constexpr u32 LoggedKept = 16;
 u32 g_logged_kept = 0;
 // The handle of each movie surface a frame read, by its slot in Movies.
 std::array<u32, Movies::Surfaces> g_movie_handles{};
+// A memory the game drew a text into, with the size of the text's image and the refreshes the
+// rewrite waited for. The game gives a text the memory of one it stopped showing, so a
+// texture at that memory takes it again, whether a frame lists the texture or not.
+struct Rewrite {
+    VAddr address;
+    vk::Extent2D extent;
+    u32 waits;
+};
+std::mutex g_rewrites_mutex;
+std::vector<Rewrite> g_rewrites;
+constexpr size_t MaxRewrites = 4096;
+// The rewrites a refresh takes, and the refreshes a rewrite waits for its texture's first upload.
+constexpr u32 RewritesPerRefresh = 64;
+constexpr u32 RewriteWaits = 600;
 std::vector<Retiring> g_retiring;
 std::vector<Staging> g_staging;
 std::deque<Upload> g_uploads;
@@ -594,6 +615,22 @@ void PS4_SYSV_ABI OnInit(u32, const Hooks::Arguments* arguments, u64) {
     g_sampled[handle].object.store(texture, std::memory_order_release);
     AddAddress(handle, sharp.Address());
     g_pending.push_back(handle);
+}
+
+void PS4_SYSV_ABI OnTextJob(u32, const Hooks::Arguments* arguments, u64) {
+    const VAddr job = arguments->rdi;
+    const VAddr texture = Load<VAddr>(job + TextJobTexture);
+    const VAddr memory = texture != 0 ? Load<VAddr>(texture) : 0;
+    if (memory == 0) {
+        return;
+    }
+    const vk::Extent2D extent{Load<u32>(job + TextJobWidth), Load<u32>(job + TextJobHeight)};
+    std::scoped_lock lock{g_rewrites_mutex};
+    // Without a render thread to take them, the rewrites are of memories no texture has yet.
+    if (g_rewrites.size() >= MaxRewrites) {
+        g_rewrites.clear();
+    }
+    g_rewrites.push_back({memory, extent, 0});
 }
 
 void PS4_SYSV_ABI OnDestroy(u32, const Hooks::Registers* registers, u64) {
@@ -1615,11 +1652,14 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     const Hooks::Result init = Hooks::ObserveReturn(module_base, Init, c, capacity, &OnInit, 0);
     const Hooks::Result destroy =
         Hooks::ObserveEntry(module_base, Destroy, c, capacity, &OnDestroy, 0);
+    const Hooks::Result text =
+        Hooks::ObserveReturn(module_base, TextJob, c, capacity, &OnTextJob, 0);
     const auto ok = [](Hooks::Result r) {
         return r == Hooks::Result::Hooked || r == Hooks::Result::Chained;
     };
-    if (!ok(init) || !ok(destroy)) {
-        LOG_ERROR(Render_Vulkan, "GR2port: the texture init or destroy is not the expected code");
+    if (!ok(init) || !ok(destroy) || !ok(text)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the texture init, the texture destroy or the text job "
+                                 "is not the expected code");
         return false;
     }
     return true;
@@ -1717,12 +1757,56 @@ u32 GetBySharp(const u32* words, bool& dynamic) {
     return 0;
 }
 
+namespace {
+
+// Render thread: fills handles with the textures of the memories the game drew texts into since
+// the last refresh, but those in listed; returns their count. A rewrite stays for the next
+// refresh while its texture has no image yet, whose first upload may be older than the text, or
+// when handles is full. A memory without a texture gets one from its first read, after the text.
+u32 TakeRewrites(std::span<u32> handles, std::span<const u32> listed) {
+    static std::vector<Rewrite> rewrites;
+    rewrites.clear();
+    {
+        std::scoped_lock lock{g_rewrites_mutex};
+        rewrites.swap(g_rewrites);
+    }
+    u32 count = 0;
+    size_t kept = 0;
+    for (Rewrite& rewrite : rewrites) {
+        const u32 handle = FindAddress(rewrite.address);
+        if (handle == 0 || handle >= FirstReserved ||
+            !g_textures[handle].sharp_only.load(std::memory_order_relaxed) ||
+            !g_textures[handle].linear.load(std::memory_order_relaxed)) {
+            continue;
+        }
+        const bool ready = g_sampled[handle].ready.load(std::memory_order_acquire) &&
+                           static_cast<bool>(g_resident[handle].image);
+        // An image of another size is that of the texture that had this memory before.
+        if (ready && (g_resident[handle].extent != rewrite.extent ||
+                      std::ranges::find(listed, handle) != listed.end())) {
+            continue;
+        }
+        if (ready && count < handles.size()) {
+            handles[count++] = handle;
+        } else if (rewrite.waits++ < RewriteWaits) {
+            rewrites[kept++] = rewrite;
+        }
+    }
+    if (kept != 0) {
+        std::scoped_lock lock{g_rewrites_mutex};
+        g_rewrites.insert(g_rewrites.begin(), rewrites.begin(), rewrites.begin() + kept);
+    }
+    return count;
+}
+
+} // namespace
+
 void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> read) {
     const auto& dl = g_device->dispatch;
     // A movie surface a frame read before takes each frame the game's job copies into it, whether
     // a frame reads it then or later.
     constexpr u32 MaxRead = std::max(Scene::MaxUiDynamicTextures, Scene::MaxDynamicTextures);
-    std::array<u32, MaxRead + Movies::Surfaces> handles;
+    std::array<u32, MaxRead + Movies::Surfaces + RewritesPerRefresh> handles;
     const auto first = std::min<std::size_t>(read.size(), MaxRead);
     // The frames name textures by descriptor: a handle or its twin.
     std::transform(read.begin(), read.begin() + first, handles.begin(),
@@ -1743,6 +1827,8 @@ void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> read) {
             handles[count++] = handle;
         }
     }
+    count += TakeRewrites(std::span{handles}.subspan(count, RewritesPerRefresh),
+                          std::span{handles}.first(count));
     for (const u32 handle : std::span{handles}.first(count)) {
         const Image& image = g_resident[handle];
         if (handle == 0 || handle >= FirstReserved || !image.image ||

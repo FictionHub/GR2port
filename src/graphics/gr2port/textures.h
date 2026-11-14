@@ -31,7 +31,7 @@ namespace Gr2Port::Textures {
 
 inline constexpr u32 Capacity = 1u << 15;
 
-/// Installs the hooks on the GNF texture init and on the texture destroy.
+/// Installs the hooks on the GNF texture init, on the texture destroy and on the text job.
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
 /// The descriptor of texture, the game's texture object, when it is a 2D texture and ready, else
@@ -55,7 +55,7 @@ void PrefetchRecords(const VAddr* objects, u32 count);
 u32 GetBySharp(const u32* sharp, bool& dynamic);
 
 /// Render thread, after Update: copies the guest memory of the textures of these descriptors into
-/// their images again.
+/// their images again, and that of the textures the game drew a text into since the last call.
 void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> descriptors);
 
 /// Render thread: handle, one of the handles Start keeps out of use, samples view from now on.
