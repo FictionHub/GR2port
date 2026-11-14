@@ -114,6 +114,15 @@ enum Control : int {
     IdTrophies,
     IdTrophyPopups,
     IdTrophyViewer,
+    IdTrophyList,
+    IdTrophyKeysLabel,
+    IdTrophyKeys,
+    IdTrophyKeysChange,
+    IdTrophyKeysClear,
+    IdTrophyButtonsLabel,
+    IdTrophyButtons,
+    IdTrophyButtonsChange,
+    IdTrophyButtonsClear,
     IdControllerGroup,
     IdMotion,
     IdGyroSwap,
@@ -352,6 +361,16 @@ constexpr RECT KeyBindingsButton{18, 396, 178, 419};
 constexpr RECT PadBindingsButton{433, 402, 577, 424};
 constexpr int TrophyPopupsTop = 118;
 constexpr RECT TrophyViewerButton{18, 146, 178, 169};
+// The inputs that open the trophy list in the game: a heading, then the keys' row and the pad
+// buttons' row, each with the inputs and their Change and Clear buttons.
+constexpr int TrophyListTop = 192;
+constexpr int TrophyKeysTop = 214;
+constexpr int TrophyButtonsTop = 244;
+constexpr int TrophyInputsWidth = 150;
+constexpr int TrophyChangeLeft = 356;
+constexpr int TrophyChangeWidth = 110;
+constexpr int TrophyClearLeft = 472;
+constexpr int TrophyClearWidth = 90;
 
 // The button prompts setting's values, in the order of the combo box.
 constexpr std::array<std::pair<const wchar_t*, std::string_view>, 7> PromptChoices{{
@@ -535,6 +554,10 @@ struct Modes {
     u32 current_rate = 0;
 };
 
+// The keys and the pad buttons that open the trophy list in the game, as an input config line's
+// inputs; empty for none.
+using TrophyListInputs = std::array<std::string, 2>;
+
 struct Dialog {
     const Art* art = nullptr;
     Settings::Values values;
@@ -567,6 +590,11 @@ struct Dialog {
     std::optional<KeyBindings> key_bindings;
     // The pad buttons as the Button Bindings dialog left them, to save on Ok.
     std::optional<PadBindings> pad_bindings;
+    // The global input config, and the inputs of its trophy list hotkeys as it holds them and as
+    // the Trophies tab shows them.
+    std::filesystem::path global_config;
+    TrophyListInputs trophy_list_saved;
+    TrophyListInputs trophy_list;
     // The MB of each Texture Streaming choice; 0 for Auto.
     std::vector<u32> texture_streaming;
     // Ok saved a change of the Paths tab, which the executable takes when it starts.
@@ -960,6 +988,41 @@ bool ReadTouchSwipe(const std::filesystem::path& file) {
     return on;
 }
 
+// The global input config's trophy list hotkeys, by the order of TrophyListInputs.
+constexpr std::array<std::string_view, 2> TrophyListPrefixes{"hotkey_trophy_list=",
+                                                             "hotkey_trophy_list_pad="};
+
+// The inputs of the global input config's trophy list hotkeys: their last lines.
+TrophyListInputs ReadTrophyList(const std::filesystem::path& file) {
+    TrophyListInputs inputs;
+    std::ifstream in(file);
+    for (std::string line; std::getline(in, line);) {
+        const std::string compact = Compact(line);
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            if (compact.starts_with(TrophyListPrefixes[i])) {
+                inputs[i] = compact.substr(TrophyListPrefixes[i].size());
+            }
+        }
+    }
+    for (std::string& input : inputs) {
+        if (input == "unmapped") {
+            input.clear();
+        }
+    }
+    return inputs;
+}
+
+std::vector<ConfigLine> TrophyListLines(const TrophyListInputs& inputs) {
+    std::vector<ConfigLine> lines;
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        const std::string_view prefix = TrophyListPrefixes[i];
+        lines.push_back({std::string(prefix), std::string(prefix.substr(0, prefix.size() - 1)) +
+                                                  " = " +
+                                                  (inputs[i].empty() ? "unmapped" : inputs[i])});
+    }
+    return lines;
+}
+
 Deadzones DefaultDeadzones() {
     Deadzones deadzones{};
     for (size_t i = 0; i < Sticks.size(); ++i) {
@@ -1077,6 +1140,15 @@ std::string PadNamesLayout(const Dialog& dialog) {
     return layout == "keyboard" ? std::string("playstation") : layout;
 }
 
+// The Trophies tab's inputs that open the trophy list, with pad buttons named as the button
+// prompts show them.
+void ShowTrophyList(const Dialog& dialog) {
+    SetWindowTextW(Item(dialog, IdTrophyKeys),
+                   CombinationText(dialog.trophy_list[0], false, {}).c_str());
+    SetWindowTextW(Item(dialog, IdTrophyButtons),
+                   CombinationText(dialog.trophy_list[1], true, PadNamesLayout(dialog)).c_str());
+}
+
 Settings::Mouse ReadMouse(const Dialog& dialog) {
     Settings::Mouse mouse = dialog.values.mouse;
     const int prompts = Selected(Item(dialog, IdPrompts));
@@ -1156,8 +1228,9 @@ void ShowPads(Dialog& dialog) {
 }
 
 // The Controller tab shows config.json's controller settings and the deadzones of the input
-// config the game reads, and the Mouse && Keyboard tab that config's touch pad swipe switch. The
-// gamepads are listed when the tab is shown.
+// config the game reads, the Mouse && Keyboard tab that config's touch pad swipe switch, and the
+// Trophies tab the global input config's trophy list inputs. The gamepads are listed when the tab
+// is shown.
 void ShowController(Dialog& dialog) {
     for (const Toggle& toggle : Toggles) {
         Check(dialog, toggle.id, (EmulatorSettings.*toggle.get)());
@@ -1170,6 +1243,9 @@ void ShowController(Dialog& dialog) {
     ShowDeadzones(dialog, dialog.deadzones);
     dialog.touch_swipe = ReadTouchSwipe(dialog.input_config);
     Check(dialog, IdTouchSwipe, dialog.touch_swipe);
+    dialog.global_config = Input::GetInputConfigFile("global");
+    dialog.trophy_list_saved = ReadTrophyList(dialog.global_config);
+    dialog.trophy_list = dialog.trophy_list_saved;
     dialog.default_pad = EmulatorSettings.GetDefaultControllerId();
 }
 
@@ -1679,6 +1755,7 @@ void Retranslate(const Dialog& dialog) {
         SendMessageW(dialog.tab, TCM_SETITEMW, i, reinterpret_cast<LPARAM>(&tab_item));
     }
     ShowAutomaticPrompts(dialog);
+    ShowTrophyList(dialog);
 }
 
 // Picks a console language in the Language list and shows the texts in it.
@@ -2001,6 +2078,33 @@ void Build(HWND window, Dialog& dialog) {
                 BS_PUSHBUTTON | WS_TABSTOP, IdTrophyViewer, TrophyViewerButton.left,
                 TrophyViewerButton.top, TrophyViewerButton.right - TrophyViewerButton.left,
                 TrophyViewerButton.bottom - TrophyViewerButton.top);
+    MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_STATICW, L"Trophy List in Game",
+                SS_LEFT, IdTrophyList, LabelLeft, TrophyListTop, ExtrasList.right - LabelLeft,
+                CheckHeight);
+    struct TrophyRow {
+        const wchar_t* label;
+        const wchar_t* change;
+        const wchar_t* clear;
+        int id;
+        int top;
+    };
+    // Each row's controls take the ids from its label's: label, inputs, Change, Clear.
+    for (const TrophyRow& row :
+         {TrophyRow{L"Keyboard", L"Change Key...", L"Clear Key", IdTrophyKeysLabel, TrophyKeysTop},
+          TrophyRow{L"Controller", L"Change Button...", L"Clear Button", IdTrophyButtonsLabel,
+                    TrophyButtonsTop}}) {
+        MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_STATICW, row.label,
+                    SS_LEFT | SS_CENTERIMAGE, row.id, LabelLeft, row.top, LabelWidth, ComboHeight);
+        MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_STATICW, L"",
+                    SS_CENTER | SS_CENTERIMAGE | SS_SUNKEN, row.id + 1, ComboLeft, row.top,
+                    TrophyInputsWidth, ComboHeight);
+        MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_BUTTONW, row.change,
+                    BS_PUSHBUTTON | WS_TABSTOP, row.id + 2, TrophyChangeLeft, row.top,
+                    TrophyChangeWidth, ComboHeight);
+        MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_BUTTONW, row.clear,
+                    BS_PUSHBUTTON | WS_TABSTOP, row.id + 3, TrophyClearLeft, row.top,
+                    TrophyClearWidth, ComboHeight);
+    }
 
     const HWND list =
         MakeControl(dialog, dialog.pages[ExtrasPage], page_origin, WC_LISTVIEWW, L"",
@@ -2109,6 +2213,7 @@ void Build(HWND window, Dialog& dialog) {
     ShowPreset(dialog);
     ShowController(dialog);
     ShowMouse(dialog, dialog.values.mouse);
+    ShowTrophyList(dialog);
     ShowOnline(dialog);
     SendMessageW(window, DM_SETDEFID, IDOK, 0);
     SetFocus(GetDlgItem(window, IDOK));
@@ -2193,6 +2298,9 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             Check(dialog, IdTrophyPopups, !GeneralSettings{}.trophy_popup_disabled.value);
             dialog.key_bindings = DefaultKeyBindings();
             dialog.pad_bindings = DefaultPadBindings();
+            dialog.trophy_list = {std::string(Input::TrophyListKeysDefault),
+                                  std::string(Input::TrophyListButtonsDefault)};
+            ShowTrophyList(dialog);
             ShowLanguage(dialog, GeneralSettings{}.console_language.value);
             ShowPaths(dialog, {}, false);
         }
@@ -2220,6 +2328,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         if (code == CBN_SELCHANGE) {
             Select(Item(dialog, id == IdPrompts ? IdPadPrompts : IdPrompts),
                    Selected(Item(dialog, id)));
+            ShowTrophyList(dialog);
         }
         break;
     case IdActivePad:
@@ -2274,6 +2383,25 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             ShowTrophies(window);
         }
         break;
+    case IdTrophyKeysChange:
+    case IdTrophyButtonsChange:
+        if (code == BN_CLICKED) {
+            const bool pad = id == IdTrophyButtonsChange;
+            std::string inputs = CaptureCombination(window, dialog.font, dialog.dpi,
+                                                    Language::Text(L"Trophy List in Game"), pad);
+            if (!inputs.empty()) {
+                dialog.trophy_list[pad] = std::move(inputs);
+                ShowTrophyList(dialog);
+            }
+        }
+        break;
+    case IdTrophyKeysClear:
+    case IdTrophyButtonsClear:
+        if (code == BN_CLICKED) {
+            dialog.trophy_list[id == IdTrophyButtonsClear].clear();
+            ShowTrophyList(dialog);
+        }
+        break;
     case IDOK:
         dialog.values.display = Read(dialog);
         dialog.values.game = ReadGame(dialog);
@@ -2293,6 +2421,11 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         }
         if (dialog.pad_bindings && !SavePadBindings(dialog.input_config, *dialog.pad_bindings)) {
             Tell(window, L"The button bindings could not be saved.", L"Button Bindings",
+                 MB_OK | MB_ICONWARNING);
+        }
+        if (dialog.trophy_list != dialog.trophy_list_saved &&
+            !SaveConfigLines(dialog.global_config, TrophyListLines(dialog.trophy_list))) {
+            Tell(window, L"The input config could not be saved.", L"Trophies",
                  MB_OK | MB_ICONWARNING);
         }
         EndDialog(window, IDOK);

@@ -294,6 +294,10 @@
     "Downloading the update...": "Завантаження оновлення...",
     "The update could not be installed.": "Не вдалося встановити оновлення.",
     "Graphics Settings": "Налаштування графіки",
-    "Some changes take effect the next time the game starts.": "Деякі зміни наберуть чинності під час наступного запуску гри."
+    "Some changes take effect the next time the game starts.": "Деякі зміни наберуть чинності під час наступного запуску гри.",
+    "Trophy List in Game": "Список призів у грі",
+    "Keyboard": "Клавіатура",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Утримуйте разом до трьох клавіш для дії\n{0}\n\nСкасування через {1} с.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Утримуйте разом до трьох кнопок на контролері для дії\n{0}\n\nСкасування через {1} с."
   }
 }

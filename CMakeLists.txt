@@ -1066,6 +1066,8 @@ set(IMGUI src/imgui/imgui_config.h
           src/imgui/settings_dialog_imgui.h
           src/imgui/settings_dialog_layer.cpp
           src/imgui/settings_dialog_layer.h
+          src/imgui/trophy_list_layer.cpp
+          src/imgui/trophy_list_layer.h
           src/imgui/renderer/imgui_core.cpp
           src/imgui/renderer/imgui_core.h
           src/imgui/renderer/imgui_impl_sdl3.cpp

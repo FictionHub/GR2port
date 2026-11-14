@@ -21,6 +21,9 @@ namespace {
 namespace Game = Input::GameFunctions;
 
 constexpr std::string_view TouchSwipePrefix = "touchpad_swipe_enabled=";
+// The global input config's trophy list hotkeys, by the order of TrophyListInputs.
+constexpr std::array<std::string_view, 2> TrophyListPrefixes{"hotkey_trophy_list=",
+                                                             "hotkey_trophy_list_pad="};
 
 // A config line without its comment and spaces, as the input config parser reads it.
 std::string Compact(std::string_view line) {
@@ -92,6 +95,36 @@ bool ReadTouchSwipe(const std::filesystem::path& file) {
         }
     }
     return on;
+}
+
+TrophyListInputs ReadTrophyList(const std::filesystem::path& file) {
+    TrophyListInputs inputs;
+    std::ifstream in(file);
+    for (std::string line; std::getline(in, line);) {
+        const std::string compact = Compact(line);
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            if (compact.starts_with(TrophyListPrefixes[i])) {
+                inputs[i] = compact.substr(TrophyListPrefixes[i].size());
+            }
+        }
+    }
+    for (std::string& input : inputs) {
+        if (input == "unmapped") {
+            input.clear();
+        }
+    }
+    return inputs;
+}
+
+std::vector<ConfigLine> TrophyListLines(const TrophyListInputs& inputs) {
+    std::vector<ConfigLine> lines;
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        const std::string_view prefix = TrophyListPrefixes[i];
+        lines.push_back({std::string(prefix), std::string(prefix.substr(0, prefix.size() - 1)) +
+                                                  " = " +
+                                                  (inputs[i].empty() ? "unmapped" : inputs[i])});
+    }
+    return lines;
 }
 
 bool SaveConfigLines(const std::filesystem::path& file, const std::vector<ConfigLine>& changes) {

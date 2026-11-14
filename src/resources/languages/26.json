@@ -294,6 +294,10 @@
     "Downloading the update...": "Se descarcă actualizarea...",
     "The update could not be installed.": "Actualizarea nu a putut fi instalată.",
     "Graphics Settings": "Setări grafice",
-    "Some changes take effect the next time the game starts.": "Unele modificări vor intra în vigoare la următoarea pornire a jocului."
+    "Some changes take effect the next time the game starts.": "Unele modificări vor intra în vigoare la următoarea pornire a jocului.",
+    "Trophy List in Game": "Lista de trofee din joc",
+    "Keyboard": "Tastatură",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Ține apăsate împreună până la trei taste pentru\n{0}\n\nNimic nu se schimbă în {1} s.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Ține apăsate împreună până la trei butoane de pe controler pentru\n{0}\n\nNimic nu se schimbă în {1} s."
   }
 }

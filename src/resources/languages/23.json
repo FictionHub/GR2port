@@ -294,6 +294,10 @@
     "Downloading the update...": "Stahování aktualizace...",
     "The update could not be installed.": "Aktualizaci se nepodařilo nainstalovat.",
     "Graphics Settings": "Nastavení grafiky",
-    "Some changes take effect the next time the game starts.": "Některé změny se projeví až při příštím spuštění hry."
+    "Some changes take effect the next time the game starts.": "Některé změny se projeví až při příštím spuštění hry.",
+    "Trophy List in Game": "Seznam trofejí ve hře",
+    "Keyboard": "Klávesnice",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Podržte současně až tři klávesy pro funkci\n{0}\n\nZrušení za {1} s.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Podržte současně až tři tlačítka na ovladači pro funkci\n{0}\n\nZrušení za {1} s."
   }
 }

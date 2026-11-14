@@ -294,6 +294,10 @@
     "Downloading the update...": "กำลังดาวน์โหลดอัปเดต...",
     "The update could not be installed.": "ไม่สามารถติดตั้งอัปเดตได้",
     "Graphics Settings": "การตั้งค่ากราฟิก",
-    "Some changes take effect the next time the game starts.": "การเปลี่ยนแปลงบางอย่างจะมีผลเมื่อเริ่มเกมครั้งถัดไป"
+    "Some changes take effect the next time the game starts.": "การเปลี่ยนแปลงบางอย่างจะมีผลเมื่อเริ่มเกมครั้งถัดไป",
+    "Trophy List in Game": "รายการถ้วยรางวัลในเกม",
+    "Keyboard": "คีย์บอร์ด",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "กดปุ่มคีย์บอร์ดค้างไว้พร้อมกันได้สูงสุดสามปุ่มสำหรับ\n{0}\n\nจะไม่มีอะไรเปลี่ยนใน {1} วินาที",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "กดปุ่มบนคอนโทรลเลอร์ค้างไว้พร้อมกันได้สูงสุดสามปุ่มสำหรับ\n{0}\n\nจะไม่มีอะไรเปลี่ยนใน {1} วินาที"
   }
 }

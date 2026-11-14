@@ -294,6 +294,10 @@
     "Downloading the update...": "Λήψη της ενημέρωσης...",
     "The update could not be installed.": "Δεν ήταν δυνατή η εγκατάσταση της ενημέρωσης.",
     "Graphics Settings": "Ρυθμίσεις γραφικών",
-    "Some changes take effect the next time the game starts.": "Ορισμένες αλλαγές θα ισχύσουν την επόμενη φορά που θα ξεκινήσει το παιχνίδι."
+    "Some changes take effect the next time the game starts.": "Ορισμένες αλλαγές θα ισχύσουν την επόμενη φορά που θα ξεκινήσει το παιχνίδι.",
+    "Trophy List in Game": "Λίστα τροπαίων στο παιχνίδι",
+    "Keyboard": "Πληκτρολόγιο",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Κρατήστε πατημένα έως τρία πλήκτρα μαζί για\n{0}\n\nΚαμία αλλαγή σε {1} δ.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Κρατήστε πατημένα έως τρία κουμπιά του χειριστηρίου μαζί για\n{0}\n\nΚαμία αλλαγή σε {1} δ."
   }
 }

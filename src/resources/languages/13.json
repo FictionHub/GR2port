@@ -294,6 +294,10 @@
     "Downloading the update...": "Hämtar uppdateringen...",
     "The update could not be installed.": "Uppdateringen kunde inte installeras.",
     "Graphics Settings": "Grafikinställningar",
-    "Some changes take effect the next time the game starts.": "Vissa ändringar träder i kraft nästa gång spelet startas."
+    "Some changes take effect the next time the game starts.": "Vissa ändringar träder i kraft nästa gång spelet startas.",
+    "Trophy List in Game": "Trofélista i spelet",
+    "Keyboard": "Tangentbord",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Håll ned upp till tre tangenter samtidigt för\n{0}\n\nAvbryts utan ändring om {1} s.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Håll ned upp till tre knappar på handkontrollen samtidigt för\n{0}\n\nAvbryts utan ändring om {1} s."
   }
 }

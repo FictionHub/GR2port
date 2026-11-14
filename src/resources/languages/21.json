@@ -294,6 +294,10 @@
     "Downloading the update...": "‫جارٍ تنزيل التحديث...‬",
     "The update could not be installed.": "‫تعذّر تثبيت التحديث.‬",
     "Graphics Settings": "‫إعدادات الرسومات‬",
-    "Some changes take effect the next time the game starts.": "‫ستسري بعض التغييرات عند تشغيل اللعبة في المرة القادمة.‬"
+    "Some changes take effect the next time the game starts.": "‫ستسري بعض التغييرات عند تشغيل اللعبة في المرة القادمة.‬",
+    "Trophy List in Game": "‫قائمة الجوائز داخل اللعبة‬",
+    "Keyboard": "‫لوحة المفاتيح‬",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "‫اضغط مع الاستمرار على ما يصل إلى ثلاثة مفاتيح معًا من أجل‬\n{0}\n\n‫لن يتغير شيء خلال {1} ث.‬",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "‫اضغط مع الاستمرار على ما يصل إلى ثلاثة أزرار في يد التحكم معًا من أجل‬\n{0}\n\n‫لن يتغير شيء خلال {1} ث.‬"
   }
 }

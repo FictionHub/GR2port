@@ -294,6 +294,10 @@
     "Downloading the update...": "Update downloaden...",
     "The update could not be installed.": "De update kon niet worden geïnstalleerd.",
     "Graphics Settings": "Grafische instellingen",
-    "Some changes take effect the next time the game starts.": "Sommige wijzigingen gaan pas in wanneer de game opnieuw start."
+    "Some changes take effect the next time the game starts.": "Sommige wijzigingen gaan pas in wanneer de game opnieuw start.",
+    "Trophy List in Game": "Trofeeënlijst in de game",
+    "Keyboard": "Toetsenbord",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Houd maximaal drie toetsen tegelijk ingedrukt voor\n{0}\n\nOver {1} s wordt er niets gewijzigd.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Houd maximaal drie knoppen op de controller tegelijk ingedrukt voor\n{0}\n\nOver {1} s wordt er niets gewijzigd."
   }
 }

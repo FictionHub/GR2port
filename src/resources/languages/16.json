@@ -294,6 +294,10 @@
     "Downloading the update...": "Pobieranie aktualizacji...",
     "The update could not be installed.": "Nie udało się zainstalować aktualizacji.",
     "Graphics Settings": "Ustawienia grafiki",
-    "Some changes take effect the next time the game starts.": "Niektóre zmiany zaczną obowiązywać po ponownym uruchomieniu gry."
+    "Some changes take effect the next time the game starts.": "Niektóre zmiany zaczną obowiązywać po ponownym uruchomieniu gry.",
+    "Trophy List in Game": "Lista trofeów w grze",
+    "Keyboard": "Klawiatura",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Przytrzymaj razem maksymalnie trzy klawisze dla funkcji\n{0}\n\nAnulowanie za {1} s.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Przytrzymaj razem maksymalnie trzy przyciski na kontrolerze dla funkcji\n{0}\n\nAnulowanie za {1} s."
   }
 }

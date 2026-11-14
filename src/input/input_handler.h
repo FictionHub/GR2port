@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <map>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -93,6 +94,7 @@
 #define HOTKEY_OPEN_EMULATOR_SETTINGS 0xf000000f
 #define HOTKEY_TOGGLE_FRIENDS 0xf0000010
 #define HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD_SWIPE 0xf0000011
+#define HOTKEY_TROPHY_LIST 0xf0000012
 
 #define SDL_UNMAPPED UINT32_MAX - 1
 
@@ -220,6 +222,8 @@ const std::map<std::string, u32> string_to_hotkey_map = {
     {"hotkey_volume_down", HOTKEY_VOLUME_DOWN},
     {"hotkey_emulator_settings", HOTKEY_OPEN_EMULATOR_SETTINGS},
     {"hotkey_toggle_friends", HOTKEY_TOGGLE_FRIENDS},
+    {"hotkey_trophy_list", HOTKEY_TROPHY_LIST},
+    {"hotkey_trophy_list_pad", HOTKEY_TROPHY_LIST},
 };
 
 const std::map<std::string, AxisMapping> string_to_axis_map = {
@@ -399,6 +403,11 @@ void ParseInputConfig(const std::string game_id);
 // The input config file of a game, made from default.ini when it is missing. "default" and
 // "global" name the shared ones.
 std::filesystem::path GetInputConfigFile(const std::string& game_id);
+
+// GR2port: the global input config's default inputs of hotkey_trophy_list and
+// hotkey_trophy_list_pad, which open the trophy list in the game.
+inline constexpr std::string_view TrophyListKeysDefault = "f1";
+inline constexpr std::string_view TrophyListButtonsDefault = "l3, r3";
 
 class InputBinding {
 public:
@@ -590,7 +599,7 @@ public:
 
 class ControllerAllOutputs {
 public:
-    static constexpr u64 output_count = 59;
+    static constexpr u64 output_count = 60;
     std::array<ControllerOutput, output_count> data = {
         // Important: these have to be the first, or else they will update in the wrong order
         ControllerOutput(LEFTJOYSTICK_HALFMODE),
@@ -664,6 +673,7 @@ public:
         ControllerOutput(HOTKEY_VOLUME_DOWN),
         ControllerOutput(HOTKEY_OPEN_EMULATOR_SETTINGS),
         ControllerOutput(HOTKEY_TOGGLE_FRIENDS),
+        ControllerOutput(HOTKEY_TROPHY_LIST),
 
         ControllerOutput(SDL_GAMEPAD_BUTTON_INVALID, SDL_GAMEPAD_AXIS_INVALID),
     };

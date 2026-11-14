@@ -7,6 +7,7 @@
 #include <cwctype>
 #include <fstream>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <string_view>
 #include <windows.h>
@@ -367,13 +368,20 @@ struct Capture {
     HFONT font = nullptr;
     // Takes a pad button instead of a key or mouse button.
     bool pad = false;
+    // Takes up to three keys or pad buttons held together, once they are all released.
+    bool combination = false;
     int seconds_left = CaptureSeconds;
     bool done = false;
     std::string key;
     std::vector<SDL_Gamepad*> pads;
     // Pad buttons held since before the popup opened, which count once released.
     std::set<std::string_view> held;
+    // A combination's inputs in the order pressed, and the inputs held now.
+    std::vector<std::string> inputs;
+    std::set<std::string> down;
 };
+
+constexpr size_t CombinationInputs = 3;
 
 constexpr UINT_PTR CountdownTimer = 1;
 constexpr UINT_PTR PadTimer = 2;
@@ -387,6 +395,30 @@ void Finish(Capture& capture, std::string key) {
         capture.key = std::move(key);
         capture.done = true;
     }
+}
+
+// Adds an input to the combination; a key the input handler does not know is passed over.
+void Press(Capture& capture, std::string input) {
+    if (input.empty() || (!capture.pad && !Input::string_to_keyboard_key_map.contains(input))) {
+        return;
+    }
+    if (capture.inputs.size() < CombinationInputs &&
+        std::ranges::find(capture.inputs, input) == capture.inputs.end()) {
+        capture.inputs.push_back(input);
+    }
+    capture.down.insert(std::move(input));
+}
+
+// Takes the combination as an input config line's inputs once nothing is held.
+void Release(Capture& capture, const std::string& input) {
+    capture.down.erase(input);
+    if (capture.done || !capture.down.empty() || capture.inputs.empty()) {
+        return;
+    }
+    for (const std::string& name : capture.inputs) {
+        capture.key += capture.key.empty() ? name : ", " + name;
+    }
+    capture.done = true;
 }
 
 // The pad buttons pressed now on any open pad.
@@ -409,6 +441,19 @@ std::set<std::string_view> PressedPadInputs(const Capture& capture) {
 void PollPads(Capture& capture) {
     const std::set<std::string_view> pressed = PressedPadInputs(capture);
     std::erase_if(capture.held, [&](std::string_view name) { return !pressed.contains(name); });
+    if (capture.combination) {
+        for (const std::string_view name : pressed) {
+            if (!capture.held.contains(name)) {
+                Press(capture, std::string(name));
+            }
+        }
+        for (const std::string& name : std::set{capture.down}) {
+            if (!pressed.contains(name)) {
+                Release(capture, name);
+            }
+        }
+        return;
+    }
     for (const std::string_view name : pressed) {
         if (!capture.held.contains(name)) {
             Finish(capture, std::string(name));
@@ -432,6 +477,23 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         if ((message >= WM_KEYFIRST && message <= WM_KEYLAST) ||
             (message >= WM_MOUSEFIRST && message <= WM_MOUSELAST)) {
             return 0;
+        }
+    } else if (capture->combination) {
+        // Keys only: the mouse does nothing.
+        switch (message) {
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            Press(*capture, KeyName(wparam, lparam));
+            return 0;
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            Release(*capture, KeyName(wparam, lparam));
+            return 0;
+        default:
+            if (message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) {
+                return 0;
+            }
+            break;
         }
     }
     switch (message) {
@@ -488,12 +550,20 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         FillRect(dc, &area, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
         const HGDIOBJ old_font = SelectObject(dc, capture->font);
         SetBkMode(dc, TRANSPARENT);
+        const std::vector<std::wstring> values{capture->function,
+                                               std::to_wstring(capture->seconds_left)};
         const std::wstring text =
-            capture->pad
+            capture->combination
+                ? (capture->pad ? Tr(L"Hold up to three buttons on the controller together for\n"
+                                     L"{0}\n\nNothing changes in {1} s.",
+                                     values)
+                                : Tr(L"Hold up to three keys together for\n{0}\n\nNothing "
+                                     L"changes in {1} s.",
+                                     values))
+            : capture->pad
                 ? Tr(L"Press a button on the controller for\n{0}\n\nNothing changes in {1} s.",
-                     {capture->function, std::to_wstring(capture->seconds_left)})
-                : Tr(L"Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.",
-                     {capture->function, std::to_wstring(capture->seconds_left)});
+                     values)
+                : Tr(L"Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.", values);
         InflateRect(&area, 0, -MulDiv(area.bottom, 1, 10));
         DrawTextW(dc, text.c_str(), -1, &area, DT_CENTER | DT_WORDBREAK);
         SelectObject(dc, old_font);
@@ -505,9 +575,10 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
     }
 }
 
-// Waits for a key or mouse button over owner, or a pad button when pad is set. Empty when the
-// countdown ends first.
-std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& function, bool pad) {
+// Waits for a key or mouse button over owner, or a pad button when pad is set, or a combination of
+// them when combination is set. Empty when the countdown ends first.
+std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& function, bool pad,
+                       bool combination = false) {
     const HINSTANCE instance = GetModuleHandleW(nullptr);
     WNDCLASSEXW capture_class{};
     capture_class.cbSize = sizeof(capture_class);
@@ -529,7 +600,7 @@ std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& fun
     if (window == nullptr) {
         return {};
     }
-    Capture capture{function, editor.font, pad};
+    Capture capture{function, editor.font, pad, combination};
     const bool gamepads = pad && SDL_InitSubSystem(SDL_INIT_GAMEPAD);
     if (gamepads) {
         int count = 0;
@@ -1066,6 +1137,27 @@ std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& button
         return std::nullopt;
     }
     return editor.buttons;
+}
+
+std::string CaptureCombination(HWND owner, HFONT font, UINT dpi, const std::wstring& function,
+                               bool pad) {
+    Editor editor;
+    editor.font = font;
+    editor.dpi = dpi;
+    return CaptureKey(owner, editor, function, pad, true);
+}
+
+std::wstring CombinationText(std::string_view inputs, bool pad, std::string_view layout) {
+    const std::string compact = Compact(inputs);
+    if (compact.empty()) {
+        return Tr(L"None");
+    }
+    std::wstring text;
+    for (const auto part : std::views::split(compact, ',')) {
+        const std::string_view name(part.begin(), part.end());
+        text += (text.empty() ? L"" : L" + ") + (pad ? PadText(layout, name) : KeyText(name));
+    }
+    return text;
 }
 
 } // namespace Gr2Port::Launcher

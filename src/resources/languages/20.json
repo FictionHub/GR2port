@@ -70,6 +70,8 @@
     "Press a button on the controller for\n{0}\n\nNothing changes in {1} s.": "Presiona un botón del control para\n{0}\n\nSe cancelará sin cambios en {1} s.",
     "No button was pressed; {0} keeps its button.": "No se presionó ningún botón; {0} conserva su botón.",
     "The game used {0} last (Options > Controls). A button presses the same PlayStation button in every type.": "Último tipo: {0} (Opciones > Controles). Un botón presiona el mismo botón PlayStation en todos los tipos.",
-    "Double-click a function, then press its button on the controller.": "Haz doble clic en una función y presiona su botón en el control."
+    "Double-click a function, then press its button on the controller.": "Haz doble clic en una función y presiona su botón en el control.",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Mantén presionadas hasta tres teclas a la vez para\n{0}\n\nSe cancelará sin cambios en {1} s.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Mantén presionados hasta tres botones del control a la vez para\n{0}\n\nSe cancelará sin cambios en {1} s."
   }
 }
