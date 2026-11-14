@@ -27,4 +27,20 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world);
 /// Instead of Write, for a frame without a packet.
 void Skip();
 
+/// A scroll bar on the game's 1920 x 1080 canvas, whose y grows downwards: a track around x from
+/// top to bottom, of the width, and the thumb on it.
+struct ScrollBar {
+    float x = 0.0f;
+    float width = 0.0f;
+    float top = 0.0f;
+    float bottom = 0.0f;
+    float thumb_top = 0.0f;
+    float thumb_bottom = 0.0f;
+    float opacity = 0.0f;
+};
+
+/// Any thread: the scroll bar the screen drawing of the frames from here on ends with. A bar of
+/// no opacity draws nothing, and neither does one that is not set again for a while.
+void SetScrollBar(const ScrollBar& bar);
+
 } // namespace Gr2Port::UiCapture

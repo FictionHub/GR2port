@@ -8,7 +8,10 @@
 #include <cmath>
 #include <cstring>
 #include <iterator>
+#include <mutex>
+#include <numbers>
 #include <span>
+#include <vector>
 
 #include <fmt/ranges.h>
 
@@ -154,6 +157,27 @@ constexpr std::array<PixelProgram, static_cast<u32>(Scene::UiPixelProgram::Count
     {0x794c452f, 0, true, 0},
 }};
 
+// The engine's blend of the menus' own draws: the colour comes multiplied by its alpha.
+constexpr u32 PremultipliedBlend = 0x65000501;
+// The canvas the game lays its menus out on, which fills the picture.
+constexpr float CanvasWidth = 1920.0f;
+constexpr float CanvasHeight = 1080.0f;
+// A vertex of a shape this file draws by itself: a position, a texture coordinate and a colour,
+// in the formats the pass program's three inputs take as three, two and four floats.
+constexpr u32 ShapeFloats = 9;
+constexpr u32 ShapePosition = 13u << 15 | 7u << 12 | 4u | 5u << 3 | 6u << 6 | 1u << 9;
+constexpr u32 ShapeCoordinate = 11u << 15 | 7u << 12 | 4u | 5u << 3 | 1u << 9;
+constexpr u32 ShapeColor = 14u << 15 | 7u << 12 | 4u | 5u << 3 | 6u << 6 | 7u << 9;
+// The steps of a rounded end, the colours of the scroll bar's track, of the lighter line along
+// the track's middle and of the thumb, the line's share of the width, and the time a scroll bar
+// stays without being set again.
+constexpr u32 EndSteps = 6;
+constexpr std::array<float, 4> TrackColor{0.0f, 0.0f, 0.0f, 0.55f};
+constexpr std::array<float, 4> LineColor{0.8f, 0.8f, 0.86f, 0.3f};
+constexpr std::array<float, 4> ThumbColor{0.93f, 0.79f, 0.47f, 1.0f};
+constexpr float LineShare = 0.3f;
+constexpr std::chrono::milliseconds BarLife{250};
+
 constexpr u32 ReportFrames = 600;
 constexpr u32 LoggedUnknowns = 64;
 // The buffers a frame's draws copied, by the game's address: an open table that each frame's
@@ -214,6 +238,10 @@ u64 g_unported = 0;
 u64 g_dropped = 0;
 u64 g_write_ns = 0;
 u32 g_unread = 0;
+
+std::mutex g_bar_mutex;
+ScrollBar g_bar;
+std::chrono::steady_clock::time_point g_bar_set;
 
 struct Buffer {
     u64 base;
@@ -319,6 +347,7 @@ public:
     }
 
     void Draw(u32 opcode, const u32* body);
+    void Shape(std::span<const float> vertices, u32 target);
     void Finish();
 
     u64 Used() const {
@@ -694,6 +723,48 @@ void Writer::Draw(u32 opcode, const u32* body) {
     ui.draws++;
 }
 
+// Draws triangles of ShapeFloats floats a vertex over the whole of a target, after the game's own
+// draws.
+void Writer::Shape(std::span<const float> vertices, u32 target) {
+    const u32 count = static_cast<u32>(vertices.size() / ShapeFloats);
+    if (count == 0 || target >= g_target_count || ui.draws == Scene::MaxUiDraws ||
+        ui.runs == Scene::MaxUiRuns) {
+        return;
+    }
+    const u64 data = Copy(reinterpret_cast<VAddr>(vertices.data()), vertices.size_bytes());
+    if (data == 0) {
+        return;
+    }
+    constexpr u32 Stride = ShapeFloats * sizeof(float);
+    Scene::UiDraw draw{};
+    draw.attributes[0] = {.address = data, .stride = Stride, .format = ShapePosition};
+    draw.attributes[1] = {
+        .address = data + 3 * sizeof(float), .stride = Stride, .format = ShapeCoordinate};
+    draw.attributes[2] = {
+        .address = data + 5 * sizeof(float), .stride = Stride, .format = ShapeColor};
+    const float width = static_cast<float>(g_targets[target].width);
+    const float height = static_cast<float>(g_targets[target].height);
+    g_frame_writes |= 1u << target;
+    AddRun({
+        .target = target,
+        .vertex = static_cast<u32>(Scene::UiVertexProgram::Pass),
+        .pixel = static_cast<u32>(Scene::UiPixelProgram::Color),
+        .blend = PremultipliedBlend,
+        .topology = Scene::UiPrimitiveList,
+        .viewport = {0.0f, height, width, -height},
+        .first = ui.draws,
+        .count = 1,
+    });
+    g_commands[ui.draws] = {
+        .vertex_count = count,
+        .instance_count = 1,
+        .first_vertex = 0,
+        .first_instance = ui.draws,
+    };
+    std::memcpy(packet + Scene::UiDrawsOffset + u64{ui.draws} * sizeof(draw), &draw, sizeof(draw));
+    ui.draws++;
+}
+
 void Writer::Finish() {
     ui.targets = g_target_count;
     std::memcpy(packet + Scene::UiTargetsOffset, g_targets.data(),
@@ -761,6 +832,12 @@ void Install(VAddr module_base) {
     g_base = module_base;
 }
 
+void SetScrollBar(const ScrollBar& bar) {
+    const std::scoped_lock lock{g_bar_mutex};
+    g_bar = bar;
+    g_bar_set = std::chrono::steady_clock::now();
+}
+
 void OnFrameGraphEnd() {
     const u32 index = Load<u32>(g_base + ContextIndex - GoldHenBase);
     g_context = g_base + Contexts - GoldHenBase + u64{index} * ContextBytes;
@@ -795,6 +872,63 @@ void Skip() {
 }
 
 namespace {
+
+// Adds an upright bar with rounded ends, in canvas pixels, as triangles around its middle. A
+// canvas pixel is tall times as high as it is wide, and the ends are round on the picture.
+void AddBar(std::vector<float>& vertices, float x, float top, float bottom, float width, float tall,
+            const std::array<float, 4>& color, float opacity) {
+    const float radius = 0.5f * width;
+    const float end = radius / tall;
+    const float upper = std::min(top + end, 0.5f * (top + bottom));
+    const float lower = std::max(bottom - end, 0.5f * (top + bottom));
+    std::array<std::array<float, 2>, 2 * (EndSteps + 1)> outline;
+    for (u32 step = 0; step <= EndSteps; step++) {
+        const float angle = std::numbers::pi_v<float> * static_cast<float>(step) / EndSteps;
+        const float across = radius * std::cos(angle);
+        const float along = end * std::sin(angle);
+        outline[step] = {x - across, upper - along};
+        outline[EndSteps + 1 + step] = {x + across, lower + along};
+    }
+    const auto add = [&](float canvas_x, float canvas_y) {
+        vertices.insert(vertices.end(), {2.0f * canvas_x / CanvasWidth - 1.0f,
+                                         1.0f - 2.0f * canvas_y / CanvasHeight, 0.0f, 0.0f, 0.0f,
+                                         color[0], color[1], color[2], color[3] * opacity});
+    };
+    for (size_t i = 0; i < outline.size(); i++) {
+        const auto& next = outline[(i + 1) % outline.size()];
+        add(x, 0.5f * (upper + lower));
+        add(outline[i][0], outline[i][1]);
+        add(next[0], next[1]);
+    }
+}
+
+// Ends the picture's draws with the scroll bar, when one is set.
+void AddScrollBar(Writer& writer, u32 picture) {
+    ScrollBar bar;
+    {
+        const std::scoped_lock lock{g_bar_mutex};
+        if (std::chrono::steady_clock::now() - g_bar_set > BarLife) {
+            return;
+        }
+        bar = g_bar;
+    }
+    if (bar.opacity <= 0.0f || bar.bottom <= bar.top || bar.width <= 0.0f ||
+        picture >= g_target_count || g_targets[picture].width == 0 ||
+        g_targets[picture].height == 0) {
+        return;
+    }
+    // The canvas fills the picture, whatever the picture's shape.
+    const float tall = static_cast<float>(g_targets[picture].height) / CanvasHeight /
+                       (static_cast<float>(g_targets[picture].width) / CanvasWidth);
+    static std::vector<float> vertices;
+    vertices.clear();
+    AddBar(vertices, bar.x, bar.top, bar.bottom, bar.width, tall, TrackColor, bar.opacity);
+    AddBar(vertices, bar.x, bar.top, bar.bottom, bar.width * LineShare, tall, LineColor,
+           bar.opacity);
+    AddBar(vertices, bar.x, bar.thumb_top, bar.thumb_bottom, bar.width, tall, ThumbColor,
+           bar.opacity);
+    writer.Shape(vertices, picture);
+}
 
 // Marks the targets other than back buffers that the frame writes after a while without writes.
 void MarkTargets(Scene::Header& header) {
@@ -841,6 +975,9 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
         Scan(reinterpret_cast<const u32*>(from), reinterpret_cast<const u32*>(next), writer);
     } else {
         g_unread++;
+    }
+    if (picture != Scene::MaxUiTargets) {
+        AddScrollBar(writer, picture);
     }
     writer.Finish();
     ui.photo = PhotoTarget(ui);
