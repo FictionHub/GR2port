@@ -203,9 +203,10 @@ static bool WriteGlobalMark(const fs::path& global) {
     return !file.flush().fail();
 }
 
-// Whether the user folder is the global one, which the mark in the global folder tells. A request
-// for the other mode is carried out first: the folder moves to the mode's place unless a folder
-// is there already.
+// Whether the user folder is the global one. The mark in the global folder tells so, which the
+// launcher's switch writes. Without the mark, the portable folder is used when it is there, and
+// else the global folder when it is there. A request for the other mode is carried out first:
+// the folder moves to the mode's place unless a folder is there already.
 static bool UseGlobalFolder(const fs::path& portable, const fs::path& global) {
     if (global.empty()) {
         return false;
@@ -217,7 +218,10 @@ static bool UseGlobalFolder(const fs::path& portable, const fs::path& global) {
     if (fs::exists(beside, ec) && WriteGlobalMark(global)) {
         fs::remove(beside, ec);
     }
-    const bool is_global = fs::exists(mark, ec);
+    const auto global_now = [&] {
+        return fs::exists(mark, ec) || (!fs::exists(portable, ec) && fs::exists(global, ec));
+    };
+    const bool is_global = global_now();
     const char* const request = std::getenv(MODE_REQUEST);
     if (request == nullptr) {
         return is_global;
@@ -242,7 +246,7 @@ static bool UseGlobalFolder(const fs::path& portable, const fs::path& global) {
         fs::remove(mark, ec);
         fs::remove(portable / GLOBAL_MARK, ec);
     }
-    const bool now_global = fs::exists(mark, ec);
+    const bool now_global = global_now();
     if (now_global != to_global) {
         g_user_folder_switch = UserFolderSwitch::Failed;
     }

@@ -25,8 +25,10 @@ enum class PathType {
 constexpr auto PORTABLE_DIR = "userdata";
 constexpr auto GLOBAL_DIR = "GR2port";
 
-/// Where GR2port keeps the user folder. A mark file in the global folder tells the mode, so
-/// every copy of the executable that the account starts is in the same one.
+/// Where GR2port keeps the user folder. The launcher's switch to Global writes a mark file in
+/// the global folder, and every copy of the executable that the account starts then uses that
+/// folder. Without the mark, a copy uses PORTABLE_DIR when it is beside the executable, and else
+/// the global folder when it exists.
 enum class UserFolderMode {
     /// PORTABLE_DIR, beside the executable.
     Portable,
