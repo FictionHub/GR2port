@@ -181,6 +181,8 @@ enum Control : int {
     IdExtras,
     IdPresetLabel,
     IdPreset,
+    IdFieldOfViewLabel,
+    IdFieldOfView,
     IdShadowsLabel,
     IdShadows,
     IdFogLabel,
@@ -486,6 +488,11 @@ constexpr std::array<const wchar_t*, 7> DetailChoices{L"400%", L"200%", L"150%",
 constexpr std::array<const wchar_t*, 4> FarDetailChoices{L"400%", L"200%", L"150%",
                                                          L"PS4 Original"};
 constexpr int OwnDetail = 3;
+// The field of view's choices, in the order of Settings::FieldOfViewLevels, and the game's own.
+constexpr std::array<const wchar_t*, 15> FieldOfViewChoices{
+    L"80%",  L"85%",  L"90%",  L"95%",  L"PS4 Original", L"105%", L"110%", L"115%",
+    L"120%", L"125%", L"130%", L"135%", L"140%",         L"145%", L"150%"};
+constexpr int OwnFieldOfView = 4;
 
 struct GraphicsColumn {
     int label_left;
@@ -1445,8 +1452,10 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
            IndexOf(Settings::DetailLevels, graphics.character_detail, OwnDetail));
 }
 
-// The upscaler and its quality, which presets leave.
+// The field of view, the upscaler and its quality, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
+    Select(Item(dialog, IdFieldOfView),
+           IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
     Select(Item(dialog, IdUpscaler), static_cast<int>(graphics.upscaler));
     Select(Item(dialog, IdUpscaleQuality), static_cast<int>(graphics.upscale_quality));
 }
@@ -1477,6 +1486,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     ReadChoice(Item(dialog, IdNearDetail), Settings::DetailLevels,
                graphics.near_environment_detail);
     ReadChoice(Item(dialog, IdCharacterDetail), Settings::DetailLevels, graphics.character_detail);
+    ReadChoice(Item(dialog, IdFieldOfView), Settings::FieldOfViewLevels, graphics.field_of_view);
     const int upscaler = Selected(Item(dialog, IdUpscaler));
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -1849,8 +1859,19 @@ void Build(HWND window, Dialog& dialog) {
         IdPresetLabel, LeftColumn.label_left, PresetTop, LeftColumn.label_width, ComboHeight));
     graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_COMBOBOXW, L"",
                                          CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, IdPreset,
-                                         LeftColumn.combo_left, PresetTop, ComboWidth,
+                                         LeftColumn.combo_left, PresetTop, LeftColumn.combo_width,
                                          ComboListHeight));
+    graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_STATICW,
+                                         L"Field of View", SS_LEFT | SS_CENTERIMAGE,
+                                         IdFieldOfViewLabel, RightColumn.label_left, PresetTop,
+                                         RightColumn.label_width, ComboHeight));
+    graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_COMBOBOXW, L"",
+                                         CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, IdFieldOfView,
+                                         RightColumn.combo_left, PresetTop, RightColumn.combo_width,
+                                         ComboListHeight));
+    for (const wchar_t* choice : FieldOfViewChoices) {
+        AddText(Item(dialog, IdFieldOfView), choice);
+    }
     for (const GraphicsRow& row : GraphicsRows) {
         const int top = PassTop + row.row * PassStep;
         graphics_order.push_back(MakeControl(

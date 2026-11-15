@@ -298,6 +298,7 @@
     "Trophy List in Game": "Trofélista i spelet",
     "Keyboard": "Tangentbord",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Håll ned upp till tre tangenter samtidigt för\n{0}\n\nAvbryts utan ändring om {1} s.",
-    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Håll ned upp till tre knappar på handkontrollen samtidigt för\n{0}\n\nAvbryts utan ändring om {1} s."
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Håll ned upp till tre knappar på handkontrollen samtidigt för\n{0}\n\nAvbryts utan ändring om {1} s.",
+    "Field of View": "Synfält"
   }
 }

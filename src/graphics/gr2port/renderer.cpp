@@ -1844,6 +1844,7 @@ Settings::Values Live(const Settings::Values& started, const Settings::Values& w
     to.glass_refraction = from.glass_refraction;
     to.anisotropic_filtering = from.anisotropic_filtering;
     to.texture_streaming_mb = from.texture_streaming_mb;
+    to.field_of_view = from.field_of_view;
     live.display.vsync = wanted.display.vsync;
     return live;
 }

@@ -298,6 +298,7 @@
     "Trophy List in Game": "Lista trofeów w grze",
     "Keyboard": "Klawiatura",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Przytrzymaj razem maksymalnie trzy klawisze dla funkcji\n{0}\n\nAnulowanie za {1} s.",
-    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Przytrzymaj razem maksymalnie trzy przyciski na kontrolerze dla funkcji\n{0}\n\nAnulowanie za {1} s."
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Przytrzymaj razem maksymalnie trzy przyciski na kontrolerze dla funkcji\n{0}\n\nAnulowanie za {1} s.",
+    "Field of View": "Pole widzenia"
   }
 }

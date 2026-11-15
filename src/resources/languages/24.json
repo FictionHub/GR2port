@@ -298,6 +298,7 @@
     "Trophy List in Game": "Játékbeli trófealista",
     "Keyboard": "Billentyűzet",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Tarts lenyomva egyszerre legfeljebb három billentyűt ehhez:\n{0}\n\n{1} mp múlva semmi sem változik.",
-    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Tarts lenyomva egyszerre legfeljebb három gombot a kontrolleren ehhez:\n{0}\n\n{1} mp múlva semmi sem változik."
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Tarts lenyomva egyszerre legfeljebb három gombot a kontrolleren ehhez:\n{0}\n\n{1} mp múlva semmi sem változik.",
+    "Field of View": "Látómező"
   }
 }

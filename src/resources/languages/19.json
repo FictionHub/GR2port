@@ -298,6 +298,7 @@
     "Trophy List in Game": "Oyun İçi Kupa Listesi",
     "Keyboard": "Klavye",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Şunun için en fazla üç tuşu birlikte basılı tut:\n{0}\n\n{1} sn sonra hiçbir şey değişmez.",
-    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Şunun için kumandada en fazla üç düğmeyi birlikte basılı tut:\n{0}\n\n{1} sn sonra hiçbir şey değişmez."
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Şunun için kumandada en fazla üç düğmeyi birlikte basılı tut:\n{0}\n\n{1} sn sonra hiçbir şey değişmez.",
+    "Field of View": "Görüş Alanı"
   }
 }

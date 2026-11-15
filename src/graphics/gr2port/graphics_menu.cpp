@@ -18,6 +18,7 @@
 
 #include "common/logging/log.h"
 #include "core/game_check/game_patches.h"
+#include "graphics/gr2port/field_of_view.h"
 
 #include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/hooks.h"
@@ -293,9 +294,10 @@ int IndexOf(const std::array<u32, Count>& levels, u32 level, int fallback) {
 }
 
 // As the launcher's preset: its passes and detail, the shape, size and texture budget it sets,
-// and no VSync for a handheld. The upscaler stays.
+// and no VSync for a handheld. The field of view and the upscaler stay.
 void ApplyPreset(Values& values, const Settings::Preset& preset) {
     Settings::Graphics graphics = Settings::FromPreset(preset);
+    graphics.field_of_view = values.graphics.field_of_view;
     graphics.upscaler = values.graphics.upscaler;
     graphics.upscale_quality = values.graphics.upscale_quality;
     graphics.texture_streaming_mb = preset.texture_streaming_mb != 0
@@ -337,7 +339,7 @@ constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
 
-const std::array<Setting, 22> Table{{
+const std::array<Setting, 23> Table{{
     {"Preset",
      [](const Values&) {
          Names names;
@@ -353,6 +355,21 @@ const std::array<Setting, 22> Table{{
                                  Settings::Presets.begin());
      },
      [](Values& values, int choice) { ApplyPreset(values, Settings::Presets[choice]); }, true},
+    {"Field of View",
+     [](const Values&) {
+         Names names;
+         for (const u32 level : Settings::FieldOfViewLevels) {
+             names.push_back(level == 100 ? std::string{"PS4 Original"}
+                                          : std::to_string(level) + "%");
+         }
+         return names;
+     },
+     [](const Values& values) {
+         return IndexOf(Settings::FieldOfViewLevels, values.graphics.field_of_view, 4);
+     },
+     [](Values& values, int choice) {
+         values.graphics.field_of_view = Settings::FieldOfViewLevels[choice];
+     }},
     {"Shadows", [](const Values&) { return Choices({"PS4 Original", "Medium", "Low", "Off"}); },
      [](const Values& values) { return static_cast<int>(values.graphics.shadows); },
      [](Values& values, int choice) { values.graphics.shadows = static_cast<Quality>(choice); }},
@@ -981,6 +998,7 @@ void Save(const Values& values) {
         if (Settings::Update([&](Values& stored) { CopyPage(values, stored); })) {
             LOG_INFO(Render_Vulkan, "GR2port: the graphics settings are saved");
         }
+        FieldOfView::Set(values.graphics.field_of_view);
         Renderer::SettingsChanged();
     }).detach();
 }

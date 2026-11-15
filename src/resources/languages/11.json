@@ -298,6 +298,7 @@
     "Trophy List in Game": "游戏内奖杯列表",
     "Keyboard": "键盘",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "请同时按住最多三个要分配给以下功能的按键：\n{0}\n\n{1} 秒后将不作任何更改。",
-    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "请同时按住控制器上最多三个要分配给以下功能的按钮：\n{0}\n\n{1} 秒后将不作任何更改。"
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "请同时按住控制器上最多三个要分配给以下功能的按钮：\n{0}\n\n{1} 秒后将不作任何更改。",
+    "Field of View": "视野"
   }
 }

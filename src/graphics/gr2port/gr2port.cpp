@@ -14,6 +14,7 @@
 #include "graphics/gr2port/camera_reach.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/exit_rows.h"
+#include "graphics/gr2port/field_of_view.h"
 #include "graphics/gr2port/float_spin.h"
 #include "graphics/gr2port/frame_graph_draws.h"
 #include "graphics/gr2port/gr2port.h"
@@ -137,6 +138,7 @@ void Install(VAddr module_base) {
     if (Settings::Get().game.frame_rate > 30) {
         MotionEnds::Install(module_base, c, StubAreaSize);
     }
+    FieldOfView::Install(module_base, c, StubAreaSize);
     if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
             Hooks::Result::Mismatch ||
         Hooks::ObserveEntry(module_base, NextContext, c, StubAreaSize, &OnNextContext, 0) ==

@@ -311,6 +311,11 @@ constexpr std::array<std::string_view, 7> DetailChoices{"400%", "200%", "150%", 
                                                         "75%",  "50%",  "25%"};
 constexpr std::array<std::string_view, 4> FarDetailChoices{"400%", "200%", "150%", "PS4 Original"};
 constexpr int OwnDetail = 3;
+// The field of view's choices, in the order of Settings::FieldOfViewLevels, and the game's own.
+constexpr std::array<std::string_view, 15> FieldOfViewChoices{
+    "80%",  "85%",  "90%",  "95%",  "PS4 Original", "105%", "110%", "115%",
+    "120%", "125%", "130%", "135%", "140%",         "145%", "150%"};
+constexpr int OwnFieldOfView = 4;
 
 struct GraphicsColumn {
     int label_left;
@@ -411,6 +416,7 @@ struct Dialog {
     QComboBox* upscale_quality = nullptr;
     QComboBox* language = nullptr;
     QComboBox* preset = nullptr;
+    QComboBox* field_of_view = nullptr;
     QComboBox* shadows = nullptr;
     QComboBox* fog = nullptr;
     QComboBox* fog_shadows = nullptr;
@@ -912,8 +918,10 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
         IndexOf(Settings::DetailLevels, graphics.character_detail, OwnDetail));
 }
 
-// The upscaler and its quality, which presets leave.
+// The field of view, the upscaler and its quality, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
+    dialog.field_of_view->setCurrentIndex(
+        IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
     dialog.upscaler->setCurrentIndex(static_cast<int>(graphics.upscaler));
     dialog.upscale_quality->setCurrentIndex(static_cast<int>(graphics.upscale_quality));
 }
@@ -942,6 +950,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     ReadChoice(dialog.far_detail, Settings::FarDetailLevels, graphics.far_environment_detail);
     ReadChoice(dialog.near_detail, Settings::DetailLevels, graphics.near_environment_detail);
     ReadChoice(dialog.character_detail, Settings::DetailLevels, graphics.character_detail);
+    ReadChoice(dialog.field_of_view, Settings::FieldOfViewLevels, graphics.field_of_view);
     const int upscaler = dialog.upscaler->currentIndex();
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -1272,12 +1281,20 @@ void BuildDisplay(Dialog& dialog, QWidget* page) {
     dialog.language = MakeRow(dialog, page, "Language", LanguageTop);
 }
 
-// Tab order follows creation: the left column's rows, then the right's.
+// Tab order follows creation: the preset and the field of view, the left column's rows, then the
+// right's.
 void BuildGraphics(Dialog& dialog, QWidget* page) {
     MakeLabel(dialog, page, "Preset", Qt::AlignLeft | Qt::AlignVCenter,
               Place(page, LeftColumn.label_left, PresetTop, LeftColumn.label_width, ComboHeight));
-    dialog.preset =
-        MakeCombo(page, Place(page, LeftColumn.combo_left, PresetTop, ComboWidth, ComboHeight));
+    dialog.preset = MakeCombo(
+        page, Place(page, LeftColumn.combo_left, PresetTop, LeftColumn.combo_width, ComboHeight));
+    MakeLabel(dialog, page, "Field of View", Qt::AlignLeft | Qt::AlignVCenter,
+              Place(page, RightColumn.label_left, PresetTop, RightColumn.label_width, ComboHeight));
+    dialog.field_of_view = MakeCombo(
+        page, Place(page, RightColumn.combo_left, PresetTop, RightColumn.combo_width, ComboHeight));
+    for (const std::string_view choice : FieldOfViewChoices) {
+        AddText(dialog, dialog.field_of_view, choice);
+    }
     const auto row = [&](const Phrase& text, const GraphicsColumn& column, int index,
                          std::span<const std::string_view> choices) {
         const int top = PassTop + index * PassStep;

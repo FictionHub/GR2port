@@ -298,6 +298,7 @@
     "Trophy List in Game": "รายการถ้วยรางวัลในเกม",
     "Keyboard": "คีย์บอร์ด",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "กดปุ่มคีย์บอร์ดค้างไว้พร้อมกันได้สูงสุดสามปุ่มสำหรับ\n{0}\n\nจะไม่มีอะไรเปลี่ยนใน {1} วินาที",
-    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "กดปุ่มบนคอนโทรลเลอร์ค้างไว้พร้อมกันได้สูงสุดสามปุ่มสำหรับ\n{0}\n\nจะไม่มีอะไรเปลี่ยนใน {1} วินาที"
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "กดปุ่มบนคอนโทรลเลอร์ค้างไว้พร้อมกันได้สูงสุดสามปุ่มสำหรับ\n{0}\n\nจะไม่มีอะไรเปลี่ยนใน {1} วินาที",
+    "Field of View": "ขอบเขตการมองเห็น"
   }
 }

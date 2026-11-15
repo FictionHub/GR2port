@@ -298,6 +298,7 @@
     "Trophy List in Game": "Список призов в игре",
     "Keyboard": "Клавиатура",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Удерживайте вместе до трёх клавиш для действия\n{0}\n\nОтмена через {1} с.",
-    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Удерживайте вместе до трёх кнопок на контроллере для действия\n{0}\n\nОтмена через {1} с."
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Удерживайте вместе до трёх кнопок на контроллере для действия\n{0}\n\nОтмена через {1} с.",
+    "Field of View": "Поле зрения"
   }
 }
