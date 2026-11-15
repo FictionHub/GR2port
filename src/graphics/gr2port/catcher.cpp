@@ -25,13 +25,21 @@
 #endif
 
 #include "common/logging/log.h"
+#include "common/path_util.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/catcher.h"
+#include "graphics/gr2port/catcher_crash.h"
+#include "graphics/gr2port/catcher_note.h"
+#include "graphics/gr2port/catcher_outside.h"
+#include "graphics/gr2port/catcher_stacks.h"
+#include "graphics/gr2port/catcher_system.h"
+#include "graphics/gr2port/catcher_test.h"
 #include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/pass_times.h"
 #include "graphics/gr2port/scene.h"
 #include "graphics/gr2port/settings.h"
+#include "graphics/gr2port/water.h"
 
 namespace Gr2Port::Catcher {
 
@@ -71,6 +79,18 @@ constexpr std::chrono::milliseconds FirstStall{250};
 constexpr std::chrono::milliseconds FirstBlocked{1000};
 constexpr std::chrono::milliseconds FirstSilence{3000};
 constexpr u32 FrameSlots = 2;
+// The watch looks closer at a frame the GPU has had for CloserLook, and again at CloserLookAgain;
+// at a render thread that long in one call; and at a game without frames once it has drawn
+// BootFrames. A run takes MaxCloserLooks of them, of MaxCloserLines lines in all.
+constexpr std::chrono::milliseconds CloserLook{1000};
+constexpr std::chrono::milliseconds CloserLookAgain{8000};
+constexpr u64 BootFrames = 600;
+constexpr u32 MaxCloserLooks = 6;
+constexpr u32 MaxCloserLines = 4000;
+// The thread that watches the watch looks this often, and speaks when the watch has not run for
+// GuardFirst, then at each doubling.
+constexpr std::chrono::milliseconds GuardTick{500};
+constexpr std::chrono::milliseconds GuardFirst{6000};
 
 // The environment variables that change which driver, layers or window system the process gets.
 constexpr std::array EnvironmentNames{
@@ -165,6 +185,35 @@ std::mutex g_watch_mutex;
 std::vector<std::string> g_watch_lines;
 std::atomic<u32> g_watch_count{0};
 std::thread g_watch;
+// When the watch last ran, for the thread that watches it.
+std::atomic<s64> g_watch_beat{0};
+std::thread g_guard;
+std::atomic<u32> g_closer_looks{0};
+// The history's entries, and the lines a report prints of it.
+constexpr size_t Events = 256;
+constexpr size_t EventChars = 64;
+struct Event {
+    Clock::time_point time;
+    u64 game_frame = 0;
+    u64 value = 0;
+    std::array<char, EventChars> what{};
+};
+std::mutex g_events_mutex;
+std::array<Event, Events> g_events{};
+size_t g_event_next = 0;
+size_t g_event_count = 0;
+// The passes userdata/catcher_skip.txt turns off, a bit each.
+std::atomic<u64> g_skipped{0};
+std::atomic<bool> g_water_guard{true};
+// The device, for the probe.
+const Device* g_device = nullptr;
+// The guard's notes logged at most.
+constexpr u32 MaxGuardNotes = 60;
+// When the process began, for the times on the catcher's lines.
+const Clock::time_point g_began = Clock::now();
+// The times the driver answered the render thread's wait with "not yet" since the wait began.
+std::atomic<u32> g_wait_answers{0};
+std::atomic<u32> g_closer_lines{0};
 
 s64 Ticks(Clock::time_point time) {
     return std::chrono::duration_cast<std::chrono::microseconds>(time.time_since_epoch()).count();
@@ -389,7 +438,8 @@ void LogWatch(std::string line, bool about_gpu) {
     if (g_watch_count.fetch_add(1) >= MaxWatchLines) {
         return;
     }
-    LOG_WARNING(Render_Vulkan, "GR2port catcher: {}", line);
+    LOG_WARNING(Render_Vulkan, "GR2port catcher: [{:.3f} s] {}",
+                std::chrono::duration<double>(Clock::now() - g_began).count(), line);
     Common::Log::Flush();
     if (about_gpu) {
         AddLine(std::move(line));
@@ -431,12 +481,163 @@ std::string DescribeTrace() {
             last = pass;
         }
     }
-    return fmt::format("the pass trace: frame {} began \"{}\" and no later pass", begun,
-                       DeviceLost::Name(static_cast<DeviceLost::Pass>(last)));
+    std::string trace = fmt::format("the pass trace: frame {} began \"{}\" and no later pass",
+                                    begun, DeviceLost::Name(static_cast<DeviceLost::Pass>(last)));
+    u32 draw_frame = 0;
+    u32 draw = 0;
+    if (DeviceLost::LastDraw(draw_frame, draw) && draw_frame == begun &&
+        last == static_cast<u32>(DeviceLost::Pass::Water)) {
+        trace += fmt::format(", and in it the draw numbered {}", draw);
+    }
+    return trace;
+}
+
+void Beat() {
+    g_watch_beat.store(Ticks(Clock::now()), std::memory_order_relaxed);
+    Outside::Set(Outside::Crumb::WatchBeat, 0);
+    Outside::Set(Outside::Crumb::GameFrames, Capture::Frames());
+}
+
+void LogLines(std::string_view title, const std::vector<std::string>& lines) {
+    for (const std::string& line : lines) {
+        if (g_closer_lines.fetch_add(1) >= MaxCloserLines) {
+            break;
+        }
+        LOG_WARNING(Render_Vulkan, "GR2port catcher: {}: {}", title, line);
+    }
+    Common::Log::Flush();
+}
+
+// Asks the GPU for a small job on the second queue and waits two seconds for it: a GPU that still
+// runs it is alive and has one job it does not finish; one that does not is doing nothing for
+// this process, unless its driver runs a family's queues one after another.
+std::string Probe() {
+    const Device* const d = g_device;
+    if (d == nullptr || !d->probe_queue || g_memory == nullptr) {
+        return "the GPU has no second queue to probe it with";
+    }
+    static vk::CommandPool pool;
+    static vk::CommandBuffer cmd;
+    static vk::Fence fence;
+    static Buffer target;
+    static bool pending = false;
+    const auto& dl = d->dispatch;
+    constexpr u64 TargetBytes = 64;
+    if (!pool) {
+        pool = d->device
+                   .createCommandPool({.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+                                       .queueFamilyIndex = d->queue_family},
+                                      nullptr, dl)
+                   .value;
+        const auto buffers =
+            d->device.allocateCommandBuffers({.commandPool = pool,
+                                              .level = vk::CommandBufferLevel::ePrimary,
+                                              .commandBufferCount = 1},
+                                             dl);
+        fence = d->device.createFence({}, nullptr, dl).value;
+        target = g_memory->CreateBuffer(TargetBytes, vk::BufferUsageFlagBits::eTransferDst,
+                                        Placement::Device);
+        if (!pool || buffers.result != vk::Result::eSuccess || !fence || !target.buffer) {
+            pool = nullptr;
+            return "the probe could not be made";
+        }
+        cmd = buffers.value.front();
+    }
+    if (pending) {
+        if (d->device.getFenceStatus(fence, dl) != vk::Result::eSuccess) {
+            return "the earlier probe's small job is still not done";
+        }
+        pending = false;
+    }
+    (void)d->device.resetFences(fence, dl);
+    (void)cmd.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit}, dl);
+    cmd.fillBuffer(target.buffer, 0, TargetBytes, 1, dl);
+    (void)cmd.end(dl);
+    const vk::SubmitInfo submit{.commandBufferCount = 1, .pCommandBuffers = &cmd};
+    const Clock::time_point start = Clock::now();
+    const vk::Result submitted = d->probe_queue.submit(submit, fence, dl);
+    if (submitted != vk::Result::eSuccess) {
+        return fmt::format("the driver refused a small job for the second queue: {}",
+                           vk::to_string(submitted));
+    }
+    constexpr u64 WaitNanoseconds = 2'000'000'000;
+    const vk::Result waited = d->device.waitForFences(fence, true, WaitNanoseconds, dl);
+    const double ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+    if (waited == vk::Result::eSuccess) {
+        return fmt::format("the GPU ran a small job on a second queue in {:.1f} ms: it and its "
+                           "driver still work for this process",
+                           ms);
+    }
+    if (waited == vk::Result::eTimeout) {
+        pending = true;
+        return "the GPU did not run a small job on a second queue within 2 s: it does nothing "
+               "more for this process, or its driver runs these queues one after another";
+    }
+    return fmt::format("the wait for a small job on a second queue gave {}", vk::to_string(waited));
+}
+
+// A closer look at a process that has stopped moving: each GPU's load, what every thread is in,
+// and what Windows and the drivers recorded.
+void LookCloser(std::string_view why, bool gpu) {
+    const u32 look = g_closer_looks.fetch_add(1);
+    if (look >= MaxCloserLooks) {
+        return;
+    }
+    LogWatch(fmt::format("closer look {} of at most {}: {}", look + 1, MaxCloserLooks, why), false);
+    Beat();
+    LogLines("load", {System::LoadNow()});
+    LogLines("probe", {Probe()});
+    Beat();
+    LogLines("history", History());
+    LogLines("stack", Stacks::All());
+    Beat();
+    if (gpu) {
+        DeviceLost::ReportStall();
+        Beat();
+    }
+    LogLines("system", System::AtEvent(15));
+    Beat();
+}
+
+// Watches the watch: a watch that has stopped is a finding too, and a thread that its read of
+// the stacks left stopped runs again. It also reads the system's records at the start, which
+// takes a while.
+void Guard() {
+    LogLines("system at the start", System::AtStart());
+    LOG_INFO(Render_Vulkan, "GR2port catcher: the executable {} its functions' names",
+             Stacks::Named() ? "carries" : "does not carry");
+    std::chrono::milliseconds next = GuardFirst;
+    // The guard runs on after a lost device, whose report ends the watch: the watcher outside
+    // still hears from the process.
+    for (;;) {
+        std::this_thread::sleep_for(GuardTick);
+        Crash::Keep();
+        Outside::Set(Outside::Crumb::GuardBeat, 0);
+        const auto quiet =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::microseconds{
+                Ticks(Clock::now()) - g_watch_beat.load(std::memory_order_relaxed)});
+        if (quiet < GuardFirst || g_lost.load(std::memory_order_relaxed)) {
+            next = GuardFirst;
+            continue;
+        }
+        if (quiet < next) {
+            continue;
+        }
+        next *= 2;
+        const bool cut = Stacks::Rescue();
+        LOG_WARNING(Render_Vulkan, "GR2port catcher: the watch itself has not run for {} ms{}; {}",
+                    quiet.count(), cut ? ", in its read of the stacks, which is now cut short" : "",
+                    System::LoadNow());
+        Common::Log::Flush();
+    }
 }
 
 void Watch() {
     u64 seen_submits = 0;
+    bool stall_looked = false;
+    bool stall_looked_again = false;
+    bool blocked_looked = false;
+    bool silence_looked = false;
     bool looked = false;
     // The frame the watch last logged as late, until the GPU finishes it.
     bool stalled = false;
@@ -451,6 +652,8 @@ void Watch() {
     std::chrono::milliseconds next_silence = FirstSilence;
     while (!g_lost.load(std::memory_order_relaxed)) {
         std::this_thread::sleep_for(Tick);
+        Beat();
+        Test::Watch();
         const Clock::time_point now = Clock::now();
         const u64 submits = g_submits.load(std::memory_order_relaxed);
         if (stalled) {
@@ -466,6 +669,8 @@ void Watch() {
                             .count()),
                     true);
                 stalled = false;
+                stall_looked = false;
+                stall_looked_again = false;
             }
         }
         if (submits != seen_submits) {
@@ -489,6 +694,7 @@ void Watch() {
                 if (!stalled) {
                     // The frame the GPU is in is the older of those it has not finished.
                     stalled = true;
+                    Outside::Set(Outside::Crumb::GpuStalled, progress.game_frame);
                     stalled_since = now;
                     stalled_slot = slot;
                     stalled_frame = progress.game_frame;
@@ -510,11 +716,19 @@ void Watch() {
                 }
                 const u32 call = g_call.load(std::memory_order_relaxed);
                 line += fmt::format(
-                    ". {}. The render thread has been in {} for {:.0f} ms; the game has started "
-                    "{} frames",
+                    ". {}. The render thread has been in {} for {:.0f} ms, and the driver has "
+                    "answered its wait {} times with \"not yet\"; the game has started {} frames",
                     DescribeTrace(), CallNames[call],
-                    MsSince(g_call_since.load(std::memory_order_relaxed)), Capture::Frames());
+                    MsSince(g_call_since.load(std::memory_order_relaxed)),
+                    g_wait_answers.load(std::memory_order_relaxed), Capture::Frames());
                 LogWatch(std::move(line), true);
+                if (since_submit >= CloserLook && !stall_looked) {
+                    stall_looked = true;
+                    LookCloser("the GPU has had a frame for over a second", true);
+                } else if (since_submit >= CloserLookAgain && !stall_looked_again) {
+                    stall_looked_again = true;
+                    LookCloser("the GPU still has that frame", true);
+                }
             }
         }
         const u32 call = g_call.load(std::memory_order_relaxed);
@@ -523,17 +737,23 @@ void Watch() {
         if (call != blocked_call || call == static_cast<u32>(Call::Idle)) {
             blocked_call = call;
             next_blocked = FirstBlocked;
+            blocked_looked = false;
         } else if (in_call >= next_blocked) {
             next_blocked *= 2;
             LogWatch(fmt::format("the render thread has been in {} for {} ms", CallNames[call],
                                  in_call.count() / 1000),
                      false);
+            if (in_call >= 2 * CloserLook && !blocked_looked && !stall_looked) {
+                blocked_looked = true;
+                LookCloser("the render thread has been in one call for over two seconds", false);
+            }
         }
         const u64 frames = Capture::Frames();
         if (frames != game_frames) {
             game_frames = frames;
             game_moved = now;
             next_silence = FirstSilence;
+            silence_looked = false;
         } else if (now - game_moved >= next_silence) {
             next_silence *= 2;
             LogWatch(
@@ -542,6 +762,10 @@ void Watch() {
                     std::chrono::duration_cast<std::chrono::milliseconds>(now - game_moved).count(),
                     frames),
                 false);
+            if (frames > BootFrames && !silence_looked) {
+                silence_looked = true;
+                LookCloser("the game starts no frames", false);
+            }
         }
     }
 }
@@ -635,6 +859,7 @@ void LogInstance(const Device& d) {
 }
 
 void LogDevice(const Device& d) {
+    g_device = &d;
     const auto& dl = d.dispatch;
     LOG_INFO(Render_Vulkan, "GR2port catcher: the picked GPU: {}", DescribeGpu(d, d.gpu));
     const auto features =
@@ -739,19 +964,35 @@ void LogDevice(const Device& d) {
     Common::Log::Flush();
 }
 
+void ReadSkips();
+
 void Start(Memory& memory) {
     g_memory = &memory;
     g_since = Clock::now();
     g_call_since.store(Ticks(g_since));
+    Test::Start(memory);
+    ReadSkips();
+    Beat();
     g_watch = std::thread{Watch};
     g_watch.detach();
+    g_guard = std::thread{Guard};
+    g_guard.detach();
+    System::StartSampling();
     LOG_INFO(Render_Vulkan,
              "GR2port catcher: the watch looks every {} ms at a frame the GPU has had for {} ms, "
              "and logs one it has had for {} ms",
              Tick.count(), FirstLook.count(), FirstStall.count());
 }
 
+void WaitAnswered() {
+    g_wait_answers.fetch_add(1, std::memory_order_relaxed);
+}
+
 void Enter(Call call) {
+    Outside::Set(Outside::Crumb::RenderCall, static_cast<u64>(call));
+    if (call == Call::Wait) {
+        g_wait_answers.store(0, std::memory_order_relaxed);
+    }
     const Clock::time_point now = Clock::now();
     const u32 before = g_call.load(std::memory_order_relaxed);
     g_current.cpu_ms[before] += std::chrono::duration<float, std::milli>(now - g_since).count();
@@ -760,7 +1001,102 @@ void Enter(Call call) {
     g_call_since.store(Ticks(now), std::memory_order_relaxed);
 }
 
+// Notes what changed from the last frame to this one.
+void NoteChanges(const Scene::Header& header) {
+    static bool world = false;
+    static u32 water = 0;
+    static u32 lights = 0;
+    static u32 generation = 0;
+    if ((header.ui.only == 0) != world) {
+        world = !world;
+        Note(world ? "the world is drawn" : "only the screen is drawn", header.draws);
+    }
+    if ((header.effects.water_draws != 0) != (water != 0)) {
+        Note(water == 0 ? "water draws begin" : "water draws end", header.effects.water_draws);
+    }
+    water = header.effects.water_draws;
+    if ((header.point_lights != 0) != (lights != 0)) {
+        Note(lights == 0 ? "point lights begin" : "point lights end", header.point_lights);
+    }
+    lights = header.point_lights;
+    if (header.particles.generation != generation) {
+        generation = header.particles.generation;
+        Note("the particle library changes, as an area loads", generation);
+    }
+    constexpr u32 GapNs = 400'000'000;
+    if (header.frame_gap_ns > GapNs) {
+        Note("a gap in the game's frames, ms", header.frame_gap_ns / 1'000'000);
+    }
+}
+
+void Note(std::string_view what, u64 value) {
+    Event event{.time = Clock::now(), .game_frame = Capture::Frames(), .value = value};
+    what.copy(event.what.data(), EventChars - 1);
+    const std::scoped_lock lock{g_events_mutex};
+    g_events[g_event_next] = event;
+    g_event_next = (g_event_next + 1) % Events;
+    g_event_count = std::min(g_event_count + 1, Events);
+}
+
+void NotePad(int pad, u32 buttons) {
+    static std::atomic<u32> noted{0};
+    if (pad == 0 && noted.exchange(buttons, std::memory_order_relaxed) != buttons) {
+        Note("the pad's buttons change to", buttons);
+    }
+}
+
+std::vector<std::string> History() {
+    std::vector<std::string> lines;
+    const Clock::time_point now = Clock::now();
+    const std::scoped_lock lock{g_events_mutex};
+    lines.reserve(g_event_count);
+    for (size_t back = g_event_count; back > 0; back--) {
+        const Event& event = g_events[(g_event_next + Events - back) % Events];
+        lines.push_back(fmt::format("{:.3f} s before, game frame {}: {} ({})",
+                                    std::chrono::duration<double>(now - event.time).count(),
+                                    event.game_frame, event.what.data(), event.value));
+    }
+    return lines;
+}
+
+bool WaterGuard() {
+    return g_water_guard.load(std::memory_order_relaxed);
+}
+
+bool Skips(DeviceLost::Pass pass) {
+    return (g_skipped.load(std::memory_order_relaxed) >> static_cast<u32>(pass) & 1) != 0;
+}
+
+// Reads the passes to leave out from userdata/catcher_skip.txt: their names as the pass trace
+// has them, a line each.
+void ReadSkips() {
+    std::ifstream file{Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "catcher_skip.txt"};
+    std::string line;
+    u64 skipped = 0;
+    while (std::getline(file, line)) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+            line.pop_back();
+        }
+        if (line == "no water guard") {
+            g_water_guard.store(false, std::memory_order_relaxed);
+            LOG_WARNING(Render_Vulkan, "GR2port catcher: catcher_skip.txt turns the water "
+                                       "program's guard off");
+        }
+        for (u32 pass = 0; pass < TracePasses; pass++) {
+            if (!line.empty() && line == DeviceLost::Name(static_cast<DeviceLost::Pass>(pass))) {
+                skipped |= u64{1} << pass;
+                LOG_WARNING(Render_Vulkan,
+                            "GR2port catcher: catcher_skip.txt turns the pass \"{}\" off", line);
+            }
+        }
+    }
+    g_skipped.store(skipped, std::memory_order_relaxed);
+}
+
 void BeginFrame(const Scene::Header& header) {
+    Crash::Keep();
+    NoteChanges(header);
+    Test::Render(header.frame);
     // The time in Idle since the last frame stays in this frame's line.
     const float idle = g_current.cpu_ms[static_cast<u32>(Call::Idle)];
     g_current = {};
@@ -777,6 +1113,18 @@ void BeginFrame(const Scene::Header& header) {
 
 void EndFrame(bool submitted, u32 slot) {
     Enter(Call::Idle);
+    if (std::array<u32, 4> note; Water::TakeNote(note)) {
+        static u32 notes = 0;
+        constexpr std::array<const char*, 4> Tables{"a table", "the light grid", "the point lights",
+                                                    "the pixel constants"};
+        Note("the water program's guard stopped a read outside a table", note[1]);
+        if (notes++ < MaxGuardNotes) {
+            LOG_WARNING(Render_Vulkan,
+                        "GR2port catcher: the water pixel program asked for word {} of {}, which "
+                        "has {} words, in its draw {}: the guard gave it the table's end instead",
+                        note[1], Tables[note[0] < Tables.size() ? note[0] : 0], note[2], note[3]);
+        }
+    }
     g_current.frame = DeviceLost::Frame();
     g_current.submitted = submitted;
     if (g_memory != nullptr) {
@@ -810,6 +1158,9 @@ void FrameTimes(u64 game_frame, std::span<const double> ms) {
 
 void ReportLoss(const Device& device) {
     g_lost.store(true, std::memory_order_relaxed);
+    LogLines("history at the loss", History());
+    LogLines("stack at the loss", Stacks::All());
+    LogLines("system at the loss", System::AtEvent(15));
     LOG_ERROR(Render_Vulkan, "GR2port catcher: the driver sent {} messages in this run",
               g_messages.load());
     {

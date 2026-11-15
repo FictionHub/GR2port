@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "graphics/gr2port/device.h"
+#include "graphics/gr2port/device_lost.h"
 
 namespace Gr2Port {
 class Memory;
@@ -57,6 +58,21 @@ void BeginFrame(const Scene::Header& header);
 
 /// Render thread: what it does from here on.
 void Enter(Call call);
+
+/// Whether the file userdata/catcher_skip.txt names pass: the frame then leaves it out. Only the
+/// passes whose call asks are left out.
+bool Skips(DeviceLost::Pass pass);
+
+/// Whether the water pixel program's guard on its worked-out reads is on: it is, unless that file
+/// holds the line "no water guard".
+bool WaterGuard();
+
+/// The longest the render thread's wait for an earlier frame stays in the driver before it asks
+/// again, in nanoseconds.
+inline constexpr u64 WaitNs = 250'000'000;
+
+/// Render thread: the driver answered that wait with "not yet".
+void WaitAnswered();
 
 /// Render thread: the frame ends; submitted says whether it went to the GPU, from slot.
 void EndFrame(bool submitted, u32 slot);

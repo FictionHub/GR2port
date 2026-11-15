@@ -19,6 +19,7 @@
 #include "common/memory_patcher.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/capture_math.h"
+#include "graphics/gr2port/catcher_test.h"
 #include "graphics/gr2port/deformers.h"
 #include "graphics/gr2port/frame_stats.h"
 #include "graphics/gr2port/meshes.h"
@@ -1399,6 +1400,7 @@ public:
             std::min(Load<u32>(view + ViewWaterBarrierCount), WaterMaxBarriers);
         std::memcpy(out.pixel_constants + WaterBarrierWord,
                     reinterpret_cast<const void*>(view + ViewWaterBarriers), WaterBarrierBytes);
+        Catcher::Test::Water(out.pixel_constants, frame);
         out.mesh.vertices = vertices;
         out.mesh.skin = 0;
         out.mesh.palette = 0;
@@ -3724,6 +3726,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     const auto start = std::chrono::steady_clock::now();
     const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
     g_frames.store(frame, std::memory_order_relaxed);
+    Catcher::Test::Game(frame);
     const bool capturing = g_capturing.load(std::memory_order_relaxed);
     LogFrameRate(start, capturing);
     UpdateScreens(view);
@@ -3974,6 +3977,7 @@ void OnFrameEnd() {
         }
         const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
         g_frames.store(frame, std::memory_order_relaxed);
+        Catcher::Test::Game(frame);
         g_pending = {.packet = packet, .frame = frame};
         g_pending.header.frame = frame;
         g_pending.header.ui.only = 1;

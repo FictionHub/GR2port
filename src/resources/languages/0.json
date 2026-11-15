@@ -294,6 +294,11 @@
     "Downloading the update...": "アップデートをダウンロード中...",
     "The update could not be installed.": "アップデートをインストールできませんでした。",
     "Graphics Settings": "グラフィック設定",
-    "Some changes take effect the next time the game starts.": "一部の変更は次回ゲーム起動時に反映されます。"
+    "Some changes take effect the next time the game starts.": "一部の変更は次回ゲーム起動時に反映されます。",
+    "Trophy List in Game": "ゲーム内のトロフィーリスト",
+    "Keyboard": "キーボード",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "次の操作に割り当てるキーを最大3つ同時に押し続けてください:\n{0}\n\nあと{1}秒で変更せずに戻ります。",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "次の操作に割り当てるボタンを最大3つ同時に押し続けてください:\n{0}\n\nあと{1}秒で変更せずに戻ります。",
+    "Field of View": "視野角"
   }
 }

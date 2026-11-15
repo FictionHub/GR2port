@@ -4,8 +4,12 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstring>
 
 #include "common/logging/log.h"
+#include "graphics/gr2port/catcher.h"
+#include "graphics/gr2port/catcher_test.h"
+#include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/pipeline.h"
@@ -21,11 +25,16 @@ namespace Gr2Port::Water {
 
 namespace {
 
+// The addresses the programs read, then the catcher's: where its guard notes, and whether the
+// guard is on.
 struct DrawPush {
     u64 draws;
     u64 lights;
     u64 point_lights;
     u64 light_grid;
+    u64 notes;
+    u32 guard;
+    u32 unused;
 };
 
 const Device* g_device = nullptr;
@@ -34,7 +43,13 @@ vk::Format g_scene_format;
 vk::Format g_depth_format;
 std::atomic<bool> g_ready{false};
 Pipeline g_pipeline;
+// The catcher's test of the guard draws water that other things hide: the same programs with no
+// depth test.
+Pipeline g_test_pipeline;
 Image g_depth_copy;
+// Four words the pixel program's guard writes and the catcher reads.
+Buffer g_notes;
+constexpr u64 NoteBytes = 4 * sizeof(u32);
 vk::Sampler g_depth_sampler;
 vk::Sampler g_background_sampler;
 vk::DescriptorSetLayout g_set_layout;
@@ -67,6 +82,22 @@ void Build() {
         return;
     }
     LOG_INFO(Render_Vulkan, "GR2port water: pipeline built in {} ms", ms);
+    if (Catcher::On) {
+        g_test_pipeline =
+            CreateGraphicsPipeline(*g_device, {
+                                                  .vertex = WATER_VERT,
+                                                  .fragment = WATER_FRAG,
+                                                  .color = g_scene_format,
+                                                  .depth = g_depth_format,
+                                                  .keep_target_alpha = true,
+                                                  .push_constant_bytes = sizeof(DrawPush),
+                                                  .set_layouts = sets,
+                                              });
+        LOG_INFO(Render_Vulkan,
+                 "GR2port water: the guard's notes are at {:#x}, {}; the pixel programs {} write",
+                 g_notes.address, g_notes.mapped != nullptr ? "read here" : "not read",
+                 g_device->fragment_stores ? "may" : "may not");
+    }
     SavePipelineCache(*g_device);
     g_ready.store(true, std::memory_order_release);
 }
@@ -78,6 +109,13 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
     g_memory = &memory;
     g_scene_format = scene_format;
     g_depth_format = depth_format;
+    if (Catcher::On && device.fragment_stores) {
+        g_notes = memory.CreateBuffer(NoteBytes, vk::BufferUsageFlagBits::eStorageBuffer,
+                                      Placement::Readback);
+        if (g_notes.mapped != nullptr) {
+            std::memset(g_notes.mapped, 0, NoteBytes);
+        }
+    }
     const auto& dl = device.dispatch;
     vk::SamplerCreateInfo sampler_info{
         .magFilter = vk::Filter::eNearest,
@@ -252,12 +290,12 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
         .loadOp = vk::AttachmentLoadOp::eLoad,
         .storeOp = vk::AttachmentStoreOp::eStore,
     };
-    cmd.beginRendering({.renderArea = {{0, 0}, extent},
-                        .layerCount = 1,
-                        .colorAttachmentCount = 1,
-                        .pColorAttachments = &color,
-                        .pDepthAttachment = &depth_attachment},
-                       dl);
+    const vk::RenderingInfo rendering{.renderArea = {{0, 0}, extent},
+                                      .layerCount = 1,
+                                      .colorAttachmentCount = 1,
+                                      .pColorAttachments = &color,
+                                      .pDepthAttachment = &depth_attachment};
+    cmd.beginRendering(rendering, dl);
     // A negative height keeps the game's y-up clip space.
     const vk::Viewport viewport = Upscaler::SceneViewport(extent);
     cmd.setViewport(0, viewport, dl);
@@ -268,15 +306,44 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
         .lights = address + Scene::ParticleLightOffset,
         .point_lights = address + Scene::PointLightsOffset,
         .light_grid = PointLights::GridAddress(),
+        .notes = g_notes.mapped != nullptr ? g_notes.address : 0,
+        .guard = Catcher::Test::GuardTest()             ? 2u
+                 : Catcher::On && Catcher::WaterGuard() ? 1u
+                                                        : 0u,
     };
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_pipeline.pipeline, dl);
+    const bool test = Catcher::Test::HiddenWater() && g_test_pipeline.pipeline;
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                     test ? g_test_pipeline.pipeline : g_pipeline.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_pipeline.layout, 0, sets, {}, dl);
     cmd.pushConstants(g_pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
                       &push, dl);
     cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
-    cmd.drawIndexedIndirect(buffer, offset + Scene::WaterCommandsOffset, count,
-                            sizeof(Scene::Command), dl);
+    if (Catcher::On) {
+        // A draw at a time, each after its own mark: the pass trace then names the draw the GPU
+        // is in.
+        for (u32 i = 0; i < count; i++) {
+            DeviceLost::MarkDraw(*g_device, cmd, i, rendering);
+            cmd.drawIndexedIndirect(
+                buffer, offset + Scene::WaterCommandsOffset + u64{i} * sizeof(Scene::Command), 1,
+                sizeof(Scene::Command), dl);
+        }
+    } else {
+        cmd.drawIndexedIndirect(buffer, offset + Scene::WaterCommandsOffset, count,
+                                sizeof(Scene::Command), dl);
+    }
     cmd.endRendering(dl);
+}
+
+bool TakeNote(std::array<u32, 4>& note) {
+    if (g_notes.mapped == nullptr) {
+        return false;
+    }
+    std::memcpy(note.data(), g_notes.mapped, NoteBytes);
+    if (note[0] == 0) {
+        return false;
+    }
+    std::memset(g_notes.mapped, 0, NoteBytes);
+    return true;
 }
 
 } // namespace Gr2Port::Water

@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -16,12 +18,14 @@
 
 #include "common/logging/log.h"
 #include "core/game_check/game_patches.h"
+#include "graphics/gr2port/field_of_view.h"
 
 #include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/menu_kit.h"
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/settings.h"
+#include "graphics/gr2port/ui_capture.h"
 
 namespace Gr2Port::GraphicsMenu {
 
@@ -152,8 +156,9 @@ constexpr size_t PressSecondTrack = 4;
 
 // A clip's text bindings.
 constexpr u64 ClipBindings = 0x08;
-// An attached text: the canvas pixel it draws from, down from the top, and whether its next draw
-// shows it. Its clip handle's frame sets both from the text's node.
+// An attached text: the canvas pixel it draws from, from the left and down from the top, and
+// whether its next draw shows it. Its clip handle's frame sets them from the text's node.
+constexpr u64 TextCanvasX = 0xc0;
 constexpr u64 TextCanvasY = 0xc4;
 constexpr u64 TextShown = 0x167;
 // A load request: its references, its callback and the callback's argument.
@@ -180,6 +185,21 @@ constexpr float PlaceStep = -0.84f;
 // moves up to where the row's text slots draw, on its plate.
 constexpr size_t ValueTexts = 2;
 constexpr float ValueRise = 56.0f;
+
+// A layout unit is 100 canvas pixels, from the canvas's middle, with y upwards.
+constexpr float UnitPixels = 100.0f;
+// The scroll bar stands beside the rows: its middle this many canvas pixels right of theirs on a
+// 16:9 screen, from above the first row's caption to below the last row's plate. Its thumb is as
+// long as the share of the settings the page shows, never shorter than MinThumb, and follows the
+// page in ThumbTime.
+constexpr float BarRight = 330.0f;
+constexpr float BarWidth = 10.0f;
+constexpr float BarAbove = 58.0f;
+constexpr float BarBelow = 52.0f;
+constexpr float MinThumb = 48.0f;
+constexpr float ThumbTime = 0.06f;
+// The message about the next start darkens the page under it.
+constexpr float NoticeOpacity = 0.12f;
 
 // The frames to wait for the rows' clips before the menu gives up on them.
 constexpr u32 LoadFrames = 600;
@@ -274,9 +294,10 @@ int IndexOf(const std::array<u32, Count>& levels, u32 level, int fallback) {
 }
 
 // As the launcher's preset: its passes and detail, the shape, size and texture budget it sets,
-// and no VSync for a handheld. The upscaler stays.
+// and no VSync for a handheld. The field of view and the upscaler stay.
 void ApplyPreset(Values& values, const Settings::Preset& preset) {
     Settings::Graphics graphics = Settings::FromPreset(preset);
+    graphics.field_of_view = values.graphics.field_of_view;
     graphics.upscaler = values.graphics.upscaler;
     graphics.upscale_quality = values.graphics.upscale_quality;
     graphics.texture_streaming_mb = preset.texture_streaming_mb != 0
@@ -318,7 +339,7 @@ constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
 
-const std::array<Setting, 22> Table{{
+const std::array<Setting, 23> Table{{
     {"Preset",
      [](const Values&) {
          Names names;
@@ -334,6 +355,21 @@ const std::array<Setting, 22> Table{{
                                  Settings::Presets.begin());
      },
      [](Values& values, int choice) { ApplyPreset(values, Settings::Presets[choice]); }, true},
+    {"Field of View",
+     [](const Values&) {
+         Names names;
+         for (const u32 level : Settings::FieldOfViewLevels) {
+             names.push_back(level == 100 ? std::string{"PS4 Original"}
+                                          : std::to_string(level) + "%");
+         }
+         return names;
+     },
+     [](const Values& values) {
+         return IndexOf(Settings::FieldOfViewLevels, values.graphics.field_of_view, 4);
+     },
+     [](Values& values, int choice) {
+         values.graphics.field_of_view = Settings::FieldOfViewLevels[choice];
+     }},
     {"Shadows", [](const Values&) { return Choices({"PS4 Original", "Medium", "Low", "Off"}); },
      [](const Values& values) { return static_cast<int>(values.graphics.shadows); },
      [](Values& values, int choice) { values.graphics.shadows = static_cast<Quality>(choice); }},
@@ -555,6 +591,13 @@ Values g_opened;
 // The setting the cursor is on, and the first setting on screen.
 int g_cursor = 0;
 int g_top = 0;
+// The scroll bar's thumb's place down its track, from 0 to 1, and when it last moved; under 0
+// while the page is not open.
+float g_thumb = -1.0f;
+std::chrono::steady_clock::time_point g_thumb_time;
+// On a screen that is not 16:9 the game stretches its canvas, and the rows' plates keep their
+// shape: the scale of a plate's width on the canvas.
+float g_plate_scale = 1.0f;
 std::atomic<u64> g_saves{0};
 
 std::mutex g_records_mutex;
@@ -700,8 +743,8 @@ void AttachTexts(OwnRow& row) {
 }
 
 // After a row's frame, which draws its texts from their nodes: lifts the row's value onto its
-// plate, and shows the value of the look the row has.
-void PlaceValue(const OwnRow& row) {
+// plate, shows the value of the look the row has, and keeps the caption over its plate's end.
+void PlaceTexts(const OwnRow& row) {
     const bool selected = Selected(Object(row));
     for (size_t i = 0; i < ValueTexts; ++i) {
         const u64 text = row.texts[i];
@@ -712,6 +755,11 @@ void PlaceValue(const OwnRow& row) {
         if ((i == 0) != selected) {
             Write<u8>(text + TextShown, 0);
         }
+    }
+    if (const u64 caption = row.texts[ValueTexts]; caption != 0) {
+        const float middle = 0.5f * CanvasWidth + row.place.world[12] * UnitPixels;
+        Write<float>(caption + TextCanvasX,
+                     middle + (Read<float>(caption + TextCanvasX) - middle) * g_plate_scale);
     }
 }
 
@@ -950,6 +998,7 @@ void Save(const Values& values) {
         if (Settings::Update([&](Values& stored) { CopyPage(values, stored); })) {
             LOG_INFO(Render_Vulkan, "GR2port: the graphics settings are saved");
         }
+        FieldOfView::Set(values.graphics.field_of_view);
         Renderer::SettingsChanged();
     }).detach();
 }
@@ -1129,6 +1178,58 @@ bool Run(u64 page, u64 system, u64 input) {
     return false;
 }
 
+// A row's opacity: its place's, which the System Menu's slides fade, times its own slide's.
+float Opacity(const OwnRow& row) {
+    const u64 handle = HandleOf(row);
+    const u64 clip = handle != 0 ? Read<u64>(handle + HandleClip) : 0;
+    if (clip == 0) {
+        return 0.0f;
+    }
+    const Track* const tracks = Read<const Track*>(handle + HandleFirstTrack);
+    const Node* const nodes = Read<const Node*>(clip + ClipNodes);
+    if (tracks == nullptr || nodes == nullptr) {
+        return 0.0f;
+    }
+    return std::clamp(row.place.opacity, 0.0f, 1.0f) *
+           std::clamp(nodes[tracks[ControlTrack].node].opacity, 0.0f, 1.0f);
+}
+
+// Shows where the page's rows lie among all the settings, on a bar beside them.
+void ShowBar() {
+    const float count = static_cast<float>(Table.size());
+    const float shown = static_cast<float>(g_slots.size());
+    if (g_phase == Phase::List || g_phase == Phase::Pressing || g_phase == Phase::Leaving ||
+        count <= shown || !Loaded(g_slots.front())) {
+        g_thumb = -1.0f;
+        UiCapture::SetScrollBar({});
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    const float wanted = static_cast<float>(g_top) / (count - shown);
+    if (g_thumb < 0.0f) {
+        g_thumb = wanted;
+    } else {
+        const float seconds = std::chrono::duration<float>(now - g_thumb_time).count();
+        g_thumb += (wanted - g_thumb) * (1.0f - std::exp(-seconds / ThumbTime));
+    }
+    g_thumb_time = now;
+    const Node& first = g_slots.front().place;
+    const Node& last = g_slots.back().place;
+    const float top = 0.5f * CanvasHeight - first.world[13] * UnitPixels - BarAbove;
+    const float bottom = 0.5f * CanvasHeight - last.world[13] * UnitPixels + BarBelow;
+    const float thumb = std::max(MinThumb, (bottom - top) * shown / count);
+    const float thumb_top = top + (bottom - top - thumb) * g_thumb;
+    UiCapture::SetScrollBar({
+        .x = 0.5f * CanvasWidth + first.world[12] * UnitPixels + BarRight * g_plate_scale,
+        .width = BarWidth * g_plate_scale,
+        .top = top,
+        .bottom = bottom,
+        .thumb_top = thumb_top,
+        .thumb_bottom = thumb_top + thumb,
+        .opacity = Opacity(g_slots.front()) * (g_phase == Phase::Notice ? NoticeOpacity : 1.0f),
+    });
+}
+
 void Tick(u64 system) {
     if (g_phase != Phase::List) {
         PlaceSlots(system);
@@ -1140,9 +1241,10 @@ void Tick(u64 system) {
     for (const OwnRow& slot : g_slots) {
         if (Loaded(slot)) {
             tick(HandleOf(slot));
-            PlaceValue(slot);
+            PlaceTexts(slot);
         }
     }
+    ShowBar();
 }
 
 u64 PS4_SYSV_ABI OnPlaceRows(u64 system) {
@@ -1194,6 +1296,8 @@ void PS4_SYSV_ABI OnEndSystem(u64 system) {
         }
         g_system = 0;
         g_phase = Phase::List;
+        g_thumb = -1.0f;
+        UiCapture::SetScrollBar({});
     }
     g_end_system(system);
 }
@@ -1222,6 +1326,7 @@ bool Replace(VAddr module_base, const Hooks::Entry& entry, Xbyak::CodeGenerator&
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     SetBase(module_base);
     g_started = Settings::Get();
+    g_plate_scale = static_cast<float>(CanvasWidth) / CanvasHeight / GamePatches::AspectRatio();
     const std::array entries{PlaceRows, SystemFrame, SlideRows, EndSystem};
     if (capacity - c.getSize() < entries.size() * Hooks::MaxStubBytes ||
         !std::ranges::all_of(

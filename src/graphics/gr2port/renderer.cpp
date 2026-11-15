@@ -25,6 +25,8 @@
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/catcher.h"
+#include "graphics/gr2port/catcher_note.h"
+#include "graphics/gr2port/catcher_test.h"
 #include "graphics/gr2port/character_glass.h"
 #include "graphics/gr2port/contours.h"
 #include "graphics/gr2port/deformers.h"
@@ -526,6 +528,9 @@ bool Thread::Init() {
 }
 
 bool Thread::Recreate() {
+    if (Catcher::On) {
+        Catcher::Note("the swapchain is made again", 0);
+    }
     const Window::Size size = Window::PixelSize();
     if (d.device.waitIdle(d.dispatch) != vk::Result::eSuccess) {
         return false;
@@ -542,6 +547,9 @@ bool Thread::Recreate() {
 // Takes the stored settings where they change while the game runs. The GPU is idle meanwhile:
 // the frames in flight drew with the earlier ones.
 void Thread::TakeSettings() {
+    if (Catcher::On) {
+        Catcher::Note("settings change while the game runs", 0);
+    }
     const Settings::Values live = Live(started, Settings::Get());
     if (d.device.waitIdle(d.dispatch) != vk::Result::eSuccess) {
         return;
@@ -1193,8 +1201,13 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         Glass::Record(cmd, header, packet.address, scene_ring.buffer, offset, depth, extent);
         PassTimes::Mark(cmd, PassTimes::Pass::Glass);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Water);
-        Water::Record(cmd, header, packet.address, scene_ring.buffer, offset, Look::SceneView(),
-                      depth, extent);
+        if (Catcher::On) {
+            Catcher::Test::Gpu(d, cmd, header.frame);
+        }
+        if (!Catcher::On || !Catcher::Skips(DeviceLost::Pass::Water)) {
+            Water::Record(cmd, header, packet.address, scene_ring.buffer, offset, Look::SceneView(),
+                          depth, extent);
+        }
         PassTimes::Mark(cmd, PassTimes::Pass::Water);
     }
     if (timestamps) {
@@ -1494,8 +1507,17 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         Catcher::Enter(Catcher::Call::Wait);
     }
     const auto wait_start = std::chrono::steady_clock::now();
-    DeviceLost::Check(d, d.device.waitForFences(slot.done, true, UINT64_MAX, dl),
-                      "the wait for an earlier frame");
+    // The catcher's wait comes back each quarter second: a wait the driver still answers is not
+    // a call that never returns.
+    vk::Result answer = vk::Result::eTimeout;
+    while (answer == vk::Result::eTimeout) {
+        answer =
+            d.device.waitForFences(slot.done, true, Catcher::On ? Catcher::WaitNs : UINT64_MAX, dl);
+        if (answer == vk::Result::eTimeout && Catcher::On) {
+            Catcher::WaitAnswered();
+        }
+    }
+    DeviceLost::Check(d, answer, "the wait for an earlier frame");
     const auto wait_end = std::chrono::steady_clock::now();
     if (Catcher::On) {
         Catcher::Enter(Catcher::Call::Record);
@@ -1882,6 +1904,7 @@ Settings::Values Live(const Settings::Values& started, const Settings::Values& w
     to.glass_refraction = from.glass_refraction;
     to.anisotropic_filtering = from.anisotropic_filtering;
     to.texture_streaming_mb = from.texture_streaming_mb;
+    to.field_of_view = from.field_of_view;
     live.display.vsync = wanted.display.vsync;
     return live;
 }

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <ranges>
 #include <set>
 #include <string>
 #include <string_view>
@@ -51,6 +52,7 @@ constexpr int RowHeight = 19;
 constexpr int CaptureWidth = 320;
 constexpr int CaptureHeight = 90;
 constexpr int CaptureSeconds = 5;
+constexpr size_t CombinationInputs = 3;
 constexpr int PadPollMs = 15;
 // A trigger counts as pressed past half its travel.
 constexpr Sint16 TriggerPressed = 16384;
@@ -331,12 +333,14 @@ std::string_view GameButton(const Game::Function& function, u32 type) {
 // ------------------------------------------------------------------------------- key capture
 
 // A popup that takes the next key or mouse button, or a pad button when pad_buttons is true, or
-// nothing when the countdown ends.
+// up to three keys or pad buttons held together when combination_wanted is true, or nothing when
+// the countdown ends.
 class Capture : public QDialog {
 public:
-    Capture(QWidget* owner, QString function_name, bool pad_buttons)
+    Capture(QWidget* owner, QString function_name, bool pad_buttons,
+            bool combination_wanted = false)
         : QDialog{owner, Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint},
-          function{std::move(function_name)}, pad{pad_buttons} {
+          function{std::move(function_name)}, pad{pad_buttons}, combination{combination_wanted} {
         setModal(true);
         setFixedSize(CaptureWidth, CaptureHeight);
         setFont(DialogFont());
@@ -383,7 +387,8 @@ public:
         }
     }
 
-    /// The key or button taken; empty when the countdown ended first.
+    /// The key or button taken, or a combination as an input config line's inputs ("lctrl, t");
+    /// empty when the countdown ended first.
     std::string key;
 
 protected:
@@ -401,12 +406,21 @@ protected:
                     Finish({});
                 }
             } else if (!pressed->isAutoRepeat()) {
-                Finish(KeyName(*pressed));
+                if (combination) {
+                    Press(KeyName(*pressed));
+                } else {
+                    Finish(KeyName(*pressed));
+                }
             }
             return true;
         }
-        case QEvent::KeyRelease:
+        case QEvent::KeyRelease: {
+            const auto* released = static_cast<const QKeyEvent*>(event);
+            if (combination && !pad && !released->isAutoRepeat()) {
+                Release(KeyName(*released));
+            }
             return true;
+        }
         default:
             return QDialog::event(event);
         }
@@ -435,7 +449,7 @@ protected:
     }
 
     void mousePressEvent(QMouseEvent* event) override {
-        if (pad) {
+        if (pad || combination) {
             return;
         }
         switch (event->button()) {
@@ -461,7 +475,7 @@ protected:
 
     // Qt counts a turn to the left as positive.
     void wheelEvent(QWheelEvent* event) override {
-        if (pad) {
+        if (pad || combination) {
             return;
         }
         const QPoint turn = event->angleDelta();
@@ -474,10 +488,14 @@ protected:
 
 private:
     void ShowText() {
-        label->setText(
-            Tr(pad ? "Press a button on the controller for\n{0}\n\nNothing changes in {1} s."
-                   : "Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.",
-               {function.toStdString(), std::to_string(seconds_left)}));
+        const std::string_view text =
+            combination ? (pad ? "Hold up to three buttons on the controller together for\n{0}\n\n"
+                                 "Nothing changes in {1} s."
+                               : "Hold up to three keys together for\n{0}\n\nNothing changes in "
+                                 "{1} s.")
+            : pad       ? "Press a button on the controller for\n{0}\n\nNothing changes in {1} s."
+                        : "Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.";
+        label->setText(Tr(text, {function.toStdString(), std::to_string(seconds_left)}));
     }
 
     // The pad buttons pressed now on any open pad.
@@ -497,16 +515,58 @@ private:
         return pressed;
     }
 
-    // Takes the first pad button pressed since the popup opened.
+    // Takes the first pad button pressed since the popup opened, or a combination of them once
+    // they are all released.
     void PollPads() {
         const std::set<std::string_view> pressed = PressedPadInputs();
         std::erase_if(held, [&](std::string_view name) { return !pressed.contains(name); });
+        if (combination) {
+            for (const std::string_view name : pressed) {
+                if (!held.contains(name)) {
+                    Press(std::string(name));
+                }
+            }
+            for (const std::string& name : std::set{down}) {
+                if (!pressed.contains(name)) {
+                    Release(name);
+                }
+            }
+            return;
+        }
         for (const std::string_view name : pressed) {
             if (!held.contains(name)) {
                 Finish(std::string(name));
                 return;
             }
         }
+    }
+
+    // Adds an input to the combination; a key the input handler does not know is passed over.
+    void Press(std::string input) {
+        if (input.empty() || (!pad && !Input::string_to_keyboard_key_map.contains(input))) {
+            return;
+        }
+        if (inputs.size() < CombinationInputs && std::ranges::find(inputs, input) == inputs.end()) {
+            inputs.push_back(input);
+        }
+        down.insert(std::move(input));
+    }
+
+    // Takes the combination once nothing is held.
+    void Release(const std::string& input) {
+        down.erase(input);
+        if (done || !down.empty() || inputs.empty()) {
+            return;
+        }
+        std::string joined;
+        for (const std::string& name : inputs) {
+            joined += joined.empty() ? name : ", " + name;
+        }
+        key = std::move(joined);
+        done = true;
+        timer.stop();
+        pad_timer.stop();
+        accept();
     }
 
     // A key the config cannot name ends the capture with no key; a name the input handler does
@@ -525,6 +585,7 @@ private:
     QString function;
     // Takes a pad button instead of a key or mouse button.
     bool pad = false;
+    bool combination = false;
     QLabel* label = nullptr;
     QTimer timer;
     QTimer pad_timer;
@@ -534,6 +595,9 @@ private:
     std::vector<SDL_Gamepad*> pads;
     // Pad buttons held since before the popup opened, which count once released.
     std::set<std::string_view> held;
+    // A combination's inputs in the order pressed, and the inputs held now.
+    std::vector<std::string> inputs;
+    std::set<std::string> down;
 };
 
 // ------------------------------------------------------------------------------------ dialog
@@ -801,6 +865,25 @@ std::optional<PadBindings> EditPadBindings(QWidget* owner, const PadBindings& bu
         return std::nullopt;
     }
     return editor.buttons;
+}
+
+std::string CaptureCombination(QWidget* owner, const QString& function, bool pad) {
+    Capture capture{owner, function, pad, true};
+    capture.exec();
+    return capture.key;
+}
+
+QString CombinationText(std::string_view inputs, bool pad, std::string_view layout) {
+    QString text;
+    for (const auto part : std::views::split(inputs, ',')) {
+        std::string name(part.begin(), part.end());
+        std::erase_if(name, [](unsigned char c) { return std::isspace(c) != 0; });
+        if (!name.empty()) {
+            text += (text.isEmpty() ? QString{} : QStringLiteral(" + ")) +
+                    (pad ? PadText(layout, name) : KeyText(name));
+        }
+    }
+    return text.isEmpty() ? Tr("None") : text;
 }
 
 } // namespace Gr2Port::Launcher

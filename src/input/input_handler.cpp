@@ -30,6 +30,7 @@
 #include "core/emulator_state.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "imgui/settings_dialog_layer.h"
+#include "imgui/trophy_list_layer.h"
 #include "input/controller.h"
 #include "input/game_functions.h"
 #include "input/input_mouse.h"
@@ -209,6 +210,8 @@ std::filesystem::path GetInputConfigFile(const std::string& game_id) {
             {"hotkey_volume_down", "kpminus"},
             {"hotkey_emulator_settings", "f3"},
             {"hotkey_toggle_friends", "f2"},
+            {"hotkey_trophy_list", std::string(TrophyListKeysDefault)},
+            {"hotkey_trophy_list_pad", std::string(TrophyListButtonsDefault)},
         };
         std::string legacy_capture_binding;
         bool legacy_capture_binding_found = false;
@@ -1130,6 +1133,11 @@ void ControllerOutput::FinalizeUpdate(u8 gamepad_index) {
         case HOTKEY_TOGGLE_FRIENDS:
             PushSDLEvent(SDL_EVENT_TOGGLE_FRIENDS);
             break;
+        case HOTKEY_TROPHY_LIST:
+            if (new_button_state) {
+                Gr2Port::TrophyList::Toggle();
+            }
+            break;
         case KEY_TOGGLE:
             // noop
             break;
@@ -1360,7 +1368,16 @@ static void ProcessTouchpadSwipeCombo() {
 
     auto hold_it = FindPressed(swipe_combo.hold);
     const bool hold_down = IsHeld(hold_it);
-    if (hold_down && !swipe_combo.hold_passthrough) {
+    // A hotkey combination of the hold input and other held inputs keeps the hold input.
+    const bool hotkey_held = std::ranges::any_of(connections, [&](const BindingConnection& c) {
+        return c.output->button >= HOTKEY_FULLSCREEN && c.output->button <= HOTKEY_TROPHY_LIST &&
+               c.binding.KeyCount() > 1 &&
+               std::ranges::find(c.binding.keys, swipe_combo.hold) != std::end(c.binding.keys) &&
+               std::ranges::all_of(c.binding.keys, [&](const InputID& key) {
+                   return !key.IsValid() || IsHeld(FindPressed(key));
+               });
+    });
+    if (hold_down && !swipe_combo.hold_passthrough && !hotkey_held) {
         // Dedicated modifier: consume the hold input so its normal mappings stay off.
         hold_it->second = true;
     }

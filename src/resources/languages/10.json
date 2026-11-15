@@ -294,6 +294,11 @@
     "Downloading the update...": "正在下載更新...",
     "The update could not be installed.": "無法安裝更新。",
     "Graphics Settings": "圖形設定",
-    "Some changes take effect the next time the game starts.": "部分變更將在下次啟動遊戲時生效。"
+    "Some changes take effect the next time the game starts.": "部分變更將在下次啟動遊戲時生效。",
+    "Trophy List in Game": "遊戲內獎盃清單",
+    "Keyboard": "鍵盤",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "請同時按住最多三個要指定給以下功能的按鍵：\n{0}\n\n{1} 秒後將不做任何變更。",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "請同時按住控制器上最多三個要指定給以下功能的按鈕：\n{0}\n\n{1} 秒後將不做任何變更。",
+    "Field of View": "視野"
   }
 }

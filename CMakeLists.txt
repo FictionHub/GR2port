@@ -1066,6 +1066,8 @@ set(IMGUI src/imgui/imgui_config.h
           src/imgui/settings_dialog_imgui.h
           src/imgui/settings_dialog_layer.cpp
           src/imgui/settings_dialog_layer.h
+          src/imgui/trophy_list_layer.cpp
+          src/imgui/trophy_list_layer.h
           src/imgui/renderer/imgui_core.cpp
           src/imgui/renderer/imgui_core.h
           src/imgui/renderer/imgui_impl_sdl3.cpp
@@ -1248,6 +1250,11 @@ if (WIN32)
         target_link_options(gr2port PRIVATE /STACK:0x200000,0x200000)
     else()
         target_link_options(gr2port PRIVATE -Wl,--stack,2097152)
+    endif()
+
+    # The catcher names the functions in its stacks from a table in the executable's file
+    if (MSVC)
+        target_link_options(gr2port PRIVATE /DEBUG:SYMTAB)
     endif()
 
     # Change base image address

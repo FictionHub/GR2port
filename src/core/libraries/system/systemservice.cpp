@@ -13,6 +13,7 @@
 #include "core/libraries/music/music_player_service.h"
 #include "core/libraries/system/systemservice.h"
 #include "core/libraries/system/systemservice_error.h"
+#include "imgui/trophy_list_layer.h"
 
 namespace Libraries::SystemService {
 
@@ -1785,7 +1786,8 @@ s32 PS4_SYSV_ABI sceSystemServiceGetStatus(OrbisSystemServiceStatus* status) {
 
     std::lock_guard<std::mutex> lock(g_event_queue_mutex);
     status->event_num = static_cast<s32>(g_event_queue.size());
-    status->is_system_ui_overlaid = false;
+    // GR2port: the trophy list is a system overlay to the game while it is open.
+    status->is_system_ui_overlaid = Gr2Port::TrophyList::IsOpen();
     status->is_in_background_execution = false;
     status->is_cpu_mode7_cpu_normal = true;
     status->is_game_live_streaming_on_air = false;

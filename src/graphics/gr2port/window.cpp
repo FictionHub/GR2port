@@ -18,6 +18,7 @@
 
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/settings.h"
+#include "graphics/gr2port/vblank.h"
 #include "graphics/gr2port/window.h"
 
 namespace Gr2Port::Window {
@@ -44,10 +45,30 @@ bool PrintScreenHeld() {
 #endif
 }
 
+// Tells the vblank the refresh rate of the monitor the window is on.
+void StoreRefreshRate() {
+    const SDL_DisplayMode* const mode =
+        SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(g_window));
+    double rate = 0.0;
+    if (mode != nullptr) {
+        rate =
+            mode->refresh_rate_denominator > 0
+                ? static_cast<double>(mode->refresh_rate_numerator) / mode->refresh_rate_denominator
+                : mode->refresh_rate;
+    }
+    Vblank::SetRefreshRate(rate);
+}
+
 bool SDLCALL WatchEvents(void*, SDL_Event* event) {
     if (event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED &&
         event->window.windowID == g_window_id.load(std::memory_order_relaxed)) {
         StoreSize(event->window.data1, event->window.data2);
+    }
+    // The window is on another monitor, or a monitor runs another mode.
+    if (event->type == SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED ||
+        (event->type == SDL_EVENT_WINDOW_DISPLAY_CHANGED &&
+         event->window.windowID == g_window_id.load(std::memory_order_relaxed))) {
+        StoreRefreshRate();
     }
     // Shift + Print Screen + F2 stops the capture, and starts it again. The picture stands still
     // while it is stopped, so no key alone does it.
@@ -101,6 +122,7 @@ void SDLCALL ShowOnMainThread(void*) {
     int height = 0;
     SDL_GetWindowSizeInPixels(g_window, &width, &height);
     StoreSize(width, height);
+    StoreRefreshRate();
 }
 
 } // namespace

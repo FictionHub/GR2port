@@ -108,6 +108,9 @@ constexpr float UpscaleRatio(UpscaleQuality quality) {
 inline constexpr std::array<u32, 7> DetailLevels{400, 200, 150, 100, 75, 50, 25};
 /// The choices of Graphics::far_environment_detail: the game's own range last, longer ones before.
 inline constexpr std::array<u32, 4> FarDetailLevels{400, 200, 150, 100};
+/// The choices of Graphics::field_of_view, from the narrowest.
+inline constexpr std::array<u32, 15> FieldOfViewLevels{80,  85,  90,  95,  100, 105, 110, 115,
+                                                       120, 125, 130, 135, 140, 145, 150};
 
 /// What the renderer draws and how finely. A preset sets them all; "custom" is any other mix.
 struct Graphics {
@@ -145,6 +148,9 @@ struct Graphics {
     /// game's own level of detail distances by them.
     u32 near_environment_detail{100};
     u32 character_detail{100};
+    /// The gameplay cameras' field of view in percent of the game's own angle, a
+    /// FieldOfViewLevels entry. Presets leave it.
+    u32 field_of_view{100};
     /// The upscaler and its quality. Presets leave them.
     Upscaler upscaler{Upscaler::Off};
     UpscaleQuality upscale_quality{UpscaleQuality::Quality};

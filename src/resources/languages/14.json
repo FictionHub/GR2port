@@ -294,6 +294,11 @@
     "Downloading the update...": "Henter opdateringen...",
     "The update could not be installed.": "Opdateringen kunne ikke installeres.",
     "Graphics Settings": "Grafikindstillinger",
-    "Some changes take effect the next time the game starts.": "Nogle ændringer træder i kraft, næste gang spillet startes."
+    "Some changes take effect the next time the game starts.": "Nogle ændringer træder i kraft, næste gang spillet startes.",
+    "Trophy List in Game": "Trofæliste i spillet",
+    "Keyboard": "Tastatur",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Hold op til tre taster nede samtidig for\n{0}\n\nAnnulleres uden ændringer om {1} s.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Hold op til tre knapper på controlleren nede samtidig for\n{0}\n\nAnnulleres uden ændringer om {1} s.",
+    "Field of View": "Synsfelt"
   }
 }

@@ -42,6 +42,15 @@ ConfigLine TouchSwipeLine(bool on);
 /// Whether the input config turns touch pad swipes on: its last touchpad_swipe_enabled line.
 bool ReadTouchSwipe(const std::filesystem::path& file);
 
+/// The keys and the pad buttons that open the trophy list in the game, as an input config line's
+/// inputs; empty for none.
+using TrophyListInputs = std::array<std::string, 2>;
+
+/// The inputs of the global input config's trophy list hotkeys: their last lines.
+TrophyListInputs ReadTrophyList(const std::filesystem::path& file);
+
+std::vector<ConfigLine> TrophyListLines(const TrophyListInputs& inputs);
+
 /// Rewrites the input config's lines that start with each prefix and adds the missing ones at its
 /// end.
 bool SaveConfigLines(const std::filesystem::path& file, const std::vector<ConfigLine>& changes);

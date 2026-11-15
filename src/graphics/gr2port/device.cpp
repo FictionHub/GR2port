@@ -264,11 +264,16 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     features.features.geometryShader = d.geometry_shaders;
     features.features.tessellationShader = d.tessellation_shaders;
     features.features.shaderStorageImageExtendedFormats = d.storage_extended_formats;
-    const float priority = 1.0f;
+    d.fragment_stores = Catcher::On && supported.fragmentStoresAndAtomics != VK_FALSE;
+    features.features.fragmentStoresAndAtomics = d.fragment_stores;
+    const std::array<float, 2> priorities{1.0f, 1.0f};
+    // The catcher asks a stuck GPU for a small job through a second queue, when there is one.
+    const bool probe =
+        Catcher::On && d.gpu.getQueueFamilyProperties(d.dispatch)[d.queue_family].queueCount >= 2;
     const vk::DeviceQueueCreateInfo queue_info{
         .queueFamilyIndex = d.queue_family,
-        .queueCount = 1,
-        .pQueuePriorities = &priority,
+        .queueCount = probe ? 2u : 1u,
+        .pQueuePriorities = priorities.data(),
     };
     std::vector<const char*> extensions{NeededExtensions.begin(), NeededExtensions.end()};
     const auto [extensions_result, available] =
@@ -354,6 +359,9 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     d.dispatch.init(device);
     Upscaler::OnDeviceCreated(d);
     d.queue = device.getQueue(d.queue_family, 0, d.dispatch);
+    if (probe) {
+        d.probe_queue = device.getQueue(d.queue_family, 1, d.dispatch);
+    }
 
     const auto properties = d.gpu.getProperties(d.dispatch);
     const auto families = d.gpu.getQueueFamilyProperties(d.dispatch);

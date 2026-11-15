@@ -93,11 +93,25 @@ void Mark(const Device& device, vk::CommandBuffer cmd, Pass pass);
 void Mark(const Device& device, vk::CommandBuffer cmd, Pass pass,
           const vk::RenderingInfo& rendering);
 
+/// Inside a rendering whose attachments load, with the trace on: records that the GPU reached
+/// draw index of the pass it is in. The rendering ends before the mark and begins again after it.
+void MarkDraw(const Device& device, vk::CommandBuffer cmd, u32 index,
+              const vk::RenderingInfo& rendering);
+
+/// Any thread, with the trace on: the draw MarkDraw recorded last, and the low half of its frame.
+/// False without the trace.
+bool LastDraw(u32& frame, u32& index);
+
 /// Render thread, after the frame's first mark: the frame draws packet, which starts with header.
 void Note(const Scene::Header& header, const u8* packet);
 
 /// Render thread: the frame went to the GPU.
 void Submitted();
+
+/// Any thread, while the render thread waits for the GPU: logs the frames in flight as a lost
+/// device's report does, their records' addresses checked, and the records the game's own
+/// programs draw from as words.
+void ReportStall();
 
 /// Given the result of call: when it says the device is lost, logs the report, once.
 void Check(const Device& device, vk::Result result, std::string_view call);

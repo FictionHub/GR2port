@@ -31,6 +31,8 @@
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
 #include "graphics/gr2port/catcher.h"
+#include "graphics/gr2port/catcher_crash.h"
+#include "graphics/gr2port/catcher_outside.h"
 #include "graphics/gr2port/device_lost.h"
 
 #ifdef _WIN32
@@ -43,6 +45,10 @@
 #endif
 
 int main(int argc, char* argv[]) {
+    // GR2port: the catcher's watcher outside the game is this executable, started by the game.
+    if (argc >= 3 && std::string(argv[1]) == Gr2Port::Catcher::Outside::Option) {
+        return Gr2Port::Catcher::Outside::Run(static_cast<u32>(std::strtoul(argv[2], nullptr, 10)));
+    }
 #ifdef _WIN32
     Gr2Port::Launcher::AttachTerminal();
     SetConsoleOutputCP(CP_UTF8);
@@ -160,8 +166,8 @@ int main(int argc, char* argv[]) {
 
     // GR2port: the log of each run after one that lost the GPU device repeats that run's report,
     // and each such run traces the GPU for its own.
-    if (Gr2Port::DeviceLost::KeepLastReport(
-            Common::FS::GetUserPath(Common::FS::PathType::LogDir) / Common::FS::LOG_FILE)) {
+    if (Gr2Port::DeviceLost::KeepLastReport(Common::FS::GetUserPath(Common::FS::PathType::LogDir) /
+                                            Common::FS::LOG_FILE)) {
         Gr2Port::DeviceLost::Arm("an earlier run lost the device");
     }
     if (gpuTrace || std::getenv("GR2PORT_GPU_TRACE") != nullptr) {
@@ -169,6 +175,8 @@ int main(int argc, char* argv[]) {
     }
     if (Gr2Port::Catcher::On) {
         Gr2Port::DeviceLost::Arm("this build catches lost devices");
+        Gr2Port::Catcher::Crash::Install(Common::FS::GetUserPath(Common::FS::PathType::LogDir));
+        Gr2Port::Catcher::Outside::Start(Common::FS::GetUserPath(Common::FS::PathType::LogDir));
     }
 
     // GR2port: Steam hides the real gamepads from the programs it starts, which leaves its own

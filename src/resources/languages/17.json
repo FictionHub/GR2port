@@ -294,6 +294,11 @@
     "Downloading the update...": "Baixando a atualização...",
     "The update could not be installed.": "Não foi possível instalar a atualização.",
     "Graphics Settings": "Configurações gráficas",
-    "Some changes take effect the next time the game starts.": "Algumas alterações só terão efeito na próxima vez que o jogo for iniciado."
+    "Some changes take effect the next time the game starts.": "Algumas alterações só terão efeito na próxima vez que o jogo for iniciado.",
+    "Trophy List in Game": "Lista de troféus no jogo",
+    "Keyboard": "Teclado",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Segure até três teclas juntas para\n{0}\n\nNada muda em {1} s.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Segure até três botões do controle juntos para\n{0}\n\nNada muda em {1} s.",
+    "Field of View": "Campo de visão"
   }
 }

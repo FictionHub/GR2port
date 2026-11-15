@@ -397,6 +397,41 @@ void ReportPackets(u64 frame) {
     }
 }
 
+// The records of the frames in flight that the game's own programs draw from, as words: the
+// constants the game gave them are what a look at a stuck pass needs.
+void ReportRecords(u64 frame) {
+    for (u64 f = frame < g_frames_in_flight ? 1 : frame - g_frames_in_flight + 1; f <= frame; f++) {
+        const FrameNote& note = g_frames[f % KeptFrames];
+        if (note.frame != f || note.packet == nullptr || note.header.ui.only != 0) {
+            continue;
+        }
+        const Scene::Header& header = note.header;
+        const auto list = [&](std::string_view name, u64 offset, u32 count, u32 room, u64 stride,
+                              u32 most) {
+            const u32 listed = std::min({count, room, most});
+            std::vector<u32> words(stride / sizeof(u32));
+            for (u32 i = 0; i < listed; i++) {
+                std::memcpy(words.data(), note.packet + offset + i * stride,
+                            words.size() * sizeof(u32));
+                std::string text;
+                for (const u32 word : words) {
+                    text += fmt::format("{:x} ", word);
+                }
+                LOG_ERROR(Render_Vulkan,
+                          "GR2port: frame {} (game frame {}) {} {} of {} as words: {}", f,
+                          header.frame, name, i, count, text);
+            }
+        };
+        list("water draw", Scene::WaterDrawsOffset, header.effects.water_draws,
+             Scene::MaxWaterDraws, sizeof(Scene::WaterDraw), Scene::MaxWaterDraws);
+        list("water command", Scene::WaterCommandsOffset, header.effects.water_draws,
+             Scene::MaxWaterDraws, sizeof(Scene::Command), Scene::MaxWaterDraws);
+        list("effect draw", Scene::EffectDrawsOffset, header.effects.draws, Scene::MaxEffectDraws,
+             sizeof(Scene::EffectDraw), 6);
+        list("light", Scene::LightOffset, 1, 1, sizeof(Scene::Light) & ~u64{3}, 1);
+    }
+}
+
 void ReportMemory() {
     if (g_memory == nullptr) {
         return;
@@ -716,6 +751,33 @@ void Mark(const Device& device, vk::CommandBuffer cmd, Pass pass,
     cmd.beginRendering(rendering, device.dispatch);
 }
 
+// The trace's last two words hold the frame and the number of the draw MarkDraw recorded last.
+constexpr u32 DrawFrameWord = MaxMarks - 2;
+constexpr u32 DrawIndexWord = MaxMarks - 1;
+static_assert(static_cast<u32>(Pass::Count) <= DrawFrameWord);
+
+void MarkDraw(const Device& device, vk::CommandBuffer cmd, u32 index,
+              const vk::RenderingInfo& rendering) {
+    if (!g_armed) {
+        return;
+    }
+    cmd.endRendering(device.dispatch);
+    cmd.fillBuffer(g_crumbs.buffer, DrawFrameWord * sizeof(u32), sizeof(u32),
+                   static_cast<u32>(g_frame.load(std::memory_order_relaxed)), device.dispatch);
+    cmd.fillBuffer(g_crumbs.buffer, DrawIndexWord * sizeof(u32), sizeof(u32), index,
+                   device.dispatch);
+    cmd.beginRendering(rendering, device.dispatch);
+}
+
+bool LastDraw(u32& frame, u32& index) {
+    if (!g_armed || g_crumbs.mapped == nullptr) {
+        return false;
+    }
+    std::memcpy(&frame, g_crumbs.mapped + DrawFrameWord * sizeof(u32), sizeof(frame));
+    std::memcpy(&index, g_crumbs.mapped + DrawIndexWord * sizeof(u32), sizeof(index));
+    return true;
+}
+
 void Note(const Scene::Header& header, const u8* packet) {
     FrameNote& note = g_frames[g_frame.load(std::memory_order_relaxed) % KeptFrames];
     note.header = header;
@@ -736,6 +798,14 @@ void Note(const Scene::Header& header, const u8* packet) {
 void Submitted() {
     g_submitted = std::chrono::steady_clock::now();
     g_submitted_frame = g_frame.load(std::memory_order_relaxed);
+}
+
+void ReportStall() {
+    const u64 frame = Frame();
+    ReportPackets(frame);
+    ReportMemory();
+    ReportRecords(frame);
+    Common::Log::Flush();
 }
 
 void Check(const Device& device, vk::Result result, std::string_view call) {

@@ -4,11 +4,13 @@
 #pragma once
 
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "common/types.h"
 #include "launcher/qt/input_config.h"
 
+class QString;
 class QWidget;
 
 namespace Gr2Port::Launcher {
@@ -23,5 +25,14 @@ std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& ke
 /// edited buttons on OK.
 std::optional<PadBindings> EditPadBindings(QWidget* owner, const PadBindings& buttons,
                                            u32 control_type, std::string_view layout);
+
+/// Waits over owner for up to three keys, or pad buttons when pad is set, held together until all
+/// are released, and returns them as an input config line's inputs ("lctrl, t"). Empty when the
+/// countdown ends first.
+std::string CaptureCombination(QWidget* owner, const QString& function, bool pad);
+
+/// The text of an input config line's inputs ("l3, r3" -> "L3 + R3"), with pad buttons named as
+/// layout's prompts show them.
+QString CombinationText(std::string_view inputs, bool pad, std::string_view layout);
 
 } // namespace Gr2Port::Launcher

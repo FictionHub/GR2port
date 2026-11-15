@@ -9,6 +9,7 @@
 #include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/swapchain.h"
+#include "graphics/gr2port/vblank.h"
 
 namespace Gr2Port {
 
@@ -115,6 +116,7 @@ bool Swapchain::Create(u32 width, u32 height) {
     }
     LOG_INFO(Render_Vulkan, "GR2port: swapchain {}x{}, {} images, {}", extent.width, extent.height,
              images.size(), vk::to_string(info.presentMode));
+    Vblank::SetSynced(info.presentMode != vk::PresentModeKHR::eImmediate);
     return true;
 }
 

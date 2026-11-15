@@ -209,6 +209,16 @@ constexpr Area KeyBindingsButton{18, 396, 178, 419};
 constexpr Area PadBindingsButton{433, 402, 577, 424};
 constexpr int TrophyPopupsTop = 118;
 constexpr Area TrophyViewerButton{18, 146, 178, 169};
+// The inputs that open the trophy list in the game: a heading, then the keys' row and the pad
+// buttons' row, each with the inputs and their Change and Clear buttons.
+constexpr int TrophyListTop = 192;
+constexpr int TrophyKeysTop = 214;
+constexpr int TrophyButtonsTop = 244;
+constexpr int TrophyInputsWidth = 150;
+constexpr int TrophyChangeLeft = 356;
+constexpr int TrophyChangeWidth = 110;
+constexpr int TrophyClearLeft = 472;
+constexpr int TrophyClearWidth = 90;
 
 // The button prompts setting's values, in the order of the combo box.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 7> PromptChoices{{
@@ -301,6 +311,11 @@ constexpr std::array<std::string_view, 7> DetailChoices{"400%", "200%", "150%", 
                                                         "75%",  "50%",  "25%"};
 constexpr std::array<std::string_view, 4> FarDetailChoices{"400%", "200%", "150%", "PS4 Original"};
 constexpr int OwnDetail = 3;
+// The field of view's choices, in the order of Settings::FieldOfViewLevels, and the game's own.
+constexpr std::array<std::string_view, 15> FieldOfViewChoices{
+    "80%",  "85%",  "90%",  "95%",  "PS4 Original", "105%", "110%", "115%",
+    "120%", "125%", "130%", "135%", "140%",         "145%", "150%"};
+constexpr int OwnFieldOfView = 4;
 
 struct GraphicsColumn {
     int label_left;
@@ -378,6 +393,11 @@ struct Dialog {
     std::optional<KeyBindings> key_bindings;
     // The pad buttons as the Button Bindings dialog left them, to save on Ok.
     std::optional<PadBindings> pad_bindings;
+    // The global input config, and the inputs of its trophy list hotkeys as it holds them and as
+    // the Trophies tab shows them.
+    std::filesystem::path global_config;
+    TrophyListInputs trophy_list_saved;
+    TrophyListInputs trophy_list;
     // The MB of each Texture Streaming choice; 0 for Auto.
     std::vector<u32> texture_streaming;
 
@@ -396,6 +416,7 @@ struct Dialog {
     QComboBox* upscale_quality = nullptr;
     QComboBox* language = nullptr;
     QComboBox* preset = nullptr;
+    QComboBox* field_of_view = nullptr;
     QComboBox* shadows = nullptr;
     QComboBox* fog = nullptr;
     QComboBox* fog_shadows = nullptr;
@@ -425,6 +446,8 @@ struct Dialog {
     QComboBox* pad_prompts = nullptr;
     QCheckBox* touch_swipe_box = nullptr;
     QCheckBox* trophy_popups = nullptr;
+    // The keys' and the pad buttons' inputs of the trophy list.
+    std::array<QLabel*, 2> trophy_inputs{};
     QCheckBox* dlc = nullptr;
     QCheckBox* halloween = nullptr;
     QLineEdit* online_id = nullptr;
@@ -600,6 +623,14 @@ std::string PadNamesLayout(const Dialog& dialog) {
     return layout == "keyboard" ? std::string("playstation") : layout;
 }
 
+// The Trophies tab's inputs that open the trophy list, with pad buttons named as the button
+// prompts show them.
+void ShowTrophyList(Dialog& dialog) {
+    dialog.trophy_inputs[0]->setText(CombinationText(dialog.trophy_list[0], false, {}));
+    dialog.trophy_inputs[1]->setText(
+        CombinationText(dialog.trophy_list[1], true, PadNamesLayout(dialog)));
+}
+
 Settings::Mouse ReadMouse(const Dialog& dialog) {
     Settings::Mouse mouse = dialog.values.mouse;
     const int prompts = dialog.prompts->currentIndex();
@@ -680,8 +711,9 @@ void ShowPads(Dialog& dialog) {
 }
 
 // The Controller tab shows config.json's controller settings and the deadzones of the input
-// config the game reads, and the Mouse && Keyboard tab that config's touch pad swipe switch. The
-// gamepads are listed when the tab is shown.
+// config the game reads, the Mouse && Keyboard tab that config's touch pad swipe switch, and the
+// Trophies tab the global input config's trophy list inputs. The gamepads are listed when the tab
+// is shown.
 void ShowController(Dialog& dialog) {
     for (size_t i = 0; i < Toggles.size(); ++i) {
         dialog.toggles[i]->setChecked((EmulatorSettings.*Toggles[i].get)());
@@ -694,6 +726,9 @@ void ShowController(Dialog& dialog) {
     ShowDeadzones(dialog, dialog.deadzones);
     dialog.touch_swipe = ReadTouchSwipe(dialog.input_config);
     dialog.touch_swipe_box->setChecked(dialog.touch_swipe);
+    dialog.global_config = Input::GetInputConfigFile("global");
+    dialog.trophy_list_saved = ReadTrophyList(dialog.global_config);
+    dialog.trophy_list = dialog.trophy_list_saved;
     dialog.default_pad = EmulatorSettings.GetDefaultControllerId();
 }
 
@@ -883,8 +918,10 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
         IndexOf(Settings::DetailLevels, graphics.character_detail, OwnDetail));
 }
 
-// The upscaler and its quality, which presets leave.
+// The field of view, the upscaler and its quality, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
+    dialog.field_of_view->setCurrentIndex(
+        IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
     dialog.upscaler->setCurrentIndex(static_cast<int>(graphics.upscaler));
     dialog.upscale_quality->setCurrentIndex(static_cast<int>(graphics.upscale_quality));
 }
@@ -913,6 +950,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     ReadChoice(dialog.far_detail, Settings::FarDetailLevels, graphics.far_environment_detail);
     ReadChoice(dialog.near_detail, Settings::DetailLevels, graphics.near_environment_detail);
     ReadChoice(dialog.character_detail, Settings::DetailLevels, graphics.character_detail);
+    ReadChoice(dialog.field_of_view, Settings::FieldOfViewLevels, graphics.field_of_view);
     const int upscaler = dialog.upscaler->currentIndex();
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -1208,6 +1246,7 @@ void Retranslate(Dialog& dialog) {
     }
     FitTabs(dialog.tab);
     ShowAutomaticPrompts(dialog);
+    ShowTrophyList(dialog);
 }
 
 // Picks a console language in the Language list and shows the texts in it.
@@ -1242,12 +1281,20 @@ void BuildDisplay(Dialog& dialog, QWidget* page) {
     dialog.language = MakeRow(dialog, page, "Language", LanguageTop);
 }
 
-// Tab order follows creation: the left column's rows, then the right's.
+// Tab order follows creation: the preset and the field of view, the left column's rows, then the
+// right's.
 void BuildGraphics(Dialog& dialog, QWidget* page) {
     MakeLabel(dialog, page, "Preset", Qt::AlignLeft | Qt::AlignVCenter,
               Place(page, LeftColumn.label_left, PresetTop, LeftColumn.label_width, ComboHeight));
-    dialog.preset =
-        MakeCombo(page, Place(page, LeftColumn.combo_left, PresetTop, ComboWidth, ComboHeight));
+    dialog.preset = MakeCombo(
+        page, Place(page, LeftColumn.combo_left, PresetTop, LeftColumn.combo_width, ComboHeight));
+    MakeLabel(dialog, page, "Field of View", Qt::AlignLeft | Qt::AlignVCenter,
+              Place(page, RightColumn.label_left, PresetTop, RightColumn.label_width, ComboHeight));
+    dialog.field_of_view = MakeCombo(
+        page, Place(page, RightColumn.combo_left, PresetTop, RightColumn.combo_width, ComboHeight));
+    for (const std::string_view choice : FieldOfViewChoices) {
+        AddText(dialog, dialog.field_of_view, choice);
+    }
     const auto row = [&](const Phrase& text, const GraphicsColumn& column, int index,
                          std::span<const std::string_view> choices) {
         const int top = PassTop + index * PassStep;
@@ -1395,10 +1442,15 @@ void BuildMouse(Dialog& dialog, QWidget* page) {
         MakeButton(dialog, page, "Key Bindings...", KeyBindingsButton);
 
     // Both tabs show the one button prompts setting.
-    QObject::connect(dialog.prompts, &QComboBox::activated, dialog.window,
-                     [&dialog](int index) { dialog.pad_prompts->setCurrentIndex(index); });
+    QObject::connect(dialog.prompts, &QComboBox::activated, dialog.window, [&dialog](int index) {
+        dialog.pad_prompts->setCurrentIndex(index);
+        ShowTrophyList(dialog);
+    });
     QObject::connect(dialog.pad_prompts, &QComboBox::activated, dialog.window,
-                     [&dialog](int index) { dialog.prompts->setCurrentIndex(index); });
+                     [&dialog](int index) {
+                         dialog.prompts->setCurrentIndex(index);
+                         ShowTrophyList(dialog);
+                     });
     QObject::connect(key_bindings, &QPushButton::clicked, dialog.window, [&dialog] {
         const KeyBindings keys =
             dialog.key_bindings ? *dialog.key_bindings : ReadKeyBindings(dialog.input_config);
@@ -1464,6 +1516,46 @@ void BuildTrophies(Dialog& dialog, QWidget* page) {
         Trophies::Extract();
         ShowTrophies(dialog.window);
     });
+    MakeLabel(dialog, page, "Trophy List in Game", Qt::AlignLeft | Qt::AlignVCenter,
+              Place(page, LabelLeft, TrophyListTop, ExtrasList.right - LabelLeft, CheckHeight));
+    struct TrophyRow {
+        std::string_view label;
+        std::string_view change;
+        std::string_view clear;
+        int top;
+    };
+    const std::array<TrophyRow, 2> rows{
+        TrophyRow{"Keyboard", "Change Key...", "Clear Key", TrophyKeysTop},
+        TrophyRow{"Controller", "Change Button...", "Clear Button", TrophyButtonsTop}};
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const TrophyRow& row = rows[i];
+        MakeLabel(dialog, page, row.label, Qt::AlignLeft | Qt::AlignVCenter,
+                  Place(page, LabelLeft, row.top, LabelWidth, ComboHeight));
+        auto* const inputs = new QLabel{page};
+        inputs->setGeometry(Place(page, ComboLeft, row.top, TrophyInputsWidth, ComboHeight));
+        inputs->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+        inputs->setAlignment(Qt::AlignCenter);
+        dialog.trophy_inputs[i] = inputs;
+        QPushButton* const change =
+            MakeButton(dialog, page, row.change,
+                       {TrophyChangeLeft, row.top, TrophyChangeLeft + TrophyChangeWidth,
+                        row.top + ComboHeight});
+        QPushButton* const clear = MakeButton(
+            dialog, page, row.clear,
+            {TrophyClearLeft, row.top, TrophyClearLeft + TrophyClearWidth, row.top + ComboHeight});
+        const bool pad = i == 1;
+        QObject::connect(change, &QPushButton::clicked, dialog.window, [&dialog, pad] {
+            std::string inputs = CaptureCombination(dialog.window, Tr("Trophy List in Game"), pad);
+            if (!inputs.empty()) {
+                dialog.trophy_list[pad] = std::move(inputs);
+                ShowTrophyList(dialog);
+            }
+        });
+        QObject::connect(clear, &QPushButton::clicked, dialog.window, [&dialog, pad] {
+            dialog.trophy_list[pad].clear();
+            ShowTrophyList(dialog);
+        });
+    }
 }
 
 void BuildExtras(Dialog& dialog, QWidget* page) {
@@ -1574,6 +1666,10 @@ void Save(Dialog& dialog) {
     if (dialog.pad_bindings && !SavePadBindings(dialog.input_config, *dialog.pad_bindings)) {
         Tell(dialog, "The button bindings could not be saved.", "Button Bindings");
     }
+    if (dialog.trophy_list != dialog.trophy_list_saved &&
+        !SaveConfigLines(dialog.global_config, TrophyListLines(dialog.trophy_list))) {
+        Tell(dialog, "The input config could not be saved.", "Trophies");
+    }
 }
 
 void SetDefaults(Dialog& dialog) {
@@ -1593,6 +1689,9 @@ void SetDefaults(Dialog& dialog) {
     dialog.trophy_popups->setChecked(!GeneralSettings{}.trophy_popup_disabled.value);
     dialog.key_bindings = DefaultKeyBindings();
     dialog.pad_bindings = DefaultPadBindings();
+    dialog.trophy_list = {std::string(Input::TrophyListKeysDefault),
+                          std::string(Input::TrophyListButtonsDefault)};
+    ShowTrophyList(dialog);
     ShowLanguage(dialog, GeneralSettings{}.console_language.value);
     ShowPaths(dialog, {}, false);
 }
@@ -1679,6 +1778,7 @@ void Build(Dialog& dialog) {
     ShowPreset(dialog);
     ShowController(dialog);
     ShowMouse(dialog, dialog.values.mouse);
+    ShowTrophyList(dialog);
     ShowOnline(dialog);
 
     QObject::connect(dialog.tab, &QTabBar::currentChanged, window, [&dialog](int shown) {

@@ -13,7 +13,10 @@
 #include "core/memory.h"
 #include "graphics/gr2port/camera_reach.h"
 #include "graphics/gr2port/capture.h"
+#include "graphics/gr2port/catcher_outside.h"
+#include "graphics/gr2port/catcher_stacks.h"
 #include "graphics/gr2port/exit_rows.h"
+#include "graphics/gr2port/field_of_view.h"
 #include "graphics/gr2port/float_spin.h"
 #include "graphics/gr2port/frame_graph_draws.h"
 #include "graphics/gr2port/gr2port.h"
@@ -24,6 +27,7 @@
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/mob_float.h"
+#include "graphics/gr2port/motion_ends.h"
 #include "graphics/gr2port/mouse_camera.h"
 #include "graphics/gr2port/movies.h"
 #include "graphics/gr2port/particle_capture.h"
@@ -31,6 +35,7 @@
 #include "graphics/gr2port/player_control.h"
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/script_timers.h"
+#include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/timeline.h"
 #include "graphics/gr2port/ui_capture.h"
@@ -129,8 +134,15 @@ void Install(VAddr module_base) {
     GravityKick::Install(module_base, c, StubAreaSize);
     GravitySlide::Install(module_base, c, StubAreaSize);
     ScriptTimers::Install(module_base, c, StubAreaSize);
+    Catcher::Stacks::SetGame(module_base);
+    Catcher::Outside::Set(Catcher::Outside::Crumb::GameBase, module_base);
     WaterSplashes::Install(module_base, c, StubAreaSize);
     FloatSpin::Install(module_base, c, StubAreaSize);
+    // At the game's own 30 fps the motions keep the stock steps.
+    if (Settings::Get().game.frame_rate > 30) {
+        MotionEnds::Install(module_base, c, StubAreaSize);
+    }
+    FieldOfView::Install(module_base, c, StubAreaSize);
     if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
             Hooks::Result::Mismatch ||
         Hooks::ObserveEntry(module_base, NextContext, c, StubAreaSize, &OnNextContext, 0) ==

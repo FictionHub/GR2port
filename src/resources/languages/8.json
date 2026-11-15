@@ -294,6 +294,11 @@
     "Downloading the update...": "Загрузка обновления...",
     "The update could not be installed.": "Не удалось установить обновление.",
     "Graphics Settings": "Настройки графики",
-    "Some changes take effect the next time the game starts.": "Некоторые изменения вступят в силу при следующем запуске игры."
+    "Some changes take effect the next time the game starts.": "Некоторые изменения вступят в силу при следующем запуске игры.",
+    "Trophy List in Game": "Список призов в игре",
+    "Keyboard": "Клавиатура",
+    "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Удерживайте вместе до трёх клавиш для действия\n{0}\n\nОтмена через {1} с.",
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Удерживайте вместе до трёх кнопок на контроллере для действия\n{0}\n\nОтмена через {1} с.",
+    "Field of View": "Поле зрения"
   }
 }

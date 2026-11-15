@@ -53,4 +53,14 @@ bool SavePadBindings(const std::filesystem::path& file, const PadBindings& butto
 std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& buttons, u32 control_type,
                                            std::string_view layout);
 
+/// Waits over owner for up to three keys, or pad buttons when pad is set, held together until all
+/// are released, and returns them as an input config line's inputs ("lctrl, t"). Empty when the
+/// countdown ends first.
+std::string CaptureCombination(HWND owner, HFONT font, UINT dpi, const std::wstring& function,
+                               bool pad);
+
+/// The text of an input config line's inputs ("l3, r3" -> "L3 + R3"), with pad buttons named as
+/// layout's prompts show them.
+std::wstring CombinationText(std::string_view inputs, bool pad, std::string_view layout);
+
 } // namespace Gr2Port::Launcher

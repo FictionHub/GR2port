@@ -19,6 +19,8 @@ struct Device {
     vk::PhysicalDevice gpu;
     vk::Device device;
     vk::Queue queue;
+    /// A second queue of the same family for the catcher's probe, or none.
+    vk::Queue probe_queue;
     u32 queue_family = 0;
     /// Nanoseconds per timestamp tick, or 0 when the queue has no timestamps.
     double timestamp_period = 0.0;
@@ -28,6 +30,8 @@ struct Device {
     bool tessellation_shaders = false;
     /// Storage images may have formats such as R8 (shaderStorageImageExtendedFormats).
     bool storage_extended_formats = false;
+    /// Pixel programs may write to buffers: the catcher's guard notes through one.
+    bool fragment_stores = false;
     /// A lost device reports the last checkpoints (VK_NV_device_diagnostic_checkpoints).
     bool checkpoints = false;
     /// A lost device reports the fault (VK_EXT_device_fault).
