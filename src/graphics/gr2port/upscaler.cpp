@@ -77,6 +77,9 @@ struct InputsPush {
     float far_plane;
 };
 
+// The inputs pass writes 1 - depth with this flag: FSR 4 takes the nearer depth as the smaller.
+constexpr u32 InputsDepthInverted = 2;
+
 // An FSR 4 dispatch the GPU may still run, with the renderer's frame that recorded it.
 struct Fsr4Frame {
     u64 id;
@@ -424,7 +427,7 @@ void RecordInputs(vk::CommandBuffer cmd, float near_plane, float far_plane) {
     }
     const InputsPush push{
         .size = {g_render.width, g_render.height},
-        .flags = 0,
+        .flags = g_upscaler == Settings::Upscaler::Fsr4 ? InputsDepthInverted : 0u,
         .near_plane = near_plane,
         .far_plane = far_plane,
     };

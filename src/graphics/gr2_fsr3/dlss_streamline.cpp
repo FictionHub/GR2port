@@ -559,7 +559,8 @@ std::string DlssEvaluate(vk::CommandBuffer cmdbuf, const DlssEvaluateInfo& info)
     sl::Constants constants{};
     constants.jitterOffset = sl::float2{info.jitter_x, info.jitter_y};
     constants.mvecScale = sl::float2{info.motion_vector_scale_x, info.motion_vector_scale_y};
-    constants.depthInverted = sl::Boolean::eFalse;
+    // The scene's depth is reversed: nearer is greater.
+    constants.depthInverted = sl::Boolean::eTrue;
     constants.cameraMotionIncluded = sl::Boolean::eTrue;
     constants.motionVectors3D = sl::Boolean::eFalse;
     constants.reset = info.reset ? sl::Boolean::eTrue : sl::Boolean::eFalse;
