@@ -152,7 +152,10 @@ void main() {
     // Reverse depth to the game's OpenGL depth.
     const float distance_to_eye =
         1.0 / (light.inverse_projection.z * (1.0 - 2.0 * depth) + light.inverse_projection.w);
-    const vec2 ndc = vec2(2.0 * uv.x - 1.0, 1.0 - 2.0 * uv.y);
+    // The upscaler's jitter moved the surface this depth belongs to by its offset.
+    const vec2 drawn = (gl_FragCoord.xy - vec2(light.jitter[0], light.jitter[1])) /
+                       vec2(textureSize(scene_depth, 0));
+    const vec2 ndc = vec2(2.0 * drawn.x - 1.0, 1.0 - 2.0 * drawn.y);
     const vec3 position =
         vec3(light.inverse_projection.xy * distance_to_eye * ndc, -distance_to_eye);
     const vec4 albedo_hatching = texelFetch(surface_albedo, pixel, 0);

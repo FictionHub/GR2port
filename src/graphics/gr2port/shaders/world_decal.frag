@@ -28,7 +28,9 @@ void main() {
     // Reverse depth to the game's OpenGL depth.
     const float distance_to_eye =
         1.0 / (light.inverse_projection.z * (1.0 - 2.0 * depth) + light.inverse_projection.w);
-    const vec2 uv_on_screen = gl_FragCoord.xy / vec2(textureSize(scene_depth, 0));
+    // The upscaler's jitter moved the surface this depth belongs to by its offset.
+    const vec2 uv_on_screen = (gl_FragCoord.xy - vec2(light.jitter[0], light.jitter[1])) /
+                              vec2(textureSize(scene_depth, 0));
     const vec2 ndc = vec2(2.0 * uv_on_screen.x - 1.0, 1.0 - 2.0 * uv_on_screen.y);
     const vec3 position =
         vec3(light.inverse_projection.xy * distance_to_eye * ndc, -distance_to_eye);

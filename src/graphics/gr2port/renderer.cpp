@@ -916,6 +916,9 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     if (drawn) {
         MeasureMotion(packet);
         Upscaler::BeginFrame(packet.data, frame, FramesInFlight);
+        const Upscaler::Offset jitter = Upscaler::Jitter();
+        std::memcpy(packet.data + Scene::LightOffset + offsetof(Scene::Light, jitter), &jitter,
+                    sizeof(jitter));
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Deformers);
         Deformers::Record(cmd, header, packet.address);
         PassTimes::Mark(cmd, PassTimes::Pass::Deformers);

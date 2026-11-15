@@ -1294,7 +1294,9 @@ struct Light {
     float shadow_influence;
     /// Whether the game traced the point lights' screen-space shadows (view+0xc1c).
     u32 shadow_trace;
-    u32 padding[2];
+    /// The upscaler's jitter in the scene's pixels, by which it moves the scene's draws. The render
+    /// thread writes it.
+    float jitter[2];
     /// Occluders in view space: centre, radius.
     float occluder_spheres[MaxOccluders][4];
     /// The ambient light's spherical harmonics for characters: Ar, Ag, Ab, Br, Bg, Bb, Cc.
