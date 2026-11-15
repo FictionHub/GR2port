@@ -5,8 +5,10 @@
 #include <array>
 #include <charconv>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -18,6 +20,7 @@
 #include "common/io_file.h"
 #include "common/logging/log.h"
 #include "common/types.h"
+#include "core/file_sys/fs.h"
 #include "core/file_sys/ifile.h"
 #include "core/game_check/dump_reference.h"
 #include "core/loader/elf.h"
@@ -50,12 +53,15 @@ constexpr u64 DigestBytes = 16;
 constexpr u64 EntryFirstBlock = 16;
 constexpr u64 EntrySize = 20;
 constexpr u64 EntryOffset = 25;
+// The bytes a whole read of an archive takes at a time.
+constexpr u64 WholeReadBytes = 4ull << 20;
 
-// A known build of an archive, or of the eboot: its size where it has one, its hash and the
-// titles dumped with it.
+// A known build of an archive, or of the eboot: its size where it has one, its hash, an
+// archive's hash as a whole file and the titles dumped with it.
 struct Form {
     u64 size = 0;
     std::string_view hash;
+    std::string_view whole;
     std::vector<std::string_view> titles;
 };
 
@@ -130,6 +136,8 @@ Reference Parse(std::string_view text) {
                 .size = Number(rest.substr(0, split)),
                 .hash = split == std::string_view::npos ? rest : rest.substr(split + 1),
             });
+        } else if (word == "whole" && form != nullptr) {
+            form->whole = rest;
         } else if (word == "titles" && form != nullptr) {
             for (std::string_view titles = rest; !titles.empty();) {
                 const size_t end = titles.find(' ');
@@ -507,6 +515,94 @@ void CompareArchive(const std::string& title, const Archive& archive, IBackend& 
 void LogDumpAgain() {
     std::ranges::for_each(g_lines, Write);
     g_lines.clear();
+}
+
+WholeRead::WholeRead(std::string title_id, std::vector<std::filesystem::path> roots) {
+    for (const Archive& archive : TheReference().archives) {
+        archives.push_back({.name = std::string{archive.name} + ".psarc"});
+    }
+    thread = std::jthread{[this, title_id = std::move(title_id), roots = std::move(roots)](
+                              std::stop_token stop) { Run(stop, title_id, roots); }};
+}
+
+std::vector<WholeArchive> WholeRead::Archives() const {
+    std::scoped_lock lock{mutex};
+    return archives;
+}
+
+bool WholeRead::Done() const {
+    std::scoped_lock lock{mutex};
+    return std::ranges::none_of(archives, [](const WholeArchive& archive) {
+        return archive.state == WholeArchive::State::Waiting ||
+               archive.state == WholeArchive::State::Reading;
+    });
+}
+
+void WholeRead::Run(const std::stop_token& stop, const std::string& title_id,
+                    const std::vector<std::filesystem::path>& roots) {
+    using State = WholeArchive::State;
+    std::vector<std::unique_ptr<IBackend>> opened;
+    for (const std::filesystem::path& root : roots) {
+        if (std::unique_ptr<IBackend> files = Core::FileSys::OpenGameBackend(root)) {
+            opened.push_back(std::move(files));
+        }
+    }
+    const std::vector<Archive>& known = TheReference().archives;
+    std::vector<u8> bytes(WholeReadBytes);
+    for (size_t index = 0; index < known.size(); ++index) {
+        const std::string name = std::string{known[index].name} + ".psarc";
+        const auto set = [&](u64 size, u64 read, State state) {
+            std::scoped_lock lock{mutex};
+            archives[index].size = size;
+            archives[index].read = read;
+            archives[index].state = state;
+        };
+        // The first root that holds the archive has the one the game reads.
+        std::unique_ptr<IFile> file;
+        for (const std::unique_ptr<IBackend>& files : opened) {
+            if (files->Exists(name)) {
+                file = files->Open(name, Common::FS::FileAccessMode::Read);
+                break;
+            }
+        }
+        if (file == nullptr) {
+            Log(true, "{} cannot be opened", name);
+            set(0, 0, State::Unread);
+            continue;
+        }
+        const u64 size = file->Size();
+        Hash sha{EVP_sha256()};
+        u64 read = 0;
+        while (read < size) {
+            set(size, read, State::Reading);
+            if (stop.stop_requested()) {
+                return;
+            }
+            const s64 got = file->Read(bytes.data(), std::min<u64>(bytes.size(), size - read));
+            if (got <= 0) {
+                break;
+            }
+            sha.Add(std::span{bytes}.first(static_cast<size_t>(got)));
+            read += static_cast<u64>(got);
+        }
+        if (read != size) {
+            Log(true, "{}, {} bytes, cannot be read after byte {}", name, size, read);
+            set(size, read, State::Unread);
+            continue;
+        }
+        const std::string hash = sha.Finish();
+        const std::vector<Form>& forms = known[index].forms;
+        const State state =
+            std::ranges::any_of(forms, [&](const Form& form) { return form.whole == hash; })
+                ? State::Good
+            : FormOf(forms, title_id) ? State::Differs
+                                      : State::NoReference;
+        Log(state == State::Differs, "{}, {} bytes, whole file SHA-256 {}: {}", name, size, hash,
+            state == State::Good      ? "as in a good dump"
+            : state == State::Differs ? "NOT as in a good dump"
+                                      : "no reference for this title");
+        set(size, read, state);
+    }
 }
 
 std::vector<std::string> CompareDump(const std::string& title_id, IBackend& game, IBackend* update,

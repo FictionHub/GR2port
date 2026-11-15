@@ -5,6 +5,7 @@
 #include <array>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -29,12 +30,14 @@
 #include <QRadioButton>
 #include <QSlider>
 #include <QTabBar>
+#include <QTimer>
 #include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_init.h>
 
 #include "common/path_util.h"
 #include "common/types.h"
 #include "core/emulator_settings.h"
+#include "core/game_check/dump_reference.h"
 #include "core/game_check/game_check.h"
 #include "core/game_check/game_patches.h"
 #include "core/game_check/trophy_list.h"
@@ -124,6 +127,15 @@ constexpr int GlobalTop = 219;
 constexpr int FolderPathInset = 18;
 constexpr int FolderPathDrop = 18;
 constexpr int PathsNoteTop = 274;
+// The whole read of the game's archives below them: its button with a note beside it, then a
+// line for each archive, which a timer keeps up with the read.
+constexpr Area VerifyGroup{18, 310, 577, 424};
+constexpr Area VerifyButton{30, 329, 210, 352};
+constexpr int VerifyNoteLeft = 218;
+constexpr int VerifyNoteTop = 327;
+constexpr int VerifyRowTop = 360;
+constexpr size_t VerifyRows = 4;
+constexpr int VerifyTimerMs = 200;
 
 // The Controller tab: GR2Launcher's controller settings in two columns of group boxes.
 constexpr Area ControllerGroup{18, 88, 290, 280};
@@ -459,8 +471,13 @@ struct Dialog {
     QLineEdit* game_folder = nullptr;
     QRadioButton* portable_folder = nullptr;
     QRadioButton* global_folder = nullptr;
+    QPushButton* verify = nullptr;
+    std::array<QLabel*, VerifyRows> verify_rows{};
+    QTimer* verify_timer = nullptr;
     // Ok saved a change of the Paths tab, which the executable takes when it starts.
     bool restart = false;
+    // The whole read of the game's archives, while it runs.
+    std::unique_ptr<GameCheck::WholeRead> whole_read;
 };
 
 void Apply(QWidget* control, const QString& text) {
@@ -1579,6 +1596,74 @@ void ShowPaths(const Dialog& dialog, const std::filesystem::path& game, bool glo
     (global ? dialog.global_folder : dialog.portable_folder)->setChecked(true);
 }
 
+// Shows each archive's line of a whole read: its share read so far, or its answer.
+void ShowWholeRead(Dialog& dialog, const std::vector<GameCheck::WholeArchive>& archives) {
+    using State = GameCheck::WholeArchive::State;
+    for (size_t i = 0; i < archives.size() && i < VerifyRows; ++i) {
+        const GameCheck::WholeArchive& archive = archives[i];
+        Phrase text{""};
+        switch (archive.state) {
+        case State::Waiting:
+            break;
+        case State::Reading:
+            text =
+                Phrase{"{0}: {1}%",
+                       {archive.name,
+                        std::to_string(archive.size == 0 ? 0 : archive.read * 100 / archive.size)}};
+            break;
+        case State::Good:
+            text = Phrase{"{0}: good", {archive.name}};
+            break;
+        case State::Differs:
+            text = Phrase{"{0}: differs from a good dump", {archive.name}};
+            break;
+        case State::NoReference:
+            text = Phrase{"{0}: no reference for this title", {archive.name}};
+            break;
+        case State::Unread:
+            text = Phrase{"{0}: could not be read", {archive.name}};
+            break;
+        }
+        SetText(dialog, dialog.verify_rows[i], std::move(text));
+    }
+}
+
+// Shows the whole read's lines as they stand. At its end, or when the player ends it, the button
+// starts a read again; an archive the player's end stops loses its line.
+void UpdateWholeRead(Dialog& dialog, bool end) {
+    if (dialog.whole_read == nullptr) {
+        return;
+    }
+    const bool done = dialog.whole_read->Done();
+    std::vector<GameCheck::WholeArchive> archives = dialog.whole_read->Archives();
+    if (done || end) {
+        dialog.verify_timer->stop();
+        dialog.whole_read.reset();
+        SetText(dialog, dialog.verify, "Verify Game Files");
+        for (GameCheck::WholeArchive& archive : archives) {
+            if (archive.state == GameCheck::WholeArchive::State::Reading) {
+                archive.state = GameCheck::WholeArchive::State::Waiting;
+            }
+        }
+    }
+    ShowWholeRead(dialog, archives);
+}
+
+// The button starts the whole read of the game's archives, and ends the one that runs.
+void ToggleWholeRead(Dialog& dialog) {
+    if (dialog.whole_read != nullptr) {
+        UpdateWholeRead(dialog, true);
+        return;
+    }
+    dialog.whole_read = GameCheck::StartWholeRead();
+    if (dialog.whole_read == nullptr) {
+        return;
+    }
+    SetText(dialog, dialog.verify, "Cancel");
+    dialog.verify_timer->start(VerifyTimerMs);
+    UpdateWholeRead(dialog, false);
+}
+
 void BuildPaths(Dialog& dialog, QWidget* page) {
     const int left = GameFolderGroup.left + GroupInset;
     const int right = GameFolderGroup.right - GroupInset;
@@ -1607,6 +1692,27 @@ void BuildPaths(Dialog& dialog, QWidget* page) {
     dialog.global_folder = make_mode("Global", GlobalTop, Common::FS::GetGlobalUserFolder());
     MakeNote(dialog, page, "The launcher restarts when Ok saves a change on this tab.",
              Place(page, LabelLeft, PathsNoteTop, right - LabelLeft, 2 * InfoHeight));
+    MakeGroup(dialog, page, "Game Files", VerifyGroup);
+    dialog.verify = MakeButton(dialog, page, "Verify Game Files", VerifyButton);
+    // The button is off for a dump of loose files, whose note says that they are not compared.
+    const bool loose_files = GameCheck::LooseFiles();
+    dialog.verify->setEnabled(!loose_files);
+    MakeNote(dialog, page,
+             loose_files ? "A dump of loose files is not compared."
+                         : "Reads the game's four archives in full and compares them with a good "
+                           "dump. This takes a few minutes.",
+             Place(page, VerifyNoteLeft, VerifyNoteTop, right - VerifyNoteLeft, 2 * InfoHeight));
+    for (size_t row = 0; row < VerifyRows; ++row) {
+        dialog.verify_rows[row] =
+            MakeLabel(dialog, page, "", Qt::AlignLeft | Qt::AlignTop,
+                      Place(page, left, VerifyRowTop + static_cast<int>(row) * InfoHeight,
+                            right - left, InfoHeight));
+    }
+    dialog.verify_timer = new QTimer{dialog.window};
+    QObject::connect(dialog.verify_timer, &QTimer::timeout, dialog.window,
+                     [&dialog] { UpdateWholeRead(dialog, false); });
+    QObject::connect(dialog.verify, &QPushButton::clicked, dialog.window,
+                     [&dialog] { ToggleWholeRead(dialog); });
     ShowPaths(dialog, EmulatorSettings.GetGameDirectory(),
               Common::FS::GetUserFolderMode() == Common::FS::UserFolderMode::Global);
     QObject::connect(browse, &QPushButton::clicked, dialog.window, [&dialog] {

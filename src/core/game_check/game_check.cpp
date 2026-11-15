@@ -504,6 +504,10 @@ std::string TitleId() {
     return g_title_id;
 }
 
+std::unique_ptr<WholeRead> StartWholeRead() {
+    return LooseFiles() ? nullptr : std::make_unique<WholeRead>(g_title_id, g_roots);
+}
+
 std::vector<std::vector<u8>> Files(std::string_view path) {
     std::vector<std::vector<u8>> copies;
     for (const std::filesystem::path& root : g_roots) {

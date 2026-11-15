@@ -1,13 +1,15 @@
 # Gravity Rush 2 with its 1.11 update: the archives of a good dump and the files each holds.
-# A form line gives an archive's size in bytes and the SHA-256 of its table of contents, and
-# the titles line after it the title IDs dumped with that form. A file line gives the file's
-# size in bytes, one for each form where the forms differ, and the MD5 of its path, by which
-# the table of contents names it. An eboot line gives the SHA-256 of the loaded segments of
-# the update's eboot.bin, and the titles line after it its title IDs.
+# A form line gives an archive's size in bytes and the SHA-256 of its table of contents, the
+# whole line after it the SHA-256 of the whole file, and the titles line after that the title
+# IDs dumped with that form. A file line gives the file's size in bytes, one for each form
+# where the forms differ, and the MD5 of its path, by which the table of contents names it.
+# An eboot line gives the SHA-256 of the loaded segments of the update's eboot.bin, and the
+# titles line after it its title IDs.
 eboot 6043aa380d3526fa159c8db1850afd27a0a93b98afde7147ca703e11162cd514
 titles CUSA03694 CUSA04934 CUSA04943
 archive Gravite2_Chunk0
 form 9973715711 0db125a4e49f2b99501818e59054d723d1c737eddca8b07fabd920333261d2b0
+whole d4a8d2553f7dda040b3f5a44f3b8e01bad68b72936a1fabe59a8b0d469b8660f
 titles CUSA00547 CUSA03694 CUSA04934 CUSA04943
 1872 012d3fe6728c92039f6437556095d0ec
 22192 847d1bb7d1f4da5fd5e7451adb96a9ef
@@ -38940,6 +38942,7 @@ titles CUSA00547 CUSA03694 CUSA04934 CUSA04943
 28570367 7cb3ba1655e15d4ca78e7415eb77e0ab
 archive Gravite2_Chunk1
 form 15791940122 48e573f44ea496787ae803e5147efb6d6585f2ff2da0b0ad3814dbf5904b5728
+whole 02fb45b27651772cf50dacc14be606d27ecc86babf5c37837f3d9ba6a19bee1e
 titles CUSA00547 CUSA03694 CUSA04934 CUSA04943
 20800 e93988666b291a672b6005dc6f07e540
 25088 e7503a8593378abf25652e1131e71be7
@@ -59650,8 +59653,10 @@ titles CUSA00547 CUSA03694 CUSA04934 CUSA04943
 20922906 cd21d4fbb1b40ae418aede2c6fd9bcfe
 archive Gravite2_Patch_Chunk0
 form 517529536 648bc6ab791b64a873705a4351339234319c22cfa4f59f65589669fd873fb606
+whole 0c9d0bf870507ce63455ff587a67c7233fe85c688b7bb32a164a5b68974adfbf
 titles CUSA03694 CUSA04943
 form 517521344 a3eca4069491d7e39988f0e8833a23bbf40f809b05a43d033a73aca1e8ad2edc
+whole a7274c86f3b4f78a7344e6da0be13e9b63d73ecbed2ca6911cc2200f3f7ff719
 titles CUSA04934
 22192 847d1bb7d1f4da5fd5e7451adb96a9ef
 22304 c34adc0081c5c2b7ead2d4c914013f71
@@ -61232,6 +61237,7 @@ titles CUSA04934
 7020480 3a8ab5646d3eec527070291ed6a4dad1
 archive Gravite2_Patch_Chunk1
 form 1570480970 befc49dbbfabd00e52e8ca6741b5d4580dde7b24f86f0514dbe1c125af1e7e8a
+whole 56eca0bc38996178fec9926d0c4791e5289bc9958f58fb28bdd74702b550cf29
 titles CUSA03694 CUSA04934 CUSA04943
 16640 e14dc025b9cf280b747ce6b8b88543a5
 34496 c16efa31108553e87fc8d003183dfd5e

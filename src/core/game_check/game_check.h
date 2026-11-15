@@ -4,6 +4,7 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -15,6 +16,8 @@
 // over it, each a folder or a .zar archive of any name. The param.sfo of each tells what it holds.
 // The checks run at every start.
 namespace Gr2Port::GameCheck {
+
+class WholeRead;
 
 struct Game {
     /// The game's folder or .zar archive. The mounts take the update's from the check.
@@ -39,6 +42,10 @@ bool LooseFiles();
 
 /// The title ID of the game Find found, such as CUSA04943.
 std::string TitleId();
+
+/// Starts a read of the archives of the game Find found, each as a whole (dump_reference.h).
+/// Returns nothing for a dump of loose files, which is not compared.
+std::unique_ptr<WholeRead> StartWholeRead();
 
 /// The copies of a file of the game Find found, the update's before the game's.
 std::vector<std::vector<u8>> Files(std::string_view path);

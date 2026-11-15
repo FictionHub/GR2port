@@ -9,6 +9,7 @@
 #include <cwctype>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <set>
 #include <span>
@@ -30,6 +31,7 @@
 #include "common/path_util.h"
 #include "common/types.h"
 #include "core/emulator_settings.h"
+#include "core/game_check/dump_reference.h"
 #include "core/game_check/game_check.h"
 #include "core/game_check/game_patches.h"
 #include "core/game_check/trophy_list.h"
@@ -225,6 +227,11 @@ enum Control : int {
     IdGlobalFolder,
     IdGlobalPath,
     IdPathsNote,
+    IdVerifyGroup,
+    IdVerify,
+    IdVerifyNote,
+    IdVerifyRow,
+    IdVerifyRowLast = IdVerifyRow + 3,
     IdDefaults,
 };
 
@@ -262,6 +269,16 @@ constexpr int GlobalTop = 219;
 constexpr int FolderPathInset = 18;
 constexpr int FolderPathDrop = 18;
 constexpr int PathsNoteTop = 274;
+// The whole read of the game's archives below them: its button with a note beside it, then a
+// line for each archive, which a timer keeps up with the read.
+constexpr RECT VerifyGroup{18, 310, 577, 424};
+constexpr RECT VerifyButton{30, 329, 210, 352};
+constexpr int VerifyNoteLeft = 218;
+constexpr int VerifyNoteTop = 327;
+constexpr int VerifyRowTop = 360;
+constexpr int VerifyRows = IdVerifyRowLast - IdVerifyRow + 1;
+constexpr UINT_PTR VerifyTimer = 1;
+constexpr UINT VerifyTimerMs = 200;
 
 // The Controller tab: GR2Launcher's controller settings in two columns of group boxes.
 constexpr RECT ControllerGroup{18, 88, 290, 280};
@@ -606,6 +623,8 @@ struct Dialog {
     std::vector<u32> texture_streaming;
     // Ok saved a change of the Paths tab, which the executable takes when it starts.
     bool restart = false;
+    // The whole read of the game's archives, while it runs.
+    std::unique_ptr<GameCheck::WholeRead> whole_read;
 };
 
 int Scaled(const Dialog& dialog, int value) {
@@ -885,6 +904,78 @@ bool SavePaths(const Dialog& dialog) {
         Common::FS::RequestUserFolderMode(mode);
     }
     return game_changed || mode_changed;
+}
+
+// Shows each archive's line of a whole read: its share read so far, or its answer.
+void ShowWholeRead(const Dialog& dialog, const std::vector<GameCheck::WholeArchive>& archives) {
+    using State = GameCheck::WholeArchive::State;
+    for (int i = 0; i < VerifyRows && i < static_cast<int>(archives.size()); ++i) {
+        const GameCheck::WholeArchive& archive = archives[static_cast<size_t>(i)];
+        const std::wstring name = Wide(archive.name);
+        Phrase text{L""};
+        switch (archive.state) {
+        case State::Waiting:
+            break;
+        case State::Reading:
+            text = Phrase{
+                L"{0}: {1}%",
+                {name, std::to_wstring(archive.size == 0 ? 0 : archive.read * 100 / archive.size)}};
+            break;
+        case State::Good:
+            text = Phrase{L"{0}: good", {name}};
+            break;
+        case State::Differs:
+            text = Phrase{L"{0}: differs from a good dump", {name}};
+            break;
+        case State::NoReference:
+            text = Phrase{L"{0}: no reference for this title", {name}};
+            break;
+        case State::Unread:
+            text = Phrase{L"{0}: could not be read", {name}};
+            break;
+        }
+        // A line is set when it changes, which keeps it from flickering.
+        const HWND row = Item(dialog, IdVerifyRow + i);
+        if (Text(row) != text.Shown()) {
+            SetText(row, std::move(text));
+        }
+    }
+}
+
+// Shows the whole read's lines as they stand. At its end, or when the player ends it, the button
+// starts a read again; an archive the player's end stops loses its line.
+void UpdateWholeRead(HWND window, Dialog& dialog, bool end) {
+    if (dialog.whole_read == nullptr) {
+        return;
+    }
+    const bool done = dialog.whole_read->Done();
+    std::vector<GameCheck::WholeArchive> archives = dialog.whole_read->Archives();
+    if (done || end) {
+        KillTimer(window, VerifyTimer);
+        dialog.whole_read.reset();
+        SetText(Item(dialog, IdVerify), L"Verify Game Files");
+        for (GameCheck::WholeArchive& archive : archives) {
+            if (archive.state == GameCheck::WholeArchive::State::Reading) {
+                archive.state = GameCheck::WholeArchive::State::Waiting;
+            }
+        }
+    }
+    ShowWholeRead(dialog, archives);
+}
+
+// The button starts the whole read of the game's archives, and ends the one that runs.
+void ToggleWholeRead(HWND window, Dialog& dialog) {
+    if (dialog.whole_read != nullptr) {
+        UpdateWholeRead(window, dialog, true);
+        return;
+    }
+    dialog.whole_read = GameCheck::StartWholeRead();
+    if (dialog.whole_read == nullptr) {
+        return;
+    }
+    SetText(Item(dialog, IdVerify), L"Cancel");
+    SetTimer(window, VerifyTimer, VerifyTimerMs, nullptr);
+    UpdateWholeRead(window, dialog, false);
 }
 
 // A config line without its comment and spaces, as the input config parser reads it.
@@ -2185,7 +2276,27 @@ void Build(HWND window, Dialog& dialog) {
                     L"The launcher restarts when Ok saves a change on this tab.",
                     SS_LEFT | WS_GROUP, IdPathsNote, LabelLeft, PathsNoteTop,
                     paths_left + paths_width - LabelLeft, 2 * InfoHeight),
+        MakeControl(dialog, paths_page, page_origin, WC_BUTTONW, L"Game Files", BS_GROUPBOX,
+                    IdVerifyGroup, VerifyGroup.left, VerifyGroup.top,
+                    VerifyGroup.right - VerifyGroup.left, VerifyGroup.bottom - VerifyGroup.top),
+        MakeControl(dialog, paths_page, page_origin, WC_BUTTONW, L"Verify Game Files",
+                    BS_PUSHBUTTON | WS_TABSTOP, IdVerify, VerifyButton.left, VerifyButton.top,
+                    VerifyButton.right - VerifyButton.left, VerifyButton.bottom - VerifyButton.top),
     });
+    // The button is off for a dump of loose files, whose note says that they are not compared.
+    const bool loose_files = GameCheck::LooseFiles();
+    MakeControl(dialog, paths_page, page_origin, WC_STATICW,
+                loose_files ? L"A dump of loose files is not compared."
+                            : L"Reads the game's four archives in full and compares them with a "
+                              L"good dump. This takes a few minutes.",
+                SS_LEFT, IdVerifyNote, VerifyNoteLeft, VerifyNoteTop,
+                paths_left + paths_width - VerifyNoteLeft, 2 * InfoHeight);
+    EnableWindow(Item(dialog, IdVerify), !loose_files);
+    for (int row = 0; row < VerifyRows; ++row) {
+        MakeControl(dialog, paths_page, page_origin, WC_STATICW, L"", SS_LEFT | SS_NOPREFIX,
+                    IdVerifyRow + row, paths_left, VerifyRowTop + row * InfoHeight, paths_width,
+                    InfoHeight);
+    }
     SetWindowTextW(Item(dialog, IdPortablePath),
                    (Common::FS::GetExecutableDirectory() / Common::FS::PORTABLE_DIR).c_str());
     SetWindowTextW(Item(dialog, IdGlobalPath), Common::FS::GetGlobalUserFolder().c_str());
@@ -2343,6 +2454,11 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             SetWindowTextW(Item(dialog, IdGameFolder), folder->c_str());
         }
         break;
+    case IdVerify:
+        if (code == BN_CLICKED) {
+            ToggleWholeRead(window, dialog);
+        }
+        break;
     case IdPrompts:
     case IdPadPrompts:
         // Both tabs show the one setting.
@@ -2496,6 +2612,11 @@ INT_PTR CALLBACK DialogProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
         return TRUE;
     case WM_HSCROLL:
         ShowSliderValue(*dialog, reinterpret_cast<HWND>(lparam));
+        return TRUE;
+    case WM_TIMER:
+        if (wparam == VerifyTimer) {
+            UpdateWholeRead(window, *dialog, false);
+        }
         return TRUE;
     case WM_NOTIFY: {
         const auto* header = reinterpret_cast<const NMHDR*>(lparam);
