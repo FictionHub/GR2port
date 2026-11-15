@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <initializer_list>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -32,6 +33,9 @@ std::mutex g_cache_file;
 // Bytes in the cache file as last read or written. The driver's cache data grows with each
 // pipeline it adds, so the same size means the file holds them all.
 size_t g_file_size = 0;
+// Held shared while a pipeline is made in the cache and alone while the cache's data is read:
+// Intel's driver faults in vkGetPipelineCacheData while another thread adds a pipeline.
+std::shared_mutex g_cache_use;
 
 // The pipeline builds that have not returned, with the lock and the signal of the wait for them.
 u32 g_builds = 0;
@@ -321,8 +325,10 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         .pDynamicState = &dynamic,
         .layout = result.layout,
     };
+    std::shared_lock use{g_cache_use};
     const auto [pipeline_result, pipeline] =
         d.device.createGraphicsPipeline(d.pipeline_cache, pipeline_info, nullptr, dl);
+    use.unlock();
     d.device.destroyShaderModule(vertex, nullptr, dl);
     if (fragment) {
         d.device.destroyShaderModule(fragment, nullptr, dl);
@@ -370,8 +376,10 @@ Pipeline CreateComputePipeline(const Device& d, std::span<const u32> code, u32 p
             },
         .layout = result.layout,
     };
+    std::shared_lock use{g_cache_use};
     const auto [pipeline_result, pipeline] =
         d.device.createComputePipeline(d.pipeline_cache, info, nullptr, dl);
+    use.unlock();
     d.device.destroyShaderModule(module, nullptr, dl);
     if (pipeline_result != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: no compute pipeline: {}",
@@ -458,6 +466,8 @@ void SavePipelineCache(const Device& d) {
         return;
     }
     std::scoped_lock lock{g_cache_file};
+    // The other threads' pipelines wait for the driver's two answers, and go on during the write.
+    std::unique_lock use{g_cache_use};
     size_t size = 0;
     if (d.device.getPipelineCacheData(d.pipeline_cache, &size, nullptr, d.dispatch) !=
             vk::Result::eSuccess ||
@@ -466,6 +476,7 @@ void SavePipelineCache(const Device& d) {
     }
     const auto start = std::chrono::steady_clock::now();
     const auto [result, data] = d.device.getPipelineCacheData(d.pipeline_cache, d.dispatch);
+    use.unlock();
     if (result != vk::Result::eSuccess || data.empty()) {
         return;
     }
