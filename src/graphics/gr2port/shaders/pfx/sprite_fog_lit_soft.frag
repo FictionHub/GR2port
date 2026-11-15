@@ -2075,7 +2075,8 @@ void main() {
                     v2 = v2 << (0x2u & 31u);
                     {
                         uint b_at = (v2) >> 2;
-                        v9 = light_grid.w[b_at + 0u];
+                        v9 = b_at + 0u < 829440u ? light_grid.w[min(b_at + 0u, 829439u)] :
+                            0xffffffffu;
                     }
                 }
                 {
@@ -2102,9 +2103,9 @@ void main() {
                         v3 = 0xfu & v3;
                         {
                             uint b_at = (v2 * 16u + v3) >> 2;
-                            v6 = point_lights.w[b_at + 0u];
-                            v7 = point_lights.w[b_at + 1u];
-                            v8 = point_lights.w[b_at + 2u];
+                            v6 = b_at + 0u < 12288u ? point_lights.w[min(b_at + 0u, 12287u)] : 0u;
+                            v7 = b_at + 1u < 12288u ? point_lights.w[min(b_at + 1u, 12287u)] : 0u;
+                            v8 = b_at + 2u < 12288u ? point_lights.w[min(b_at + 2u, 12287u)] : 0u;
                         }
                     }
                     {
@@ -2200,22 +2201,22 @@ void main() {
                         v13 = v3;
                         {
                             uint b_at = (v2 * 16u + v3) >> 2;
-                            v9 = point_lights.w[b_at + 0u];
-                            v10 = point_lights.w[b_at + 1u];
-                            v11 = point_lights.w[b_at + 2u];
+                            v9 = b_at + 0u < 12288u ? point_lights.w[min(b_at + 0u, 12287u)] : 0u;
+                            v10 = b_at + 1u < 12288u ? point_lights.w[min(b_at + 1u, 12287u)] : 0u;
+                            v11 = b_at + 2u < 12288u ? point_lights.w[min(b_at + 2u, 12287u)] : 0u;
                         }
                         {
                             uint b_at = (v12 * 16u + v13 + 12u) >> 2;
-                            v27 = point_lights.w[b_at + 0u];
+                            v27 = b_at + 0u < 12288u ? point_lights.w[min(b_at + 0u, 12287u)] : 0u;
                         }
                         {
                             uint b_at = (v2 * 16u + v3 + 12u) >> 2;
-                            v26 = point_lights.w[b_at + 0u];
+                            v26 = b_at + 0u < 12288u ? point_lights.w[min(b_at + 0u, 12287u)] : 0u;
                         }
                         v12 = abs_diff(0x2u, 0x0u) + v2;
                         {
                             uint b_at = (v12 * 16u + v13) >> 2;
-                            v2 = point_lights.w[b_at + 0u];
+                            v2 = b_at + 0u < 12288u ? point_lights.w[min(b_at + 0u, 12287u)] : 0u;
                         }
                     }
                     {
