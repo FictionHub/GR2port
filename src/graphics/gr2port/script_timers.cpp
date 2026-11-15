@@ -62,6 +62,9 @@ constexpr std::array Timers{
     // Episode 4's contest with Fi, 1200 calls. The contest's task and Fi's judge report call it
     // once a frame each.
     Timer{1056, 1068, 20, "_RESET_TIMER_DAT", -1.0},
+    // le_rainbow.lua, LeRainbow._setCountTime's task: subtracts 1 once a frame from the time the
+    // rainbow stays up after it fades in, 18000 calls.
+    Timer{233, 245, 19, "time", 1.0},
 };
 
 // The step constant of a loaded timer function.
