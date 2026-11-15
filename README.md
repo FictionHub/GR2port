@@ -23,8 +23,7 @@ Screenshot © Sony Interactive Entertainment LLC. Not covered by this project's 
 **Support Me Here** for more features and projects in the Future: https://ko-fi.com/junminlee2004
 
 -------
-<img width="256" height="256" alt="20261025_030106_001" src="https://github.com/user-attachments/assets/5f28141c-570b-4010-9cd6-4ddb573217d6" /><img width="256" height="256![Uploading 20260525_051655_001.jpg…]()
-" alt="20261025_031040_001" src="https://github.com/user-attachments/assets/fb09aaee-6adb-415c-9206-d292dd9e8cb5" /><img width="256" height="256" alt="20260705_103536_001" src="https://github.com/user-attachments/assets/b2f5e6f9-75f1-4548-9c19-e61deb38d46f" /><br>
+<img width="256" height="256" alt="20261025_030106_001" src="https://github.com/user-attachments/assets/5f28141c-570b-4010-9cd6-4ddb573217d6" /><img width="256" height="256" alt="20261025_031040_001" src="https://github.com/user-attachments/assets/fb09aaee-6adb-415c-9206-d292dd9e8cb5" /><img width="256" height="256" alt="20260705_103536_001" src="https://github.com/user-attachments/assets/b2f5e6f9-75f1-4548-9c19-e61deb38d46f" /><br>
 Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's GPL 2.0 license.
 
 **System Requirements**
@@ -46,9 +45,15 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 - Native mouse input (controls camera)
 - Fully bindable gamepad and keyboard bindings and button prompts
 - Fully customizable graphics presets
+- Graphics Settings page in the pause menu's System Menu, with changes applied live where the renderer allows
+- Field of view setting: 80% to 150% of the game's own angle
+- Right stick tilts menus, the title screen and comics when the pad has no gyro (or there is no pad)
+- Trophy list in game (F1, or L3 + R3 on a pad)
+- Verify Game Files under Setup > Paths: reads the four archives in full and compares them with a good dump
+- A dump that differs from the good 1.11 dump is refused at start, and the message names the files. Loose-file dumps (extracted archives) are accepted but not compared
 - Steam Deck preset
 - Impeccable performance, graphical accuracy, and stability
-- 30-360fps supported
+- 30-360fps supported, with gameplay timing the same at every frame rate
 - 544p-8k resolution supported
 - Ultrawide and 16:10 supported
 - Feature-complete online mode
@@ -74,9 +79,10 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 F10 | FPS Counter
 Ctrl+F10 | Video Debug Info
 F11 | Fullscreen
+F1 | Trophy list
 
 > [!NOTE]
-> Xbox and DualShock controllers work out of the box.
+> Xbox and DualShock controllers work out of the box. The trophy list is L3 + R3 on a pad. Keys and buttons can be changed under Setup > Mouse & Keyboard > Key Bindings and Setup > Controller > Button Bindings.
 
 ## Controls
 
