@@ -3,10 +3,6 @@
 # whole line after it the SHA-256 of the whole file, and the titles line after that the title
 # IDs dumped with that form. A file line gives the file's size in bytes, one for each form
 # where the forms differ, and the MD5 of its path, by which the table of contents names it.
-# An eboot line gives the SHA-256 of the loaded segments of the update's eboot.bin, and the
-# titles line after it its title IDs.
-eboot 6043aa380d3526fa159c8db1850afd27a0a93b98afde7147ca703e11162cd514
-titles CUSA03694 CUSA04934 CUSA04943
 archive Gravite2_Chunk0
 form 9973715711 0db125a4e49f2b99501818e59054d723d1c737eddca8b07fabd920333261d2b0
 whole d4a8d2553f7dda040b3f5a44f3b8e01bad68b72936a1fabe59a8b0d469b8660f

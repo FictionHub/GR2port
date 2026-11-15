@@ -384,7 +384,7 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
     }
     const bool loose_files = !all(Form::Archive);
     if (const std::vector<std::string> differing =
-            CompareDump(id, *game, update.get(), *eboot, !loose_files);
+            CompareDump(id, *game, update.get(), !loose_files);
         !differing.empty()) {
         std::string names;
         for (const std::string& name : differing) {

@@ -23,7 +23,6 @@
 #include "core/file_sys/fs.h"
 #include "core/file_sys/ifile.h"
 #include "core/game_check/dump_reference.h"
-#include "core/loader/elf.h"
 
 CMRC_DECLARE(gr2port_dumps);
 
@@ -56,8 +55,8 @@ constexpr u64 EntryOffset = 25;
 // The bytes a whole read of an archive takes at a time.
 constexpr u64 WholeReadBytes = 4ull << 20;
 
-// A known build of an archive, or of the eboot: its size where it has one, its hash, an
-// archive's hash as a whole file and the titles dumped with it.
+// A known build of an archive: its size, its hash, its hash as a whole file and the titles dumped
+// with it.
 struct Form {
     u64 size = 0;
     std::string_view hash;
@@ -74,7 +73,6 @@ struct Archive {
 
 struct Reference {
     std::vector<Archive> archives;
-    std::vector<Form> eboots;
 };
 
 // A line about the dump, and whether it tells of a problem.
@@ -128,8 +126,6 @@ Reference Parse(std::string_view text) {
             space == std::string_view::npos ? std::string_view{} : line.substr(space + 1);
         if (word == "archive") {
             reference.archives.push_back({.name = rest});
-        } else if (word == "eboot") {
-            form = &reference.eboots.emplace_back(Form{.hash = rest});
         } else if (word == "form" && !reference.archives.empty()) {
             const size_t split = rest.find(' ');
             form = &reference.archives.back().forms.emplace_back(Form{
@@ -412,64 +408,6 @@ void Report(std::vector<std::string>& differing, std::string_view archive,
     }
 }
 
-// The SHA-256 of eboot.bin's loaded segments, each after its address, as the loader reads them
-// from a plain or a signed file alike; its size too.
-std::optional<std::string> SegmentsHash(IBackend& files, u64& size) {
-    std::unique_ptr<IFile> file = files.Open("eboot.bin", Common::FS::FileAccessMode::Read);
-    if (file == nullptr) {
-        return std::nullopt;
-    }
-    size = file->Size();
-    Core::Loader::Elf elf;
-    elf.Open(std::move(file));
-    if (!elf.IsElfFile()) {
-        return std::nullopt;
-    }
-    Hash hash{EVP_sha256()};
-    for (const elf_program_header& header : elf.GetProgramHeader()) {
-        if (header.p_type != PT_LOAD && header.p_type != PT_SCE_RELRO) {
-            continue;
-        }
-        std::vector<u8> bytes(header.p_filesz);
-        if (!elf.TryLoadSegment(reinterpret_cast<u64>(bytes.data()), header.p_offset,
-                                bytes.size())) {
-            return std::nullopt;
-        }
-        hash.Add({reinterpret_cast<const u8*>(&header.p_vaddr), sizeof(header.p_vaddr)});
-        hash.Add(bytes);
-    }
-    return hash.Finish();
-}
-
-// Logs the eboot's size and hash. Where the dump is compared, the result is logged too, and an
-// eboot that differs from the reference of a listed title counts as differing.
-void CompareEboot(const std::string& title, IBackend& files, bool compared,
-                  std::vector<std::string>& differing) {
-    u64 size = 0;
-    const std::optional<std::string> hash = SegmentsHash(files, size);
-    if (!hash) {
-        Log(true, "eboot.bin, {} bytes, cannot be read as a program", size);
-        return;
-    }
-    if (!compared) {
-        Log(false,
-            "eboot.bin of {}, {} bytes, segments SHA-256 {}; loose "
-            "files are not compared",
-            title, size, *hash);
-        return;
-    }
-    const std::vector<Form>& eboots = TheReference().eboots;
-    const bool known = std::ranges::any_of(eboots, [&](const Form& f) { return f.hash == *hash; });
-    const bool listed = FormOf(eboots, title).has_value();
-    Log(false, "eboot.bin of {}, {} bytes, segments SHA-256 {}: {}", title, size, *hash,
-        known    ? "as in a good dump"
-        : listed ? "NOT as in a good dump"
-                 : "no reference for this title");
-    if (!known && listed) {
-        differing.emplace_back("eboot.bin");
-    }
-}
-
 // An archive as a .psarc file: a known size and table of contents make it good. Another one of a
 // listed title is compared file by file.
 void CompareArchive(const std::string& title, const Archive& archive, IBackend& root,
@@ -606,9 +544,8 @@ void WholeRead::Run(const std::stop_token& stop, const std::string& title_id,
 }
 
 std::vector<std::string> CompareDump(const std::string& title_id, IBackend& game, IBackend* update,
-                                     IBackend& eboot, bool archives) {
+                                     bool archives) {
     std::vector<std::string> differing;
-    CompareEboot(title_id, eboot, archives, differing);
     if (!archives) {
         return differing;
     }
