@@ -138,6 +138,10 @@ void main() {
     Words palette = Words(mesh.palette);
     uint displacement = mesh.displacement;
     gl_Position = vec4(0.0);
+    // A draw whose record has no vertex address draws nothing.
+    if (mesh.vertices == 0ul) {
+        return;
+    }
     const uvec4 input0 = EnemyElement(mesh, mesh.elements[0]);
     v4 = input0.x;
     v5 = input0.y;

@@ -142,6 +142,10 @@ void main() {
     EffectMesh mesh = EffectMesh(draw + 704ul);
     uint displacement = mesh.displacement;
     gl_Position = vec4(0.0);
+    // A draw whose record has no vertex address draws nothing.
+    if (mesh.vertices == 0ul) {
+        return;
+    }
     const vec3 mesh_position = MeshPosition(mesh);
     v4 = u(mesh_position.x);
     v5 = u(mesh_position.y);

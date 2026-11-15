@@ -159,6 +159,10 @@ void main() {
     Words model_block = Words(draws_address + uint64_t(draw_index) * 1192ul + 368ul);
     Words vertex_constants = Words(draws_address + uint64_t(draw_index) * 1192ul + 464ul);
     EffectMesh mesh = EffectMesh(draws_address + uint64_t(draw_index) * 1192ul + 384ul);
+    // A draw whose record has no vertex address draws nothing.
+    if (mesh.vertices == 0ul) {
+        return;
+    }
     const vec3 mesh_position = MeshPosition(mesh);
     v4 = u(mesh_position.x);
     v5 = u(mesh_position.y);
