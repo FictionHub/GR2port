@@ -206,6 +206,7 @@ void GameController::DisconnectController() {
     std::lock_guard lock{m_state_mutex};
     m_states_queue.Clear();
     m_sdl_gamepad = nullptr;
+    m_gyro = false;
 
     const u8 connected_count = m_state.connected_count;
     m_state = {};
@@ -427,6 +428,7 @@ void GameControllers::TryOpenSDLControllers() {
                 c->ConnectController(pad);
                 if (EmulatorSettings.IsMotionControlsEnabled() && PromptPacks::MotionAllowed()) {
                     if (SDL_SetGamepadSensorEnabled(c->m_sdl_gamepad, SDL_SENSOR_GYRO, true)) {
+                        c->m_gyro = true;
                         const float poll_rate =
                             SDL_GetGamepadSensorDataRate(c->m_sdl_gamepad, SDL_SENSOR_GYRO);
                         LOG_INFO(Input, "Gyro initialized, poll rate: {}", poll_rate);

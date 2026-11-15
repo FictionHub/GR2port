@@ -5,6 +5,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <mutex>
 #include <optional>
 #include <utility>
@@ -113,6 +114,10 @@ public:
     // gyro and accelerometer readings. direction: +1 tilts left, -1 tilts right.
     void SetMotionTilt(int direction, bool active);
     void SetMotionShake(bool active);
+    /// Whether the gamepad's gyro is on, so the game reads its motion.
+    bool HasGyro() const {
+        return m_gyro.load(std::memory_order_relaxed);
+    }
 
     float gyro_buf[3] = {0.0f, 0.0f, 0.0f}, accel_buf[3] = {0.0f, 9.81f, 0.0f};
     s32 user_id = Libraries::UserService::ORBIS_USER_SERVICE_USER_ID_INVALID;
@@ -129,6 +134,7 @@ private:
     u64 m_last_orientation_update{};
     bool m_tilt_left{};
     bool m_tilt_right{};
+    std::atomic<bool> m_gyro{};
     bool m_shake_held{};
     u64 m_shake_start{};
     float m_synthetic_roll{};

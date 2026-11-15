@@ -34,6 +34,7 @@
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/script_timers.h"
 #include "graphics/gr2port/settings.h"
+#include "graphics/gr2port/stick_tilt.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/timeline.h"
 #include "graphics/gr2port/ui_capture.h"
@@ -121,6 +122,7 @@ void Install(VAddr module_base) {
     }
     UiCapture::Install(module_base);
     MouseCamera::Install(module_base, c, StubAreaSize);
+    StickTilt::Install(module_base, c, StubAreaSize);
     CameraReach::Install(module_base, c, StubAreaSize);
     Timeline::Install(module_base, c, StubAreaSize);
     PlayerControl::Install(module_base, c, StubAreaSize);

@@ -108,6 +108,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/shadows.h
     ${CMAKE_CURRENT_LIST_DIR}/splash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/splash.h
+    ${CMAKE_CURRENT_LIST_DIR}/stick_tilt.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/stick_tilt.h
     ${CMAKE_CURRENT_LIST_DIR}/submits.cpp
     ${CMAKE_CURRENT_LIST_DIR}/submits.h
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.cpp
