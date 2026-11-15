@@ -69,10 +69,13 @@ void SetInputs(vk::Image depth, vk::ImageView depth_view, vk::Image velocity,
 /// With the GPU idle, after SetInputs: the toned colour the upscaler reads, at the render size.
 void SetColor(vk::Image toned, vk::ImageView view, vk::Format format);
 
-/// At the start of a frame that draws the scene: picks the frame's jitter. packet is the frame's
-/// scene packet, which gives the camera; the renderer's frames up to frame - frames_in_flight
-/// have finished on the GPU.
-void BeginFrame(const u8* packet, u64 frame, u32 frames_in_flight);
+/// At the start of each frame of the world's passes, which upscale even when the scene draws
+/// nothing: the renderer's frames up to frame - frames_in_flight have finished on the GPU.
+void SetFrame(u64 frame, u32 frames_in_flight);
+
+/// At the start of a frame that draws the scene, after SetFrame: picks the frame's jitter.
+/// packet is the frame's scene packet, which gives the camera.
+void BeginFrame(const u8* packet);
 
 /// The jitter of the frame's scene draws; zero without an upscaler.
 Offset Jitter();

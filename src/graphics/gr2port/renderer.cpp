@@ -913,9 +913,10 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     const vk::Extent2D extent = render_extent;
     const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices();
     stats.refused += header.indices > MaxFrameIndices();
+    Upscaler::SetFrame(frame, FramesInFlight);
     if (drawn) {
         MeasureMotion(packet);
-        Upscaler::BeginFrame(packet.data, frame, FramesInFlight);
+        Upscaler::BeginFrame(packet.data);
         const Upscaler::Offset jitter = Upscaler::Jitter();
         std::memcpy(packet.data + Scene::LightOffset + offsetof(Scene::Light, jitter), &jitter,
                     sizeof(jitter));

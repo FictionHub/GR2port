@@ -910,9 +910,12 @@ void SetColor(vk::Image toned, vk::ImageView view, vk::Format format) {
     }
 }
 
-void BeginFrame(const u8* packet, u64 frame, u32 frames_in_flight) {
+void SetFrame(u64 frame, u32 frames_in_flight) {
     g_renderer_frame = frame;
     g_frames_in_flight = frames_in_flight;
+}
+
+void BeginFrame(const u8* packet) {
     if (!Active()) {
         g_jitter = {};
         return;
