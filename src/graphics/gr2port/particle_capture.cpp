@@ -1175,11 +1175,14 @@ std::array<HeldTable, SceneRing::Slots> g_held_effects;
 void CopyTable(HeldTable& held, const u8* packet, u8* out, VAddr source, u64 bytes) {
     const auto* const in = reinterpret_cast<const u8*>(source);
     if (held.packet != packet || held.bytes != bytes) {
-        // What the packet holds is not known: any line may hold something.
+        // What the packet holds is not known: any line of the table may hold something.
         std::memcpy(out, in, bytes);
         held.packet = packet;
         held.bytes = bytes;
-        held.lines.fill(~u64{0});
+        held.lines.fill(0);
+        if (bytes != 0) {
+            Mark(held.lines, 0, (bytes - 1) / TableLine);
+        }
         return;
     }
     const u64 whole = bytes / TableLine;
