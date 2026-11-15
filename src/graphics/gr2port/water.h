@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <array>
+
 #include "graphics/gr2port/device.h"
 #include "graphics/gr2port/scene.h"
 
@@ -27,5 +29,10 @@ bool Resize(vk::Extent2D extent, vk::ImageView background);
 /// scene's colour and depth as attachments.
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
             u64 offset, vk::ImageView scene, const Image& depth, vk::Extent2D extent);
+
+/// Render thread: what the catcher's guard in the pixel program last noted, when it noted
+/// anything since the last call: which table (1 the light grid, 2 the point lights, 3 the pixel
+/// constants), the word asked for, the table's words and the draw.
+bool TakeNote(std::array<u32, 4>& note);
 
 } // namespace Gr2Port::Water

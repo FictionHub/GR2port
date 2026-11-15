@@ -397,6 +397,13 @@ bool Set(const Values& values) {
     return Write(values);
 }
 
+std::string Describe() {
+    std::scoped_lock lock{g_mutex};
+    const json root = ReadConfig();
+    const auto section = root.find(Section);
+    return section != root.end() ? section->dump() : std::string{"none"};
+}
+
 bool Update(const std::function<void(Values&)>& change) {
     std::scoped_lock lock{g_mutex};
     Values values = Loaded();

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <limits>
@@ -13,6 +14,7 @@
 #include "common/debug_files.h"
 #include "common/logging/log.h"
 #include "common/path_util.h"
+#include "graphics/gr2port/catcher.h"
 #include "graphics/gr2port/pass_times.h"
 
 namespace Gr2Port::PassTimes {
@@ -96,9 +98,19 @@ struct Counts {
     u32 metaballs;
 };
 
+// The slots Poll can be asked about.
+constexpr u32 MaxSlots = 4;
+
 const Device* g_device = nullptr;
 vk::QueryPool g_pool;
 u32 g_slot = 0;
+// Per slot, for Poll: a bit for each mark the frame's commands hold, and the game's frame.
+std::array<std::atomic<u64>, MaxSlots> g_written{};
+std::array<std::atomic<u64>, MaxSlots> g_game_frame{};
+// Per slot, the marks' values of the frame before the one its commands hold. The GPU clears a
+// slot's marks only when it begins the new frame, so until then they read as that frame's: a
+// mark is the new frame's once its value differs.
+std::array<std::array<std::atomic<u64>, Marks>, MaxSlots> g_before{};
 std::vector<Counts> g_counts;
 std::vector<bool> g_pending;
 std::FILE* g_file = nullptr;
@@ -117,6 +129,50 @@ void Clear() {
 }
 
 } // namespace
+
+const char* Name(Pass pass) {
+    return Names[static_cast<u32>(pass)];
+}
+
+Progress Poll(u32 slot) {
+    Progress progress{};
+    if (!g_pool || slot >= std::min<size_t>(g_counts.size(), MaxSlots)) {
+        return progress;
+    }
+    const u64 written = g_written[slot].load(std::memory_order_relaxed);
+    progress.game_frame = g_game_frame[slot].load(std::memory_order_relaxed);
+    std::array<std::array<u64, 2>, Marks> marks{};
+    const vk::Result result = g_device->device.getQueryPoolResults(
+        g_pool, Marks * slot, Marks, sizeof(marks), marks.data(), sizeof(marks[0]),
+        vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWithAvailability,
+        g_device->dispatch);
+    if (result != vk::Result::eSuccess && result != vk::Result::eNotReady) {
+        return progress;
+    }
+    progress.known = true;
+    u32 passed = Marks;
+    const auto fresh = [&](u32 mark) {
+        return marks[mark][1] != 0 &&
+               marks[mark][0] != g_before[slot][mark].load(std::memory_order_relaxed);
+    };
+    for (u32 mark = 0; mark < Marks; mark++) {
+        if ((written >> mark & 1) == 0) {
+            continue;
+        }
+        progress.written++;
+        if (fresh(mark)) {
+            progress.finished++;
+            passed = mark;
+        } else if (progress.next == Passes && mark != 0 && (passed == Marks || mark > passed)) {
+            progress.next = mark - 1;
+        }
+    }
+    if (passed != Marks && passed != 0) {
+        progress.last = passed - 1;
+    }
+    progress.done = (written >> (Marks - 1) & 1) != 0 && fresh(Marks - 1);
+    return progress;
+}
 
 void Start(const Device& device, u32 slots) {
     g_device = &device;
@@ -164,6 +220,10 @@ void Begin(vk::CommandBuffer cmd, u32 slot, const Scene::Header& header) {
         .metaballs = header.metaballs,
     };
     g_pending[slot] = true;
+    if (slot < MaxSlots) {
+        g_written[slot].store(1, std::memory_order_relaxed);
+        g_game_frame[slot].store(header.frame, std::memory_order_relaxed);
+    }
     cmd.resetQueryPool(g_pool, Marks * slot, Marks, g_device->dispatch);
     cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, g_pool, Marks * slot,
                         g_device->dispatch);
@@ -172,6 +232,9 @@ void Begin(vk::CommandBuffer cmd, u32 slot, const Scene::Header& header) {
 void Mark(vk::CommandBuffer cmd, Pass pass) {
     if (!g_pool) {
         return;
+    }
+    if (g_slot < MaxSlots) {
+        g_written[g_slot].fetch_or(u64{2} << static_cast<u32>(pass), std::memory_order_relaxed);
     }
     cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, g_pool,
                         Marks * g_slot + 1 + static_cast<u32>(pass), g_device->dispatch);
@@ -188,7 +251,17 @@ void Collect(u32 slot) {
         g_pool, Marks * slot, Marks, sizeof(marks), marks.data(), sizeof(marks[0]),
         vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWithAvailability,
         g_device->dispatch);
-    if ((result != vk::Result::eSuccess && result != vk::Result::eNotReady) || marks[0][1] == 0) {
+    if (result != vk::Result::eSuccess && result != vk::Result::eNotReady) {
+        return;
+    }
+    if (slot < MaxSlots) {
+        for (u32 mark = 0; mark < Marks; mark++) {
+            if (marks[mark][1] != 0) {
+                g_before[slot][mark].store(marks[mark][0], std::memory_order_relaxed);
+            }
+        }
+    }
+    if (marks[0][1] == 0) {
         return;
     }
     const double ms = g_device->timestamp_period * 1e-6;
@@ -208,6 +281,9 @@ void Collect(u32 slot) {
         g_max[i] = std::max(g_max[i], times[i]);
     }
     g_frames++;
+    if (Catcher::On) {
+        Catcher::FrameTimes(g_counts[slot].frame, times);
+    }
     if (g_file != nullptr) {
         const Counts& c = g_counts[slot];
         const double seconds =
