@@ -62,6 +62,7 @@
     "No eboot.bin found. Your game files may be corrupted.": "Nenhum eboot.bin encontrado. Os ficheiros do jogo podem estar corrompidos.",
     "Your game files are corrupted: eboot.bin in {} is not the Gravity Rush 2 v1.11 eboot.bin that GR2port's patches fit.": "Os ficheiros do jogo estão corrompidos: o eboot.bin em {} não é o eboot.bin v1.11 do Gravity Rush 2 a que os patches do GR2port se aplicam.",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Dump inválido: os quatro arquivos do jogo têm de ser todos ficheiros .psarc, ou estar todos extraídos em pastas com os mesmos nomes.\n{}",
+    "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Dump inválido: estes ficheiros do jogo são diferentes dos de um dump correto de Gravity Rush 2 com a atualização 1.11. Volte a fazer o dump do jogo e da atualização.\n{}",
     "Move Forward": "Mover para a frente",
     "Left stick up": "Manípulo esq. para cima",
     "Left stick down": "Manípulo esq. para baixo",

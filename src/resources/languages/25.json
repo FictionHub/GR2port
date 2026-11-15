@@ -167,6 +167,7 @@
     ".psarc archive": "αρχείο .psarc",
     "extracted folder": "εξαγμένος φάκελος",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Λανθασμένο dump: τα τέσσερα αρχεία του παιχνιδιού πρέπει να είναι είτε όλα αρχεία .psarc είτε όλα εξαγμένα σε φακέλους με τα ίδια ονόματα.\n{}",
+    "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Λανθασμένο dump: αυτά τα αρχεία του παιχνιδιού διαφέρουν από ένα σωστό dump του Gravity Rush 2 με την ενημέρωση 1.11. Κάντε ξανά dump του παιχνιδιού και της ενημέρωσης.\n{}",
     "Move Forward": "Κίνηση μπροστά",
     "Left stick up": "Αριστερός μοχλός πάνω",
     "Move Back": "Κίνηση πίσω",

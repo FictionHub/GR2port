@@ -167,6 +167,7 @@
     ".psarc archive": "archivo .psarc",
     "extracted folder": "carpeta extraída",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Volcado incorrecto: los cuatro archivos del juego deben ser todos .psarc o estar todos extraídos en carpetas con los mismos nombres.\n{}",
+    "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Volcado incorrecto: estos archivos del juego difieren de un volcado correcto de Gravity Rush 2 con su actualización 1.11. Vuelve a volcar el juego y la actualización.\n{}",
     "Move Forward": "Avanzar",
     "Left stick up": "Joystick izquierdo arriba",
     "Move Back": "Retroceder",

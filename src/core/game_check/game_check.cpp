@@ -21,6 +21,7 @@
 #include "core/file_format/psf.h"
 #include "core/file_sys/fs.h"
 #include "core/file_sys/ifile.h"
+#include "core/game_check/dump_reference.h"
 #include "core/game_check/game_check.h"
 #include "core/language/language.h"
 #include "core/loader/elf.h"
@@ -382,6 +383,18 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
         return std::nullopt;
     }
     const bool loose_files = !all(Form::Archive);
+    if (const std::vector<std::string> differing =
+            CompareDump(id, *game, update.get(), *eboot, !loose_files);
+        !differing.empty()) {
+        std::string names;
+        for (const std::string& name : differing) {
+            names += '\n' + name;
+        }
+        Tell(Say("Bad dump: these game files differ from a good dump of Gravity Rush 2 with its "
+                 "1.11 update. Please dump the game and the update again.\n{}",
+                 names));
+        return std::nullopt;
+    }
     g_loose_files.store(loose_files, std::memory_order_relaxed);
     g_title_id = id;
     g_roots.clear();

@@ -167,6 +167,7 @@
     ".psarc archive": ".psarc archívum",
     "extracted folder": "kicsomagolt mappa",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Hibás dump: a játék négy archívumának vagy mind .psarc fájlnak kell lennie, vagy mindnek azonos nevű mappába kicsomagolva.\n{}",
+    "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Hibás dump: ezek a játékfájlok eltérnek a Gravity Rush 2 és az 1.11-es frissítés hibátlan dumpjától. Készítsd el újra a játék és a frissítés dumpját.\n{}",
     "Move Forward": "Előre",
     "Left stick up": "Bal kar fel",
     "Move Back": "Hátra",

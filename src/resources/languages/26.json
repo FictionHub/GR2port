@@ -167,6 +167,7 @@
     ".psarc archive": "arhivă .psarc",
     "extracted folder": "dosar extras",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Dump greșit: cele patru arhive ale jocului trebuie să fie toate fișiere .psarc sau toate extrase în dosare cu aceleași nume.\n{}",
+    "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Dump greșit: aceste fișiere ale jocului diferă de un dump corect al Gravity Rush 2 cu actualizarea 1.11. Faceți din nou dump-ul jocului și al actualizării.\n{}",
     "Move Forward": "Mergi înainte",
     "Left stick up": "Maneta stângă în sus",
     "Move Back": "Mergi înapoi",

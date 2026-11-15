@@ -167,6 +167,7 @@
     ".psarc archive": "archivio .psarc",
     "extracted folder": "cartella estratta",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Dump non valido: i quattro archivi del gioco devono essere tutti file .psarc oppure tutti estratti in cartelle con gli stessi nomi.\n{}",
+    "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Dump non valido: questi file di gioco sono diversi da quelli di un dump corretto di Gravity Rush 2 con l'aggiornamento 1.11. Esegui di nuovo il dump del gioco e dell'aggiornamento.\n{}",
     "Move Forward": "Muoviti in avanti",
     "Left stick up": "Levetta sinistra in alto",
     "Move Back": "Muoviti indietro",

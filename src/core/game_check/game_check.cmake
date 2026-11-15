@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 target_sources(gr2port PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/dump_reference.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dump_reference.h
     ${CMAKE_CURRENT_LIST_DIR}/game_check.cpp
     ${CMAKE_CURRENT_LIST_DIR}/game_check.h
     ${CMAKE_CURRENT_LIST_DIR}/game_patches.cpp
@@ -15,6 +17,14 @@ cmrc_add_resource_library(gr2port-patches
     NAMESPACE gr2port_patches
     src/resources/patches/GravityDaze2-Orbis.xml)
 target_link_libraries(gr2port PRIVATE res::gr2port_patches)
+
+# The reference of a good dump, the game's archives and the files each holds, is part of the
+# executable.
+cmrc_add_resource_library(gr2port-dumps
+    ALIAS res::gr2port_dumps
+    NAMESPACE gr2port_dumps
+    src/resources/dumps/gravity_rush_2.txt)
+target_link_libraries(gr2port PRIVATE res::gr2port_dumps)
 
 # GR2Launcher's GR2 packs: button prompts and input presets for each pad type, and the Halloween
 # photo items. The executable writes them to the user folder before the game starts.

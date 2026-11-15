@@ -167,6 +167,7 @@
     ".psarc archive": ".psarc 归档文件",
     "extracted folder": "已解包的文件夹",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "转储文件有误：游戏的四个归档文件必须全部是 .psarc 文件，或全部解包到同名的文件夹。\n{}",
+    "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "转储文件有误：这些游戏文件与含 1.11 更新的 Gravity Rush 2 正确转储文件不同。请重新转储游戏和更新。\n{}",
     "Move Forward": "向前移动",
     "Left stick up": "左摇杆向上",
     "Move Back": "向后移动",

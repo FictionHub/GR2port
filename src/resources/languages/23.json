@@ -167,6 +167,7 @@
     ".psarc archive": "archiv .psarc",
     "extracted folder": "rozbalená složka",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Chybný dump: čtyři archivy hry musí být buď všechny soubory .psarc, nebo všechny rozbalené do složek se stejnými názvy.\n{}",
+    "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Chybný dump: tyto soubory hry se liší od správného dumpu hry Gravity Rush 2 s aktualizací 1.11. Vytvořte dump hry i aktualizace znovu.\n{}",
     "Move Forward": "Pohyb vpřed",
     "Left stick up": "Levá páčka nahoru",
     "Move Back": "Pohyb vzad",

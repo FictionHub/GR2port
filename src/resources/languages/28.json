@@ -167,6 +167,7 @@
     ".psarc archive": "tệp nén .psarc",
     "extracted folder": "thư mục đã giải nén",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Bản dump lỗi: bốn tệp nén của trò chơi phải đều là tệp .psarc, hoặc đều được giải nén vào các thư mục cùng tên.\n{}",
+    "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Bản dump lỗi: các tệp trò chơi này khác với bản dump chuẩn của Gravity Rush 2 kèm bản cập nhật 1.11. Vui lòng dump lại trò chơi và bản cập nhật.\n{}",
     "Move Forward": "Tiến",
     "Left stick up": "Cần trái lên",
     "Move Back": "Lùi",

@@ -34,6 +34,7 @@
 #include "core/file_format/psf.h"
 #include "core/file_format/trp.h"
 #include "core/file_sys/fs.h"
+#include "core/game_check/dump_reference.h"
 #include "core/game_check/game_patches.h"
 #include "core/ipc/ipc.h"
 #include "core/libraries/kernel/kernel.h"
@@ -485,6 +486,8 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
         LOG_INFO(Loader, "PSVR Supported: {}", (bool)psf_attributes.support_ps_vr.Value());
         LOG_INFO(Loader, "PSVR Required: {}", (bool)psf_attributes.require_ps_vr.Value());
     }
+    // GR2port: the dump check ran before this log began.
+    Gr2Port::GameCheck::LogDumpAgain();
     if (!args.empty()) {
         const auto argc = std::min<size_t>(args.size(), 32);
         for (auto i = 0; i < argc; i++) {
