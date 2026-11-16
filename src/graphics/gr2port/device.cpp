@@ -227,6 +227,24 @@ bool PickGpu(Device& d) {
 
 } // namespace
 
+void ImageBarrier(const Device& device, vk::CommandBuffer cmd, vk::Image image,
+                  vk::ImageLayout from, vk::ImageLayout to, vk::PipelineStageFlags2 src_stage,
+                  vk::AccessFlags2 src_access, vk::PipelineStageFlags2 dst_stage,
+                  vk::AccessFlags2 dst_access, vk::ImageAspectFlags aspect) {
+    const vk::ImageMemoryBarrier2 barrier{
+        .srcStageMask = src_stage,
+        .srcAccessMask = src_access,
+        .dstStageMask = dst_stage,
+        .dstAccessMask = dst_access,
+        .oldLayout = from,
+        .newLayout = to,
+        .image = image,
+        .subresourceRange = {aspect, 0, 1, 0, 1},
+    };
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
+                         device.dispatch);
+}
+
 bool CreateDevice(SDL_Window* window, Device& d) {
     if (!CreateInstance(d)) {
         return false;

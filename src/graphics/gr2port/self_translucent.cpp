@@ -43,24 +43,6 @@ void WriteImage(u32 binding, vk::ImageView view, vk::ImageLayout layout) {
     g_device->device.updateDescriptorSets(write, {}, g_device->dispatch);
 }
 
-void Barrier(vk::CommandBuffer cmd, vk::Image image, vk::ImageAspectFlags aspect,
-             vk::ImageLayout from, vk::ImageLayout to, vk::PipelineStageFlags2 src_stage,
-             vk::AccessFlags2 src_access, vk::PipelineStageFlags2 dst_stage,
-             vk::AccessFlags2 dst_access) {
-    const vk::ImageMemoryBarrier2 barrier{
-        .srcStageMask = src_stage,
-        .srcAccessMask = src_access,
-        .dstStageMask = dst_stage,
-        .dstAccessMask = dst_access,
-        .oldLayout = from,
-        .newLayout = to,
-        .image = image,
-        .subresourceRange = {aspect, 0, 1, 0, 1},
-    };
-    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
-                         g_device->dispatch);
-}
-
 } // namespace
 
 bool Start(const Device& device, Memory& memory) {
@@ -73,12 +55,7 @@ bool Start(const Device& device, Memory& memory) {
         {0, Sampled, 1, Fragment},
         {1, Sampled, 1, Fragment},
     }};
-    g_set_layout =
-        device.device
-            .createDescriptorSetLayout(
-                {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
-                nullptr, dl)
-            .value;
+    g_set_layout = CreateSetLayout(device, bindings);
     const vk::DescriptorPoolSize size{Sampled, 2};
     g_pool = device.device
                  .createDescriptorPool({.maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &size},
@@ -177,10 +154,11 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
     constexpr auto Fragment = vk::PipelineStageFlagBits2::eFragmentShader;
     constexpr auto Sampled = vk::AccessFlagBits2::eShaderSampledRead;
     // Last frame's contents do not matter: the targets are cleared.
-    Barrier(cmd, g_color.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal, Fragment, {}, ColorStage, ColorAccess);
-    Barrier(cmd, g_depth.image, depth_aspect, vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal, Fragment, {}, Tests, DepthAccess);
+    ImageBarrier(*g_device, cmd, g_color.image, vk::ImageLayout::eUndefined,
+                 vk::ImageLayout::eColorAttachmentOptimal, Fragment, {}, ColorStage, ColorAccess);
+    ImageBarrier(*g_device, cmd, g_depth.image, vk::ImageLayout::eUndefined,
+                 vk::ImageLayout::eDepthStencilAttachmentOptimal, Fragment, {}, Tests, DepthAccess,
+                 depth_aspect);
     const vk::RenderingAttachmentInfo color{
         .imageView = g_color.view,
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -231,11 +209,12 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
         Particles::RecordSelfTranslucent(cmd, header, packet, address, buffer, offset);
     }
     cmd.endRendering(dl);
-    Barrier(cmd, g_color.image, vk::ImageAspectFlagBits::eColor,
-            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-            ColorStage, ColorWrite, Fragment, Sampled);
-    Barrier(cmd, g_depth.image, depth_aspect, vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageLayout::eDepthStencilReadOnlyOptimal, Tests, DepthWrite, Fragment, Sampled);
+    ImageBarrier(*g_device, cmd, g_color.image, vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::ImageLayout::eShaderReadOnlyOptimal, ColorStage, ColorWrite, Fragment,
+                 Sampled);
+    ImageBarrier(*g_device, cmd, g_depth.image, vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                 vk::ImageLayout::eDepthStencilReadOnlyOptimal, Tests, DepthWrite, Fragment,
+                 Sampled, depth_aspect);
 }
 
 } // namespace Gr2Port::SelfTranslucent

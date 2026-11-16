@@ -320,24 +320,6 @@ private:
 // Set when the stored settings changed; the render thread takes them before its next frame.
 std::atomic<bool> g_settings_changed{false};
 
-void Barrier(const Device& d, vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from,
-             vk::ImageLayout to, vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
-             vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access,
-             vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor) {
-    const vk::ImageMemoryBarrier2 barrier{
-        .srcStageMask = src_stage,
-        .srcAccessMask = src_access,
-        .dstStageMask = dst_stage,
-        .dstAccessMask = dst_access,
-        .oldLayout = from,
-        .newLayout = to,
-        .image = image,
-        .subresourceRange = {aspect, 0, 1, 0, 1},
-    };
-    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
-                         d.dispatch);
-}
-
 bool Thread::Init() {
     SDL_Window* const window = Window::Show();
     if (window == nullptr || !CreateDevice(window, d)) {
@@ -707,21 +689,22 @@ void Thread::RecordSnapshot(vk::CommandBuffer cmd, vk::Image image) {
             return;
         }
     }
-    Barrier(d, cmd, image, vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageLayout::eTransferSrcOptimal,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eCopy,
-            vk::AccessFlagBits2::eTransferRead);
+    ImageBarrier(d, cmd, image, vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::ImageLayout::eTransferSrcOptimal,
+                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                 vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eCopy,
+                 vk::AccessFlagBits2::eTransferRead);
     const vk::BufferImageCopy region{
         .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
         .imageExtent = {extent.width, extent.height, 1},
     };
     cmd.copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal, snapshot.buffer, region,
                           d.dispatch);
-    Barrier(d, cmd, image, vk::ImageLayout::eTransferSrcOptimal,
-            vk::ImageLayout::eColorAttachmentOptimal, vk::PipelineStageFlagBits2::eCopy,
-            vk::AccessFlagBits2::eTransferRead, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::AccessFlagBits2::eColorAttachmentWrite);
+    ImageBarrier(d, cmd, image, vk::ImageLayout::eTransferSrcOptimal,
+                 vk::ImageLayout::eColorAttachmentOptimal, vk::PipelineStageFlagBits2::eCopy,
+                 vk::AccessFlagBits2::eTransferRead,
+                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                 vk::AccessFlagBits2::eColorAttachmentWrite);
     snapshot_extent = extent;
     snapshot_format = swapchain->Format();
 }
@@ -1010,10 +993,10 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     if (drawn) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::CharacterDepth);
         // The last frame's occlusion sampled the characters' depth.
-        Barrier(d, cmd, character_depth.image, vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eDepthStencilAttachmentOptimal,
-                vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eNone, depth_tests,
-                depth_writes, vk::ImageAspectFlagBits::eDepth);
+        ImageBarrier(d, cmd, character_depth.image, vk::ImageLayout::eUndefined,
+                     vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                     vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eNone,
+                     depth_tests, depth_writes, vk::ImageAspectFlagBits::eDepth);
         const vk::RenderingAttachmentInfo characters{
             .imageView = character_depth.view,
             .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
@@ -1035,10 +1018,10 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_depth_pipeline, depth_sets, header,
                        packet, offset, extent);
         cmd.endRendering(dl);
-        Barrier(d, cmd, character_depth.image, vk::ImageLayout::eDepthStencilAttachmentOptimal,
-                vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
-                vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderSampledRead,
-                vk::ImageAspectFlagBits::eDepth);
+        ImageBarrier(d, cmd, character_depth.image, vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                     vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
+                     vk::PipelineStageFlagBits2::eComputeShader,
+                     vk::AccessFlagBits2::eShaderSampledRead, vk::ImageAspectFlagBits::eDepth);
         PassTimes::Mark(cmd, PassTimes::Pass::CharacterDepth);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Occlusion);
         // Without ambient occlusion its images keep their clear: nothing is occluded.
@@ -1057,12 +1040,12 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                             Timestamps * slot_index + OcclusionTimestamp, dl);
     }
     // The last frame sampled the scene's colour in its meter and its picture.
-    Barrier(d, cmd, Look::SceneImage(), vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::PipelineStageFlagBits2::eComputeShader |
-                vk::PipelineStageFlagBits2::eFragmentShader,
-            vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::AccessFlagBits2::eColorAttachmentWrite);
+    ImageBarrier(d, cmd, Look::SceneImage(), vk::ImageLayout::eUndefined,
+                 vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::PipelineStageFlagBits2::eComputeShader |
+                     vk::PipelineStageFlagBits2::eFragmentShader,
+                 vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                 vk::AccessFlagBits2::eColorAttachmentWrite);
     const vk::RenderingAttachmentInfo lit{
         .imageView = Look::SceneView(),
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -1248,7 +1231,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                             Timestamps * slot_index + FogApplyTimestamp, dl);
     }
 
-    Barrier(
+    ImageBarrier(
         d, cmd, Look::SceneImage(), vk::ImageLayout::eColorAttachmentOptimal,
         vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
         vk::AccessFlagBits2::eColorAttachmentWrite,
@@ -1338,10 +1321,11 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
     PassTimes::Mark(cmd, PassTimes::Pass::Ui);
 
     const vk::Image image = swapchain->Image(index);
-    Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::AccessFlagBits2::eColorAttachmentWrite);
+    ImageBarrier(d, cmd, image, vk::ImageLayout::eUndefined,
+                 vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone,
+                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                 vk::AccessFlagBits2::eColorAttachmentWrite);
     // Black around a back buffer of another shape than the window.
     const vk::RenderingAttachmentInfo picture{
         .imageView = swapchain->View(index),
@@ -1445,10 +1429,11 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
         stats.caster_indices[c] += header.caster_indices[c];
     }
 
-    Barrier(d, cmd, image, vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageLayout::ePresentSrcKHR, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eNone,
-            vk::AccessFlagBits2::eNone);
+    ImageBarrier(d, cmd, image, vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::ImageLayout::ePresentSrcKHR,
+                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                 vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eNone,
+                 vk::AccessFlagBits2::eNone);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eBottomOfPipe, timestamps,
                             Timestamps * slot_index + Timestamps - 1, dl);

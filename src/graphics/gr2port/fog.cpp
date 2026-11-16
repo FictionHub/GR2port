@@ -116,14 +116,6 @@ Pipeline g_apply;
 constexpr auto Combined = vk::DescriptorType::eCombinedImageSampler;
 constexpr auto Storage = vk::DescriptorType::eStorageImage;
 
-vk::DescriptorSetLayout CreateLayout(std::span<const vk::DescriptorSetLayoutBinding> bindings) {
-    return g_device->device
-        .createDescriptorSetLayout(
-            {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
-            nullptr, g_device->dispatch)
-        .value;
-}
-
 vk::Sampler CreateSampler(vk::Filter filter, vk::SamplerAddressMode xy, vk::SamplerAddressMode z) {
     const vk::SamplerCreateInfo info{
         .magFilter = filter,
@@ -226,12 +218,12 @@ bool CreateSets() {
         {0, Combined, 1, vk::ShaderStageFlagBits::eFragment},
         {1, Combined, 1, vk::ShaderStageFlagBits::eFragment},
     }};
-    g_bake_layout = CreateLayout(bake);
-    g_darkness_layout = CreateLayout(bake);
-    g_cell_layout = CreateLayout(cells);
-    g_shadow_layout = CreateLayout(bake);
-    g_scatter_layout = CreateLayout(scatter);
-    g_apply_layout = CreateLayout(apply);
+    g_bake_layout = CreateSetLayout(*g_device, bake);
+    g_darkness_layout = CreateSetLayout(*g_device, bake);
+    g_cell_layout = CreateSetLayout(*g_device, cells);
+    g_shadow_layout = CreateSetLayout(*g_device, bake);
+    g_scatter_layout = CreateSetLayout(*g_device, scatter);
+    g_apply_layout = CreateSetLayout(*g_device, apply);
     // Bakes 2, darkness 2, cells 2, shadows 2, scattering 4, apply 1.
     constexpr u32 Sets = 13;
     const std::array<vk::DescriptorPoolSize, 2> sizes{{

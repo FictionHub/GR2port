@@ -30,23 +30,6 @@ Image g_image;
 Image g_motion;
 bool g_upscaler_motion = false;
 
-void ImageBarrier(vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from,
-                  vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
-                  vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
-    const vk::ImageMemoryBarrier2 barrier{
-        .srcStageMask = src_stage,
-        .srcAccessMask = src_access,
-        .dstStageMask = dst_stage,
-        .dstAccessMask = dst_access,
-        .oldLayout = from,
-        .newLayout = vk::ImageLayout::eGeneral,
-        .image = image,
-        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
-    };
-    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
-                         g_device->dispatch);
-}
-
 } // namespace
 
 bool Start(const Device& device, Memory& memory) {
@@ -70,11 +53,7 @@ bool Start(const Device& device, Memory& memory) {
         {2, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
         {3, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
     }};
-    g_layout = device.device
-                   .createDescriptorSetLayout({.bindingCount = static_cast<u32>(bindings.size()),
-                                               .pBindings = bindings.data()},
-                                              nullptr, dl)
-                   .value;
+    g_layout = CreateSetLayout(device, bindings);
     const std::array<vk::DescriptorPoolSize, 2> sizes{{
         {vk::DescriptorType::eCombinedImageSampler, 2},
         {vk::DescriptorType::eStorageImage, 2},
@@ -176,18 +155,21 @@ void Record(vk::CommandBuffer cmd, bool drawn, u64 packet_address) {
     if (!drawn) {
         const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
         for (const vk::Image image : {g_image.image, g_motion.image}) {
-            ImageBarrier(cmd, image, vk::ImageLayout::eUndefined, Compute,
-                         vk::AccessFlagBits2::eNone, Clear, vk::AccessFlagBits2::eTransferWrite);
+            ImageBarrier(*g_device, cmd, image, vk::ImageLayout::eUndefined,
+                         vk::ImageLayout::eGeneral, Compute, vk::AccessFlagBits2::eNone, Clear,
+                         vk::AccessFlagBits2::eTransferWrite);
             cmd.clearColorImage(image, vk::ImageLayout::eGeneral,
                                 vk::ClearColorValue{.float32 = std::array<float, 4>{}}, range, dl);
-            ImageBarrier(cmd, image, vk::ImageLayout::eGeneral, Clear,
-                         vk::AccessFlagBits2::eTransferWrite, Compute, Read);
+            ImageBarrier(*g_device, cmd, image, vk::ImageLayout::eGeneral,
+                         vk::ImageLayout::eGeneral, Clear, vk::AccessFlagBits2::eTransferWrite,
+                         Compute, Read);
         }
         return;
     }
     for (const vk::Image image : {g_image.image, g_motion.image}) {
-        ImageBarrier(cmd, image, vk::ImageLayout::eUndefined, Compute, vk::AccessFlagBits2::eNone,
-                     Compute, vk::AccessFlagBits2::eShaderStorageWrite);
+        ImageBarrier(*g_device, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
+                     Compute, vk::AccessFlagBits2::eNone, Compute,
+                     vk::AccessFlagBits2::eShaderStorageWrite);
     }
     const u64 light = packet_address + Scene::LightOffset;
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_pipeline.pipeline, dl);
@@ -197,8 +179,8 @@ void Record(vk::CommandBuffer cmd, bool drawn, u64 packet_address) {
     cmd.dispatch((g_image.extent.width + GroupPixels - 1) / GroupPixels,
                  (g_image.extent.height + GroupPixels - 1) / GroupPixels, 1, dl);
     for (const vk::Image image : {g_image.image, g_motion.image}) {
-        ImageBarrier(cmd, image, vk::ImageLayout::eGeneral, Compute,
-                     vk::AccessFlagBits2::eShaderStorageWrite, Compute, Read);
+        ImageBarrier(*g_device, cmd, image, vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral,
+                     Compute, vk::AccessFlagBits2::eShaderStorageWrite, Compute, Read);
     }
 }
 

@@ -100,12 +100,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
         {2, Sampled, 1, Fragment},
         {3, Sampler, 1, Fragment, &g_background_sampler},
     }};
-    g_set_layout =
-        device.device
-            .createDescriptorSetLayout(
-                {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
-                nullptr, dl)
-            .value;
+    g_set_layout = CreateSetLayout(device, bindings);
     const std::array<vk::DescriptorPoolSize, 2> sizes{{
         {Sampled, 2},
         {Sampler, 2},

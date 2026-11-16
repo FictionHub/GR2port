@@ -101,12 +101,7 @@ bool CreateSet(const Device& d) {
         {2, Combined, 1, Stages, &g_sampler},
         {3, Combined, 1, Stages, &g_depth_sampler},
     }};
-    g_set_layout =
-        d.device
-            .createDescriptorSetLayout(
-                {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
-                nullptr, dl)
-            .value;
+    g_set_layout = CreateSetLayout(d, bindings);
     const vk::DescriptorPoolSize size{vk::DescriptorType::eCombinedImageSampler,
                                       static_cast<u32>(bindings.size())};
     g_pool = d.device

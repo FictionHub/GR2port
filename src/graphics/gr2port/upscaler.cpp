@@ -243,26 +243,6 @@ FfxVkPortableImage PortableImage(vk::Image image, vk::Format format, vk::Extent2
     };
 }
 
-void ImageBarrier(vk::CommandBuffer cmd, vk::Image image, vk::ImageAspectFlags aspect,
-                  vk::ImageLayout from, vk::ImageLayout to, vk::PipelineStageFlags2 src_stage,
-                  vk::AccessFlags2 src_access, vk::PipelineStageFlags2 dst_stage,
-                  vk::AccessFlags2 dst_access) {
-    const vk::ImageMemoryBarrier2 barrier{
-        .srcStageMask = src_stage,
-        .srcAccessMask = src_access,
-        .dstStageMask = dst_stage,
-        .dstAccessMask = dst_access,
-        .oldLayout = from,
-        .newLayout = to,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = image,
-        .subresourceRange = {aspect, 0, 1, 0, 1},
-    };
-    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
-                         g_device->dispatch);
-}
-
 void WriteInput(u32 binding, vk::DescriptorType type, vk::ImageView view, vk::ImageLayout layout) {
     if (!g_inputs_set || !view) {
         return;
@@ -457,9 +437,9 @@ void RecordInputs(vk::CommandBuffer cmd) {
     constexpr auto Compute = vk::PipelineStageFlagBits2::eComputeShader;
     for (const Image* image : {&g_input_color, &g_input_motion, &g_input_depth}) {
         // The last frame's upscaler read the image.
-        ImageBarrier(cmd, image->image, vk::ImageAspectFlagBits::eColor,
-                     vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral, Compute,
-                     vk::AccessFlagBits2::eNone, Compute, vk::AccessFlagBits2::eShaderStorageWrite);
+        ImageBarrier(*g_device, cmd, image->image, vk::ImageLayout::eUndefined,
+                     vk::ImageLayout::eGeneral, Compute, vk::AccessFlagBits2::eNone, Compute,
+                     vk::AccessFlagBits2::eShaderStorageWrite);
     }
     const InputsPush push{
         .size = {g_render.width, g_render.height},
@@ -473,7 +453,7 @@ void RecordInputs(vk::CommandBuffer cmd) {
     cmd.dispatch((g_render.width + InputGroupPixels - 1) / InputGroupPixels,
                  (g_render.height + InputGroupPixels - 1) / InputGroupPixels, 1, dl);
     for (const Image* image : {&g_input_color, &g_input_motion, &g_input_depth}) {
-        ImageBarrier(cmd, image->image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral,
+        ImageBarrier(*g_device, cmd, image->image, vk::ImageLayout::eGeneral,
                      vk::ImageLayout::eGeneral, Compute, vk::AccessFlagBits2::eShaderStorageWrite,
                      Compute, vk::AccessFlagBits2::eShaderRead);
     }
@@ -654,7 +634,7 @@ void RecordDlss(vk::CommandBuffer cmd) {
 // Moves the copies of the inputs to the layout XeSS reads, then records XeSS.
 void RecordXess(vk::CommandBuffer cmd) {
     for (const Image* image : {&g_input_color, &g_input_motion, &g_input_depth}) {
-        ImageBarrier(cmd, image->image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral,
+        ImageBarrier(*g_device, cmd, image->image, vk::ImageLayout::eGeneral,
                      vk::ImageLayout::eShaderReadOnlyOptimal,
                      vk::PipelineStageFlagBits2::eComputeShader,
                      vk::AccessFlagBits2::eShaderStorageWrite,
@@ -855,12 +835,7 @@ bool Start(const Device& device, Memory& memory) {
             {4, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
             {5, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
         }};
-        g_inputs_layout =
-            device.device
-                .createDescriptorSetLayout({.bindingCount = static_cast<u32>(bindings.size()),
-                                            .pBindings = bindings.data()},
-                                           nullptr, dl)
-                .value;
+        g_inputs_layout = CreateSetLayout(device, bindings);
         const std::array<vk::DescriptorPoolSize, 2> sizes{{
             {vk::DescriptorType::eSampledImage, 3},
             {vk::DescriptorType::eStorageImage, 3},
@@ -1042,14 +1017,15 @@ void Record(vk::CommandBuffer cmd) {
     constexpr auto Compute = vk::PipelineStageFlagBits2::eComputeShader;
     constexpr auto Depth = vk::ImageAspectFlagBits::eDepth;
     // The upscaler reads the depth as a compute shader's sampled image.
-    ImageBarrier(cmd, g_depth, Depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+    ImageBarrier(*g_device, cmd, g_depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal,
                  vk::ImageLayout::eShaderReadOnlyOptimal,
                  vk::PipelineStageFlagBits2::eEarlyFragmentTests |
                      vk::PipelineStageFlagBits2::eLateFragmentTests |
                      vk::PipelineStageFlagBits2::eFragmentShader,
-                 vk::AccessFlagBits2::eNone, Compute, vk::AccessFlagBits2::eShaderSampledRead);
+                 vk::AccessFlagBits2::eNone, Compute, vk::AccessFlagBits2::eShaderSampledRead,
+                 Depth);
     // The last frame's picture read the output.
-    ImageBarrier(cmd, g_output.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
+    ImageBarrier(*g_device, cmd, g_output.image, vk::ImageLayout::eUndefined,
                  vk::ImageLayout::eGeneral, Compute, vk::AccessFlagBits2::eShaderSampledRead,
                  Compute, vk::AccessFlagBits2::eShaderStorageWrite);
     switch (g_upscaler) {
@@ -1072,13 +1048,14 @@ void Record(vk::CommandBuffer cmd) {
         break;
     }
     g_reset = false;
-    ImageBarrier(cmd, g_depth, Depth, vk::ImageLayout::eShaderReadOnlyOptimal,
+    ImageBarrier(*g_device, cmd, g_depth, vk::ImageLayout::eShaderReadOnlyOptimal,
                  vk::ImageLayout::eDepthStencilReadOnlyOptimal, Compute, vk::AccessFlagBits2::eNone,
                  vk::PipelineStageFlagBits2::eEarlyFragmentTests |
                      vk::PipelineStageFlagBits2::eFragmentShader,
                  vk::AccessFlagBits2::eDepthStencilAttachmentRead |
-                     vk::AccessFlagBits2::eShaderSampledRead);
-    ImageBarrier(cmd, g_output.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral,
+                     vk::AccessFlagBits2::eShaderSampledRead,
+                 Depth);
+    ImageBarrier(*g_device, cmd, g_output.image, vk::ImageLayout::eGeneral,
                  vk::ImageLayout::eGeneral, Compute, vk::AccessFlagBits2::eShaderStorageWrite,
                  Compute, vk::AccessFlagBits2::eShaderSampledRead);
 }

@@ -357,15 +357,6 @@ Buffer g_alive_copy;
 u64 g_alive_frame = 0;
 u32 g_alive_pool = 0;
 
-vk::DescriptorSetLayout CreateLayout(const Device& d,
-                                     std::span<const vk::DescriptorSetLayoutBinding> bindings) {
-    return d.device
-        .createDescriptorSetLayout(
-            {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
-            nullptr, d.dispatch)
-        .value;
-}
-
 // Builds the pipelines, some of whose shaders run to thousands of instructions.
 void Build() {
     const auto start = std::chrono::steady_clock::now();
@@ -1415,14 +1406,14 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
         {4, Sampled, 1, Drawn},
         {5, Sampled, 1, Drawn},
     }};
-    g_compute_layout = CreateLayout(device, compute_bindings);
-    g_draw_layout = CreateLayout(device, draw_bindings);
+    g_compute_layout = CreateSetLayout(device, compute_bindings);
+    g_draw_layout = CreateSetLayout(device, draw_bindings);
     const std::array<vk::DescriptorSetLayoutBinding, 3> backup_bindings{{
         {0, Sampled, 1, Compute},
         {1, Sampler, 1, Compute, &g_depth_sampler},
         {2, vk::DescriptorType::eStorageImage, 1, Compute},
     }};
-    g_backup_layout = CreateLayout(device, backup_bindings);
+    g_backup_layout = CreateSetLayout(device, backup_bindings);
     const std::array<vk::DescriptorPoolSize, 3> sizes{{
         {Sampled, 13},
         {Sampler, 9},
@@ -1479,7 +1470,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
         const vk::DescriptorSetLayoutBinding half_binding{
             0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment,
             &g_depth_sampler};
-        g_half_layout = CreateLayout(device, std::span{&half_binding, 1});
+        g_half_layout = CreateSetLayout(device, std::span{&half_binding, 1});
         const std::array<vk::DescriptorPoolSize, 3> half_sizes{{
             {Sampled, 4},
             {Sampler, 2},

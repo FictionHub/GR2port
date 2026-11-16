@@ -195,18 +195,12 @@ bool CreateSceneSet(const Device& d) {
     const vk::DescriptorSetLayoutBinding binding{
         0, vk::DescriptorType::eCombinedImageSampler, 1,
         vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute, &g_scene_sampler};
-    g_scene_layout =
-        d.device.createDescriptorSetLayout({.bindingCount = 1, .pBindings = &binding}, nullptr, dl)
-            .value;
+    g_scene_layout = CreateSetLayout(d, std::span{&binding, 1});
     const std::array<vk::DescriptorSetLayoutBinding, 2> pair{{
         {0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment},
         {1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment},
     }};
-    g_pair_layout = d.device
-                        .createDescriptorSetLayout({.bindingCount = static_cast<u32>(pair.size()),
-                                                    .pBindings = pair.data()},
-                                                   nullptr, dl)
-                        .value;
+    g_pair_layout = CreateSetLayout(d, pair);
     // The toned colour, the sampler, the output, the history, the velocity and the scene.
     const std::array<vk::DescriptorSetLayoutBinding, 6> antialias{{
         {0, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eCompute},
@@ -216,12 +210,7 @@ bool CreateSceneSet(const Device& d) {
         {4, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eCompute},
         {5, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eCompute},
     }};
-    g_antialias_layout =
-        d.device
-            .createDescriptorSetLayout(
-                {.bindingCount = static_cast<u32>(antialias.size()), .pBindings = antialias.data()},
-                nullptr, dl)
-            .value;
+    g_antialias_layout = CreateSetLayout(d, antialias);
     // The antialias sets twice: the game's antialiasing's and the upscaler's encode.
     const std::array<vk::DescriptorPoolSize, 4> sizes{{
         {vk::DescriptorType::eCombinedImageSampler, 2 * Sets},
@@ -293,29 +282,12 @@ void WritePair(vk::DescriptorSet set, vk::ImageView first, vk::Sampler first_sam
     g_device->device.updateDescriptorSets(writes, {}, g_device->dispatch);
 }
 
-void ImageBarrier(vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from, vk::ImageLayout to,
-                  vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
-                  vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
-    const vk::ImageMemoryBarrier2 barrier{
-        .srcStageMask = src_stage,
-        .srcAccessMask = src_access,
-        .dstStageMask = dst_stage,
-        .dstAccessMask = dst_access,
-        .oldLayout = from,
-        .newLayout = to,
-        .image = image,
-        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
-    };
-    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
-                         g_device->dispatch);
-}
-
 // Draws one full-screen pass into target and leaves it for reader's shaders to read.
 void FullscreenPass(vk::CommandBuffer cmd, const Image& target, const Pipeline& pipeline,
                     vk::DescriptorSet set, const void* push, u32 push_bytes,
                     vk::PipelineStageFlags2 reader) {
     const auto& dl = g_device->dispatch;
-    ImageBarrier(cmd, target.image, vk::ImageLayout::eUndefined,
+    ImageBarrier(*g_device, cmd, target.image, vk::ImageLayout::eUndefined,
                  vk::ImageLayout::eColorAttachmentOptimal, reader, vk::AccessFlagBits2::eNone,
                  vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                  vk::AccessFlagBits2::eColorAttachmentWrite);
@@ -343,7 +315,7 @@ void FullscreenPass(vk::CommandBuffer cmd, const Image& target, const Pipeline& 
                       dl);
     cmd.draw(3, 1, 0, 0, dl);
     cmd.endRendering(dl);
-    ImageBarrier(cmd, target.image, vk::ImageLayout::eColorAttachmentOptimal,
+    ImageBarrier(*g_device, cmd, target.image, vk::ImageLayout::eColorAttachmentOptimal,
                  vk::ImageLayout::eShaderReadOnlyOptimal,
                  vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                  vk::AccessFlagBits2::eColorAttachmentWrite, reader,
@@ -745,7 +717,7 @@ void RecordGlow(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_a
     constexpr auto Tests = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
                            vk::PipelineStageFlagBits2::eLateFragmentTests;
     ImageBarrier(
-        cmd, target.image, vk::ImageLayout::eShaderReadOnlyOptimal,
+        *g_device, cmd, target.image, vk::ImageLayout::eShaderReadOnlyOptimal,
         vk::ImageLayout::eColorAttachmentOptimal, vk::PipelineStageFlagBits2::eFragmentShader,
         vk::AccessFlagBits2::eShaderSampledRead, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
         vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite);
@@ -817,7 +789,7 @@ void RecordGlow(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_a
     }
     cmd.endRendering(dl);
     ImageBarrier(
-        cmd, target.image, vk::ImageLayout::eColorAttachmentOptimal,
+        *g_device, cmd, target.image, vk::ImageLayout::eColorAttachmentOptimal,
         vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
         vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eFragmentShader,
         vk::AccessFlagBits2::eShaderSampledRead);
@@ -833,13 +805,13 @@ void RecordBloom(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_
         g_bloom_cleared = true;
         const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
         for (const Image& image : g_bloom) {
-            ImageBarrier(cmd, image.image, vk::ImageLayout::eUndefined,
+            ImageBarrier(*g_device, cmd, image.image, vk::ImageLayout::eUndefined,
                          vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits2::eNone,
                          vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eClear,
                          vk::AccessFlagBits2::eTransferWrite);
             cmd.clearColorImage(image.image, vk::ImageLayout::eTransferDstOptimal,
                                 vk::ClearColorValue{.float32 = std::array<float, 4>{}}, range, dl);
-            ImageBarrier(cmd, image.image, vk::ImageLayout::eTransferDstOptimal,
+            ImageBarrier(*g_device, cmd, image.image, vk::ImageLayout::eTransferDstOptimal,
                          vk::ImageLayout::eShaderReadOnlyOptimal,
                          vk::PipelineStageFlagBits2::eClear, vk::AccessFlagBits2::eTransferWrite,
                          vk::PipelineStageFlagBits2::eFragmentShader,
@@ -886,13 +858,13 @@ void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
         g_antialiased_cleared = true;
         const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
         for (const Image& image : g_antialiased) {
-            ImageBarrier(cmd, image.image, vk::ImageLayout::eUndefined,
+            ImageBarrier(*g_device, cmd, image.image, vk::ImageLayout::eUndefined,
                          vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits2::eNone,
                          vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eClear,
                          vk::AccessFlagBits2::eTransferWrite);
             cmd.clearColorImage(image.image, vk::ImageLayout::eTransferDstOptimal,
                                 vk::ClearColorValue{.float32 = std::array<float, 4>{}}, range, dl);
-            ImageBarrier(cmd, image.image, vk::ImageLayout::eTransferDstOptimal,
+            ImageBarrier(*g_device, cmd, image.image, vk::ImageLayout::eTransferDstOptimal,
                          vk::ImageLayout::eShaderReadOnlyOptimal,
                          vk::PipelineStageFlagBits2::eClear, vk::AccessFlagBits2::eTransferWrite,
                          Compute | Fragment, Read);
@@ -907,8 +879,9 @@ void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
     g_antialiased_image = (g_antialiased_image + 1) % AntialiasImages;
     const vk::Image output = g_antialiased[g_antialiased_image].image;
     // The last frame read this image as its history.
-    ImageBarrier(cmd, output, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral, Compute,
-                 vk::AccessFlagBits2::eNone, Compute, vk::AccessFlagBits2::eShaderStorageWrite);
+    ImageBarrier(*g_device, cmd, output, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
+                 Compute, vk::AccessFlagBits2::eNone, Compute,
+                 vk::AccessFlagBits2::eShaderStorageWrite);
     if (Upscaler::Active()) {
         // The upscaler fills the picture from the toned scene; the encode writes its sRGB.
         Upscaler::Record(cmd);
@@ -930,8 +903,9 @@ void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
                  (g_picture_extent.height + AntialiasGroupPixels - 1) / AntialiasGroupPixels, 1,
                  dl);
     // The picture reads the output, and the next frame reads it as its history.
-    ImageBarrier(cmd, output, vk::ImageLayout::eGeneral, vk::ImageLayout::eShaderReadOnlyOptimal,
-                 Compute, vk::AccessFlagBits2::eShaderStorageWrite, Compute | Fragment, Read);
+    ImageBarrier(*g_device, cmd, output, vk::ImageLayout::eGeneral,
+                 vk::ImageLayout::eShaderReadOnlyOptimal, Compute,
+                 vk::AccessFlagBits2::eShaderStorageWrite, Compute | Fragment, Read);
 }
 
 void RecordComposite(vk::CommandBuffer cmd, u64 packet_address, vk::Extent2D extent) {

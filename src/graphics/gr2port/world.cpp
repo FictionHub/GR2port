@@ -108,15 +108,6 @@ Pipeline g_lines_pipeline;
 Pipeline g_occlusion_pipeline;
 Pipeline g_depth_level_pipeline;
 
-vk::DescriptorSetLayout CreateLayout(const Device& d,
-                                     std::span<const vk::DescriptorSetLayoutBinding> bindings) {
-    return d.device
-        .createDescriptorSetLayout(
-            {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
-            nullptr, d.dispatch)
-        .value;
-}
-
 template <size_t N>
 bool AllocateSets(const Device& d, vk::DescriptorSetLayout layout,
                   std::array<vk::DescriptorSet, N>& sets) {
@@ -177,10 +168,10 @@ bool CreateSet(const Device& d) {
         {1, Storage, 1, Compute},
         {2, Combined, 1, Compute, &g_sampler},
     }};
-    g_set_layout = CreateLayout(d, bindings);
-    g_lines_layout = CreateLayout(d, line_bindings);
-    g_occlusion_layout = CreateLayout(d, occlusion_bindings);
-    g_depth_level_layout = CreateLayout(d, depth_level_bindings);
+    g_set_layout = CreateSetLayout(d, bindings);
+    g_lines_layout = CreateSetLayout(d, line_bindings);
+    g_occlusion_layout = CreateSetLayout(d, occlusion_bindings);
+    g_depth_level_layout = CreateSetLayout(d, depth_level_bindings);
     const std::array<vk::DescriptorPoolSize, 2> sizes{{
         {Combined, LineImages * static_cast<u32>(bindings.size() + 3 + 5) + 2 * DepthLevels},
         {Storage, 2 * LineImages + DepthLevels},

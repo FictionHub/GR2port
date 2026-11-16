@@ -39,6 +39,13 @@ struct Device {
     vk::PipelineCache pipeline_cache;
 };
 
+/// Records a barrier on the first mip level and layer of image's aspect.
+void ImageBarrier(const Device& device, vk::CommandBuffer cmd, vk::Image image,
+                  vk::ImageLayout from, vk::ImageLayout to, vk::PipelineStageFlags2 src_stage,
+                  vk::AccessFlags2 src_access, vk::PipelineStageFlags2 dst_stage,
+                  vk::AccessFlags2 dst_access,
+                  vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor);
+
 /// Creates the instance, a surface for window, and a device on the first discrete GPU (else the
 /// first GPU) that has the features the renderer needs and a queue family that draws and presents
 /// to the surface.

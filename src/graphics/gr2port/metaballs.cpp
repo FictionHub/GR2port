@@ -45,23 +45,6 @@ Image g_mask;
 Image g_temporary;
 vk::Extent2D g_extent;
 
-void ImageBarrier(vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from, vk::ImageLayout to,
-                  vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
-                  vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
-    const vk::ImageMemoryBarrier2 barrier{
-        .srcStageMask = src_stage,
-        .srcAccessMask = src_access,
-        .dstStageMask = dst_stage,
-        .dstAccessMask = dst_access,
-        .oldLayout = from,
-        .newLayout = to,
-        .image = image,
-        .subresourceRange = ColorRange,
-    };
-    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
-                         g_device->dispatch);
-}
-
 // The writes of one rendering into the surfaces and depth, before the next loads them.
 void AttachmentBarrier(vk::CommandBuffer cmd) {
     constexpr auto Stages = vk::PipelineStageFlagBits2::eColorAttachmentOutput |
@@ -148,12 +131,7 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format) {
         {1, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eFragment, &g_sampler},
         {2, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eFragment},
     }};
-    g_blur_layout =
-        device.device
-            .createDescriptorSetLayout(
-                {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
-                nullptr, dl)
-            .value;
+    g_blur_layout = CreateSetLayout(device, bindings);
     const std::array<vk::DescriptorPoolSize, 2> sizes{{
         {vk::DescriptorType::eSampledImage, 4},
         {vk::DescriptorType::eSampler, 2},
@@ -247,7 +225,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, u64 addr
     }
     AttachmentBarrier(cmd);
     // The last frame's blur read the mask.
-    ImageBarrier(cmd, g_mask.image, vk::ImageLayout::eUndefined,
+    ImageBarrier(*g_device, cmd, g_mask.image, vk::ImageLayout::eUndefined,
                  vk::ImageLayout::eColorAttachmentOptimal,
                  vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eNone,
                  vk::PipelineStageFlagBits2::eColorAttachmentOutput,
@@ -291,7 +269,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, u64 addr
     cmd.endRendering(dl);
     AttachmentBarrier(cmd);
     ImageBarrier(
-        cmd, g_mask.image, vk::ImageLayout::eColorAttachmentOptimal,
+        *g_device, cmd, g_mask.image, vk::ImageLayout::eColorAttachmentOptimal,
         vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
         vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eFragmentShader,
         vk::AccessFlagBits2::eShaderSampledRead);
@@ -307,23 +285,23 @@ void RecordBlur(vk::CommandBuffer cmd, const Scene::Header& header, const Image&
     constexpr auto Attachment = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
     constexpr auto Written = vk::AccessFlagBits2::eColorAttachmentWrite;
     // The game first sets the blur's image to 0 outside the metaballs.
-    ImageBarrier(cmd, g_temporary.image, vk::ImageLayout::eUndefined,
+    ImageBarrier(*g_device, cmd, g_temporary.image, vk::ImageLayout::eUndefined,
                  vk::ImageLayout::eTransferDstOptimal, Fragment, vk::AccessFlagBits2::eNone,
                  vk::PipelineStageFlagBits2::eClear, vk::AccessFlagBits2::eTransferWrite);
     cmd.clearColorImage(g_temporary.image, vk::ImageLayout::eTransferDstOptimal,
                         vk::ClearColorValue{.float32 = std::array<float, 4>{}}, ColorRange, dl);
-    ImageBarrier(cmd, g_temporary.image, vk::ImageLayout::eTransferDstOptimal,
+    ImageBarrier(*g_device, cmd, g_temporary.image, vk::ImageLayout::eTransferDstOptimal,
                  vk::ImageLayout::eColorAttachmentOptimal, vk::PipelineStageFlagBits2::eClear,
                  vk::AccessFlagBits2::eTransferWrite, Attachment,
                  vk::AccessFlagBits2::eColorAttachmentRead | Written);
     BlurPass(cmd, g_temporary.view, g_blur_sets[0], g_axes.address);
-    ImageBarrier(cmd, g_temporary.image, vk::ImageLayout::eColorAttachmentOptimal,
+    ImageBarrier(*g_device, cmd, g_temporary.image, vk::ImageLayout::eColorAttachmentOptimal,
                  vk::ImageLayout::eShaderReadOnlyOptimal, Attachment, Written, Fragment, Read);
-    ImageBarrier(cmd, normal.image, vk::ImageLayout::eShaderReadOnlyOptimal,
+    ImageBarrier(*g_device, cmd, normal.image, vk::ImageLayout::eShaderReadOnlyOptimal,
                  vk::ImageLayout::eColorAttachmentOptimal, Fragment, Read, Attachment,
                  vk::AccessFlagBits2::eColorAttachmentRead | Written);
     BlurPass(cmd, normal.view, g_blur_sets[1], g_axes.address + AxisBytes);
-    ImageBarrier(cmd, normal.image, vk::ImageLayout::eColorAttachmentOptimal,
+    ImageBarrier(*g_device, cmd, normal.image, vk::ImageLayout::eColorAttachmentOptimal,
                  vk::ImageLayout::eShaderReadOnlyOptimal, Attachment, Written,
                  Fragment | vk::PipelineStageFlagBits2::eComputeShader, Read);
 }

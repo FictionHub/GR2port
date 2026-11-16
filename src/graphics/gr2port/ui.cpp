@@ -346,10 +346,7 @@ bool Start(const Device& device, Memory& memory) {
     const vk::DescriptorSetLayoutBinding binding{0, vk::DescriptorType::eSampler, Samplers,
                                                  vk::ShaderStageFlagBits::eFragment,
                                                  g_samplers.data()};
-    g_sampler_layout =
-        device.device
-            .createDescriptorSetLayout({.bindingCount = 1, .pBindings = &binding}, nullptr, dl)
-            .value;
+    g_sampler_layout = CreateSetLayout(device, std::span{&binding, 1});
     const vk::DescriptorPoolSize size{vk::DescriptorType::eSampler, Samplers};
     g_pool = device.device
                  .createDescriptorPool({.maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &size},

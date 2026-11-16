@@ -69,6 +69,10 @@ struct Pipeline {
     vk::PipelineLayout layout;
 };
 
+/// A descriptor set layout of bindings.
+vk::DescriptorSetLayout CreateSetLayout(const Device& device,
+                                        std::span<const vk::DescriptorSetLayoutBinding> bindings);
+
 /// A pipeline for dynamic rendering with a dynamic viewport and scissor, no vertex input (the
 /// shaders pull their data by device address) and push constants for every stage.
 Pipeline CreateGraphicsPipeline(const Device& device, const GraphicsPipelineInfo& info);

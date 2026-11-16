@@ -91,31 +91,6 @@ std::vector<u32> WithConstantTrue(std::span<const u32> code, u32 id) {
     return {};
 }
 
-vk::DescriptorSetLayout CreateLayout(std::span<const vk::DescriptorSetLayoutBinding> bindings) {
-    return g_device->device
-        .createDescriptorSetLayout(
-            {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
-            nullptr, g_device->dispatch)
-        .value;
-}
-
-void ImageBarrier(vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from, vk::ImageLayout to,
-                  vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
-                  vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
-    const vk::ImageMemoryBarrier2 barrier{
-        .srcStageMask = src_stage,
-        .srcAccessMask = src_access,
-        .dstStageMask = dst_stage,
-        .dstAccessMask = dst_access,
-        .oldLayout = from,
-        .newLayout = to,
-        .image = image,
-        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
-    };
-    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
-                         g_device->dispatch);
-}
-
 // Draws the reconstruction from the image of set into target.
 void Reconstruct(vk::CommandBuffer cmd, vk::DescriptorSet set, vk::ImageView target, u64 address) {
     const auto& dl = g_device->dispatch;
@@ -187,9 +162,9 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
         {5, Sampled, 1, Fragment},
         {6, Sampled, 1, Fragment},
     }};
-    g_compress_layout = CreateLayout(compress_bindings);
-    g_max_layout = CreateLayout(max_bindings);
-    g_blur_layout = CreateLayout(blur_bindings);
+    g_compress_layout = CreateSetLayout(*g_device, compress_bindings);
+    g_max_layout = CreateSetLayout(*g_device, max_bindings);
+    g_blur_layout = CreateSetLayout(*g_device, blur_bindings);
     const std::array<vk::DescriptorPoolSize, 4> sizes{{
         {Sampled, 2 + 2 * 5},
         {SamplerType, 1 + 2 * 2},
@@ -328,8 +303,8 @@ void Record(vk::CommandBuffer cmd, u64 address) {
     constexpr auto Attachment = vk::ImageLayout::eColorAttachmentOptimal;
     // The last frame's reconstruction read the images.
     for (const Image* image : {&g_compressed, &g_tile_max, &g_neighbor_max}) {
-        ImageBarrier(cmd, image->image, vk::ImageLayout::eUndefined, General, Fragment | Compute,
-                     vk::AccessFlagBits2::eNone, Compute, Write);
+        ImageBarrier(*g_device, cmd, image->image, vk::ImageLayout::eUndefined, General,
+                     Fragment | Compute, vk::AccessFlagBits2::eNone, Compute, Write);
     }
     const u64 compress_constants = address + Scene::MotionBlurOffset;
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_compress.pipeline, dl);
@@ -346,13 +321,14 @@ void Record(vk::CommandBuffer cmd, u64 address) {
     cmd.pushConstants(g_tile.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(tile_constants),
                       &tile_constants, dl);
     cmd.dispatch(Tiles.width, Tiles.height, 1, dl);
-    ImageBarrier(cmd, g_tile_max.image, General, General, Compute, Write, Compute, Read);
+    ImageBarrier(*g_device, cmd, g_tile_max.image, General, General, Compute, Write, Compute, Read);
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_neighbor.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_neighbor.layout, 0, g_neighbor_set,
                            {}, dl);
     cmd.dispatch(Tiles.width, Tiles.height, 1, dl);
     for (const Image* image : {&g_compressed, &g_neighbor_max}) {
-        ImageBarrier(cmd, image->image, General, General, Compute, Write, Fragment, Read);
+        ImageBarrier(*g_device, cmd, image->image, General, General, Compute, Write, Fragment,
+                     Read);
     }
     if (g_low) {
         // The scene's copy into the second image.
@@ -360,9 +336,9 @@ void Record(vk::CommandBuffer cmd, u64 address) {
         constexpr auto Source = vk::ImageLayout::eTransferSrcOptimal;
         constexpr auto Target = vk::ImageLayout::eTransferDstOptimal;
         constexpr auto CopyWrite = vk::AccessFlagBits2::eTransferWrite;
-        ImageBarrier(cmd, g_scene, ShaderRead, Source, Fragment | Compute,
+        ImageBarrier(*g_device, cmd, g_scene, ShaderRead, Source, Fragment | Compute,
                      vk::AccessFlagBits2::eNone, Copy, vk::AccessFlagBits2::eTransferRead);
-        ImageBarrier(cmd, g_second.image, vk::ImageLayout::eUndefined, Target, Fragment,
+        ImageBarrier(*g_device, cmd, g_second.image, vk::ImageLayout::eUndefined, Target, Fragment,
                      vk::AccessFlagBits2::eNone, Copy, CopyWrite);
         const vk::Extent2D second = g_second.extent;
         const vk::ImageCopy region{
@@ -371,23 +347,24 @@ void Record(vk::CommandBuffer cmd, u64 address) {
             .extent = vk::Extent3D{second.width, second.height, 1},
         };
         cmd.copyImage(g_scene, Source, g_second.image, Target, region, dl);
-        ImageBarrier(cmd, g_second.image, Target, ShaderRead, Copy, CopyWrite, Fragment, Read);
-        ImageBarrier(cmd, g_scene, Source, Attachment, Copy, vk::AccessFlagBits2::eNone, Output,
-                     AttachmentWrite);
+        ImageBarrier(*g_device, cmd, g_second.image, Target, ShaderRead, Copy, CopyWrite, Fragment,
+                     Read);
+        ImageBarrier(*g_device, cmd, g_scene, Source, Attachment, Copy, vk::AccessFlagBits2::eNone,
+                     Output, AttachmentWrite);
     } else {
         // The reconstruction into the second image.
-        ImageBarrier(cmd, g_second.image, vk::ImageLayout::eUndefined, Attachment, Fragment,
-                     vk::AccessFlagBits2::eNone, Output, AttachmentWrite);
+        ImageBarrier(*g_device, cmd, g_second.image, vk::ImageLayout::eUndefined, Attachment,
+                     Fragment, vk::AccessFlagBits2::eNone, Output, AttachmentWrite);
         Reconstruct(cmd, g_blur_sets[0], g_second.view, address);
-        ImageBarrier(cmd, g_second.image, Attachment, ShaderRead, Output, AttachmentWrite, Fragment,
-                     Read);
-        ImageBarrier(cmd, g_scene, ShaderRead, Attachment, Fragment | Compute, Read, Output,
-                     AttachmentWrite);
+        ImageBarrier(*g_device, cmd, g_second.image, Attachment, ShaderRead, Output,
+                     AttachmentWrite, Fragment, Read);
+        ImageBarrier(*g_device, cmd, g_scene, ShaderRead, Attachment, Fragment | Compute, Read,
+                     Output, AttachmentWrite);
     }
     // From the second image back into the scene.
     Reconstruct(cmd, g_blur_sets[1], g_scene_view, address);
-    ImageBarrier(cmd, g_scene, Attachment, ShaderRead, Output, AttachmentWrite, Fragment | Compute,
-                 Read);
+    ImageBarrier(*g_device, cmd, g_scene, Attachment, ShaderRead, Output, AttachmentWrite,
+                 Fragment | Compute, Read);
 }
 
 } // namespace Gr2Port::MotionBlur

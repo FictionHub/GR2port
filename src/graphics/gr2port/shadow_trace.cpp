@@ -35,23 +35,6 @@ Image g_image;
 // The image holds no shadow until the first trace.
 bool g_cleared = false;
 
-void ImageBarrier(vk::CommandBuffer cmd, vk::ImageLayout from, vk::ImageLayout to,
-                  vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
-                  vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
-    const vk::ImageMemoryBarrier2 barrier{
-        .srcStageMask = src_stage,
-        .srcAccessMask = src_access,
-        .dstStageMask = dst_stage,
-        .dstAccessMask = dst_access,
-        .oldLayout = from,
-        .newLayout = to,
-        .image = g_image.image,
-        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
-    };
-    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
-                         g_device->dispatch);
-}
-
 } // namespace
 
 bool Start(const Device& device, Memory& memory) {
@@ -69,10 +52,7 @@ bool Start(const Device& device, Memory& memory) {
     g_sampler = device.device.createSampler(sampler_info, nullptr, dl).value;
     const vk::DescriptorSetLayoutBinding binding{0, vk::DescriptorType::eCombinedImageSampler, 1,
                                                  vk::ShaderStageFlagBits::eFragment, &g_sampler};
-    g_layout =
-        device.device
-            .createDescriptorSetLayout({.bindingCount = 1, .pBindings = &binding}, nullptr, dl)
-            .value;
+    g_layout = CreateSetLayout(device, std::span{&binding, 1});
     const vk::DescriptorPoolSize size{vk::DescriptorType::eCombinedImageSampler, 1};
     g_pool = device.device
                  .createDescriptorPool({.maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &size},
@@ -134,14 +114,15 @@ void Record(vk::CommandBuffer cmd, u64 address, bool traced) {
     constexpr auto Read = vk::AccessFlagBits2::eShaderSampledRead;
     if (!g_cleared) {
         g_cleared = true;
-        ImageBarrier(cmd, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-                     vk::PipelineStageFlagBits2::eNone, vk::AccessFlagBits2::eNone,
-                     vk::PipelineStageFlagBits2::eClear, vk::AccessFlagBits2::eTransferWrite);
+        ImageBarrier(*g_device, cmd, g_image.image, vk::ImageLayout::eUndefined,
+                     vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits2::eNone,
+                     vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eClear,
+                     vk::AccessFlagBits2::eTransferWrite);
         cmd.clearColorImage(g_image.image, vk::ImageLayout::eTransferDstOptimal,
                             vk::ClearColorValue{.float32 = std::array<float, 4>{}},
                             vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
                             dl);
-        ImageBarrier(cmd, vk::ImageLayout::eTransferDstOptimal,
+        ImageBarrier(*g_device, cmd, g_image.image, vk::ImageLayout::eTransferDstOptimal,
                      vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eClear,
                      vk::AccessFlagBits2::eTransferWrite, Readers, Read);
     }
@@ -149,7 +130,7 @@ void Record(vk::CommandBuffer cmd, u64 address, bool traced) {
         return;
     }
     // The last frame's light pass read the image.
-    ImageBarrier(cmd, vk::ImageLayout::eShaderReadOnlyOptimal,
+    ImageBarrier(*g_device, cmd, g_image.image, vk::ImageLayout::eShaderReadOnlyOptimal,
                  vk::ImageLayout::eColorAttachmentOptimal, Readers, vk::AccessFlagBits2::eNone,
                  vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                  vk::AccessFlagBits2::eColorAttachmentWrite);
@@ -181,7 +162,7 @@ void Record(vk::CommandBuffer cmd, u64 address, bool traced) {
                       &push, dl);
     cmd.draw(3, 1, 0, 0, dl);
     cmd.endRendering(dl);
-    ImageBarrier(cmd, vk::ImageLayout::eColorAttachmentOptimal,
+    ImageBarrier(*g_device, cmd, g_image.image, vk::ImageLayout::eColorAttachmentOptimal,
                  vk::ImageLayout::eShaderReadOnlyOptimal,
                  vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                  vk::AccessFlagBits2::eColorAttachmentWrite, Readers, Read);

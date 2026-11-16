@@ -160,6 +160,15 @@ PipelineBuildNote::~PipelineBuildNote() {
     EndBuild();
 }
 
+vk::DescriptorSetLayout CreateSetLayout(const Device& d,
+                                        std::span<const vk::DescriptorSetLayoutBinding> bindings) {
+    return d.device
+        .createDescriptorSetLayout(
+            {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
+            nullptr, d.dispatch)
+        .value;
+}
+
 Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& info) {
     const Building building{{"vertex", info.vertex},
                             {"tessellation control", info.tessellation_control},
