@@ -16,32 +16,6 @@
             <Line Type="bytes" Address="0x1377c1c" Value="e9b40000009090"/>
         </PatchList>
     </Metadata>
-    <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="Disable motion blur" Category="Essentials" Note="Removes the camera motion blur by skipping its two fullscreen draws, the same draws the GR2 fork emulator drops for its motion blur option. Saves two fullscreen passes per frame." Author="Junmin Lee" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
-        <PatchList>
-            <Line Type="bytes" Address="0x0143e71f" Value="0f1f440000"/>
-            <Line Type="bytes" Address="0x0143ea18" Value="0f1f440000"/>
-        </PatchList>
-    </Metadata>
-    <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="SSAO ghost trail fix" Category="Essentials" Note="Stops moving characters from leaving dark copies of themselves in the ambient occlusion. Uses the game's ssaoClear SSAO shader, patched so characters still cast AO. One shader compile hitch on first use." Author="Junmin Lee" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
-        <PatchList>
-            <Line Type="bytes" Address="0x014365f4" Value="9090"/>
-            <Line Type="bytes" Address="0x01c320c4" Value="82020e7e"/>
-            <Line Type="bytes" Address="0x01c3220c" Value="82020c7e"/>
-            <Line Type="bytes" Address="0x01c32354" Value="82020c7e"/>
-            <Line Type="bytes" Address="0x01c32498" Value="8202107e"/>
-            <Line Type="bytes" Address="0x01c3266c" Value="80020c7e"/>
-            <Line Type="bytes" Address="0x01c32761" Value="01"/>
-        </PatchList>
-    </Metadata>
-    <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="Auto-exposure fix" Category="Essentials" Note="Fixes the washed-out, overexposed picture at low render resolutions (544p and below, and the FSR Performance and Ultra Performance presets): auto-exposure measures the whole frame at every resolution. No visible change at 1080p. One shader compile hitch on first use." Author="Junmin Lee" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
-        <PatchList>
-            <Line Type="bytes" Address="0x01c33b70" Value="0c860e900e810e80110e0e930e100e800e02027e0000a8d10a0202007f008cbf002070e001000280000080bf000080bf"/>
-            <Line Type="bytes" Address="0x01c33bd9" Value="01"/>
-            <Line Type="bytes" Address="0x0142dea0" Value="ba00400000"/>
-            <Line Type="bytes" Address="0x0142deb7" Value="ba00400000"/>
-            <Line Type="bytes" Address="0x0143ef3d" Value="83c23f83c33fc1ea0683e3c00fafda"/>
-        </PatchList>
-    </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="40fps v5.0 (READ NOTES)" Note="40 FPS with a fixed 1/40 game step: the game slows down if it drops below 40 FPS. Movie audio can play up to 25% faster or 20% slower to stay in sync with the picture on a PC that stutters. Use one FPS patch at a time. Set Vblank Frequency to 40. In the launcher it is on the Experimental tab, which only a game's own settings show: right-click the game &gt; Game-specific Settings... &gt; Create Game-specific Settings from Global Settings (or Configure Game-specific Settings) &gt; Experimental &gt; Vblank Frequency, then Save." Author="Junmin Lee" PatchVer="5.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
             <Line Type="bytes" Address="0x00496760" Value="a302f701001500001e003200002300004400350000250000370034000027000037004900002700008501d200002e00005901e300003000003c01c7000034000010004000003600005e012901003b00001902aa01003c000024005900003d0000c6020b02003e0000f300dd00003f0000c1035f02004000000302cd01004400004101f500004500009302ac010048000023037302004a0000da009f00004b000042011501004b0000be000401004c00000d01ea000053000013006400005600001d006800005900005901c400005a0000d700de00005b0000ca00ce00005e00007801de00005e00007c00ec00005e00002c035302005e0000a000d500005f0000"/>
@@ -18672,30 +18646,6 @@
         <PatchList>
             <Line Type="bytes" Address="0x14ba606" Value="48b80040010000c00000"/>
             <Line Type="bytes" Address="0x14ba69e" Value="c78580feffff00030000"/>
-        </PatchList>
-    </Metadata>
-    <Metadata Title="Gravity Rush 2" Name="Performance: disable transparent particles (smoke, dust)" Category="Performance" Note="Skips the transparent particle layer - smoke, dust and sparks - saving both draw calls and a lot of overdraw." Author="junminlee2004" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
-        <PatchList>
-            <Line Type="bytes" Address="0x143caea" Value="e92503000090"/>
-        </PatchList>
-    </Metadata>
-    <Metadata Title="Gravity Rush 2" Name="Performance: disable heat-haze distortion" Category="Performance" Note="Skips the refraction shimmer on fire, explosions and gravity rifts." Author="junminlee2004" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
-        <PatchList>
-            <Line Type="bytes" Address="0x143b99e" Value="e91301000090"/>
-        </PatchList>
-    </Metadata>
-    <Metadata Title="Gravity Rush 2" Name="Performance: disable surfaces" Category="Performance" Note="Skips more passes" Author="junminlee2004" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
-        <PatchList>
-            <Line Type="bytes" Address="0x143bbe7" Value="e96d03000090"/>
-        </PatchList>
-    </Metadata>
-    <Metadata Title="Gravity Rush 2" Name="Performance: RGBA8 HDR render targets" Category="Performance" Note="AFFECTS VISUALS. Stores the lit scene, the fogged scene, the IBL light and the two half-size distortion copies as RGBA8 instead of RGBA16F, like the Bloodborne rgba8 patch, which halves their memory traffic. Light brighter than full white is clipped before tonemapping, so highlights, sky and bloom can look flatter and dark scenes can band." Author="junminlee2004" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
-        <PatchList>
-            <Line Type="bytes" Address="0x142aca4" Value="be03000000"/>
-            <Line Type="bytes" Address="0x142aea9" Value="be03000000"/>
-            <Line Type="bytes" Address="0x142af2e" Value="be03000000"/>
-            <Line Type="bytes" Address="0x142b5a7" Value="41c787cc8500000e000000"/>
-            <Line Type="bytes" Address="0x142b76f" Value="41c787f48700000e000000"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="Resolution 424x240 (240p, 16:9)" Category="Resolution/No upscaling/16:9" Note="424x240, 16:9." Author="Junmin Lee" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
