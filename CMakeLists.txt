@@ -692,7 +692,6 @@ set(NP_LIBS src/core/libraries/np/np_error.h
             src/core/libraries/np/np_sns_facebook_dialog.h
             src/core/libraries/np/np_partner.cpp
             src/core/libraries/np/np_partner.h
-            src/core/libraries/np/object_manager.h
             src/core/libraries/np/np_handler/np_handler.cpp
             src/core/libraries/np/np_handler/np_handler.h
             src/core/libraries/np/np_handler/np_handler_friends.cpp
@@ -918,7 +917,6 @@ set(CORE src/core/aerolib/stubs.cpp
          src/core/address_space.h
          src/core/file_sys/devices/base_device.cpp
          src/core/file_sys/devices/base_device.h
-         src/core/file_sys/devices/ioccom.h
          src/core/file_sys/devices/logger.cpp
          src/core/file_sys/devices/logger.h
          src/core/file_sys/devices/nop_device.h
@@ -942,7 +940,6 @@ set(CORE src/core/aerolib/stubs.cpp
          src/core/file_sys/directories/normal_directory.h
          src/core/file_sys/directories/pfs_directory.cpp
          src/core/file_sys/directories/pfs_directory.h
-         src/core/file_format/pfs.h
          src/core/file_format/psf.cpp
          src/core/file_format/psf.h
          src/core/file_format/playgo_chunk.cpp
