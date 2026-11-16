@@ -46,6 +46,7 @@ Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU
 - Native mouse input (controls camera)
 - Fully bindable gamepad and keyboard bindings and button prompts
 - Fully customizable graphics presets
+- In-game exit to desktop button below return to title
 - Graphics Settings page in the pause menu's System Menu, with changes applied live where the renderer allows
 - Field of view setting: 80% to 150% of the game's own angle
 - Right stick tilts menus, the title screen and comics when the pad has no gyro (or there is no pad)
