@@ -86,6 +86,7 @@ enum class Upscaler : u32 {
     Fsr3,
     Fsr4,
     Dlss,
+    Xess,
 };
 
 /// The upscaler's ratio of output to scene size: Native 1, Quality 1.5, Balanced 1.7, Performance

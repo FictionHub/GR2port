@@ -182,7 +182,7 @@ jobs:
         path: ./artifacts
 
     # Each zip holds the executable, the readme and a userdata folder with FSR 4's files; the
-    # Windows zip also has DLSS's. GitHub puts a dot for each space of an asset's file name, so
+    # Windows zip also has DLSS's and XeSS's. GitHub puts a dot for each space of an asset's file name, so
     # the file names carry the dots and the labels the release page shows carry the spaces.
     - name: Make the zips
       run: |
@@ -198,6 +198,8 @@ jobs:
             mkdir -p "$dir/userdata/dlss"
             tar -xJf third_party/upscaler-files/dlss.tar.xz -C "$dir/userdata/dlss"
             cp third_party/streamline/license.txt "$dir/userdata/dlss/LICENSE-Streamline.txt"
+            mkdir -p "$dir/userdata/xess"
+            tar -xJf third_party/upscaler-files/xess.tar.xz -C "$dir/userdata/xess"
           fi
           cp src/dist/README.txt "$dir"
           (cd "$dir" && zip -r "$GITHUB_WORKSPACE/GR2port.build.${FULLHASH:0:8}.$system.zip" .)

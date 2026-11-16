@@ -24,15 +24,16 @@ struct Offset {
 };
 
 /// While the instance's extensions are chosen: with DLSS chosen, starts Streamline and appends the
-/// instance extensions DLSS needs.
-void ExtendInstance(std::vector<const char*>& extensions,
+/// instance extensions DLSS needs; with XeSS chosen, loads XeSS and appends the instance
+/// extensions it needs on Vulkan api_version.
+void ExtendInstance(std::vector<const char*>& extensions, u32 api_version,
                     const vk::detail::DispatchLoaderDynamic& dispatch);
 
 /// Right before the device is made from info: enables the features and extensions the chosen
 /// upscaler needs that gpu supports. features chains vk11, vk12 and vk13.
-void ExtendDevice(vk::PhysicalDevice gpu, const vk::detail::DispatchLoaderDynamic& dispatch,
-                  vk::DeviceCreateInfo& info, vk::PhysicalDeviceFeatures2& features,
-                  vk::PhysicalDeviceVulkan11Features& vk11,
+void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
+                  const vk::detail::DispatchLoaderDynamic& dispatch, vk::DeviceCreateInfo& info,
+                  vk::PhysicalDeviceFeatures2& features, vk::PhysicalDeviceVulkan11Features& vk11,
                   vk::PhysicalDeviceVulkan12Features& vk12,
                   vk::PhysicalDeviceVulkan13Features& vk13);
 

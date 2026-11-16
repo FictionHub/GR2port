@@ -81,10 +81,8 @@ std::string QualityName(Quality quality) {
 }
 
 constexpr std::pair<Upscaler, std::string_view> UpscalerNames[] = {
-    {Upscaler::Off, "off"},
-    {Upscaler::Fsr3, "fsr3"},
-    {Upscaler::Fsr4, "fsr4"},
-    {Upscaler::Dlss, "dlss"},
+    {Upscaler::Off, "off"},   {Upscaler::Fsr3, "fsr3"}, {Upscaler::Fsr4, "fsr4"},
+    {Upscaler::Dlss, "dlss"}, {Upscaler::Xess, "xess"},
 };
 
 constexpr std::pair<UpscaleQuality, std::string_view> UpscaleQualityNames[] = {

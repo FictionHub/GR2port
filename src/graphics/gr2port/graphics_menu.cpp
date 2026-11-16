@@ -314,6 +314,25 @@ void ApplyPreset(Values& values, const Settings::Preset& preset) {
     }
 }
 
+struct UpscalerChoice {
+    Settings::Upscaler upscaler;
+    const char* name;
+};
+
+// The upscalers the row lists: DLSS on NVIDIA GPUs, XeSS on Windows.
+std::vector<UpscalerChoice> UpscalerChoices() {
+    std::vector<UpscalerChoice> choices{{Settings::Upscaler::Off, "Off"},
+                                        {Settings::Upscaler::Fsr3, "FSR 3.1"},
+                                        {Settings::Upscaler::Fsr4, "FSR 4"}};
+    if (g_vendor.load(std::memory_order_relaxed) == NvidiaVendor) {
+        choices.push_back({Settings::Upscaler::Dlss, "DLSS"});
+    }
+#ifdef _WIN32
+    choices.push_back({Settings::Upscaler::Xess, "XeSS"});
+#endif
+    return choices;
+}
+
 // The texture budgets: Auto, the launcher's sizes, and the saved one when it is none of them.
 std::vector<u32> TextureBudgets(const Values& values) {
     std::vector<u32> budgets{0,    1024,  1536,  2048,  3072,  4096,  6144,
@@ -458,19 +477,20 @@ const std::array<Setting, 23> Table{{
      }},
     {"Upscaler",
      [](const Values&) {
-         Names names = Choices({"Off", "FSR 3.1", "FSR 4"});
-         if (g_vendor.load(std::memory_order_relaxed) == NvidiaVendor) {
-             names.emplace_back("DLSS");
+         Names names;
+         for (const UpscalerChoice& choice : UpscalerChoices()) {
+             names.emplace_back(choice.name);
          }
          return names;
      },
      [](const Values& values) {
-         const int choice = static_cast<int>(values.graphics.upscaler);
-         const bool dlss = g_vendor.load(std::memory_order_relaxed) == NvidiaVendor;
-         return choice == static_cast<int>(Settings::Upscaler::Dlss) && !dlss ? 0 : choice;
+         const std::vector<UpscalerChoice> choices = UpscalerChoices();
+         const auto found =
+             std::ranges::find(choices, values.graphics.upscaler, &UpscalerChoice::upscaler);
+         return found != choices.end() ? static_cast<int>(found - choices.begin()) : 0;
      },
      [](Values& values, int choice) {
-         values.graphics.upscaler = static_cast<Settings::Upscaler>(choice);
+         values.graphics.upscaler = UpscalerChoices()[choice].upscaler;
      }},
     {"Upscaler Quality",
      [](const Values&) {

@@ -148,7 +148,7 @@ bool CreateInstance(Device& d) {
         return false;
     }
     std::vector<const char*> extensions{surface_extensions, surface_extensions + count};
-    Upscaler::ExtendInstance(extensions, d.dispatch);
+    Upscaler::ExtendInstance(extensions, ApiVersion, d.dispatch);
     const vk::ApplicationInfo application{
         .pApplicationName = "GR2port",
         .apiVersion = ApiVersion,
@@ -313,7 +313,8 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         .enabledExtensionCount = static_cast<u32>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data(),
     };
-    Upscaler::ExtendDevice(d.gpu, d.dispatch, info, features, features11, features12, features13);
+    Upscaler::ExtendDevice(d.instance, d.gpu, d.dispatch, info, features, features11, features12,
+                           features13);
     const auto [result, device] = d.gpu.createDevice(info, nullptr, d.dispatch);
     if (result != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: no device: {}", vk::to_string(result));

@@ -25,6 +25,7 @@
 #include "graphics/gr2_fsr3/fsr4_v07_bridge.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_inputs_comp.h"
 #include "graphics/gr2_fsr3/vk_trampolines.h"
+#include "graphics/gr2_fsr3/xess_vulkan.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/scene.h"
@@ -43,7 +44,7 @@ using Clock = std::chrono::steady_clock;
 // Each upscaler writes its picture in the toned colour's format, which compute shaders then
 // encode.
 constexpr vk::Format OutputFormat = vk::Format::eR16G16B16A16Sfloat;
-// FSR 4 and DLSS read copies of the inputs in these formats.
+// FSR 4, DLSS and XeSS read copies of the inputs in these formats.
 constexpr vk::Format InputColorFormat = vk::Format::eR16G16B16A16Sfloat;
 constexpr vk::Format InputMotionFormat = vk::Format::eR16G16Sfloat;
 constexpr vk::Format InputDepthFormat = vk::Format::eR32Sfloat;
@@ -93,6 +94,8 @@ Settings::Upscaler g_upscaler = Settings::Upscaler::Off;
 Settings::UpscaleQuality g_quality = Settings::UpscaleQuality::Quality;
 // The output's size over the scene's. The capture reads it on the game's thread.
 std::atomic<float> g_ratio{1.0f};
+// Whether RenderExtent rounds up, as XeSS's smallest render size does.
+std::atomic<bool> g_round_up{false};
 Image g_output;
 vk::Extent2D g_render;
 vk::Extent2D g_output_extent;
@@ -119,7 +122,7 @@ FfxVkPortableUpscaleContext* g_fsr3 = nullptr;
 FfxVkPortableUpscaleCreateInfo g_fsr3_create{};
 u64 g_fsr3_logged_issues = 0;
 
-// FSR 4 and DLSS: the inputs pass and its copies of the inputs.
+// FSR 4, DLSS and XeSS: the inputs pass and its copies of the inputs.
 vk::DescriptorSetLayout g_inputs_layout;
 vk::DescriptorPool g_inputs_pool;
 vk::DescriptorSet g_inputs_set;
@@ -138,6 +141,9 @@ std::deque<Fsr4Frame> g_fsr4_frames;
 // DLSS: whether Streamline holds options for the sizes.
 bool g_dlss_ready = false;
 
+// XeSS: whether the context is initialized for the sizes.
+bool g_xess_ready = false;
+
 const char* Name(Settings::Upscaler upscaler) {
     switch (upscaler) {
     case Settings::Upscaler::Fsr3:
@@ -146,13 +152,16 @@ const char* Name(Settings::Upscaler upscaler) {
         return "FSR 4";
     case Settings::Upscaler::Dlss:
         return "DLSS";
+    case Settings::Upscaler::Xess:
+        return "XeSS";
     default:
         return "off";
     }
 }
 
 bool UsesInputs() {
-    return g_upscaler == Settings::Upscaler::Fsr4 || g_upscaler == Settings::Upscaler::Dlss;
+    return g_upscaler == Settings::Upscaler::Fsr4 || g_upscaler == Settings::Upscaler::Dlss ||
+           g_upscaler == Settings::Upscaler::Xess;
 }
 
 // The radical inverse of index in base: the Halton sequence the jitter follows.
@@ -201,6 +210,22 @@ Gr2Fsr3::DlssMode DlssModeOf(Settings::UpscaleQuality quality) {
         return Gr2Fsr3::DlssMode::UltraPerformance;
     default:
         return Gr2Fsr3::DlssMode::Quality;
+    }
+}
+
+// The XeSS setting that renders at the quality's ratio.
+Gr2Fsr3::XessQuality XessQualityOf(Settings::UpscaleQuality quality) {
+    switch (quality) {
+    case Settings::UpscaleQuality::Native:
+        return Gr2Fsr3::XessQuality::Aa;
+    case Settings::UpscaleQuality::Balanced:
+        return Gr2Fsr3::XessQuality::Quality;
+    case Settings::UpscaleQuality::Performance:
+        return Gr2Fsr3::XessQuality::Balanced;
+    case Settings::UpscaleQuality::UltraPerformance:
+        return Gr2Fsr3::XessQuality::UltraPerformance;
+    default:
+        return Gr2Fsr3::XessQuality::UltraQuality;
     }
 }
 
@@ -270,6 +295,7 @@ void FreeContexts() {
         Gr2Fsr3::DlssFree();
         g_dlss_ready = false;
     }
+    g_xess_ready = false;
     for (Image* image : {&g_output, &g_input_color, &g_input_motion, &g_input_depth}) {
         g_memory->Destroy(*image);
     }
@@ -415,7 +441,19 @@ bool CreateDlss(vk::Extent2D render, vk::Extent2D output) {
     return true;
 }
 
-// Copies the toned colour, the velocity and the depth into the images FSR 4 and DLSS read.
+bool CreateXess(vk::Extent2D render, vk::Extent2D output) {
+    if (const std::string rejected = Gr2Fsr3::XessInit(XessQualityOf(g_quality), render, output,
+                                                       0.5f * static_cast<float>(render.width),
+                                                       -0.5f * static_cast<float>(render.height));
+        !rejected.empty()) {
+        TurnOff(rejected);
+        return false;
+    }
+    g_xess_ready = true;
+    return true;
+}
+
+// Copies the toned colour, the velocity and the depth into the images FSR 4, DLSS and XeSS read.
 void RecordInputs(vk::CommandBuffer cmd, float near_plane, float far_plane) {
     const auto& dl = g_device->dispatch;
     constexpr auto Compute = vk::PipelineStageFlagBits2::eComputeShader;
@@ -613,16 +651,50 @@ void RecordDlss(vk::CommandBuffer cmd) {
     }
 }
 
-} // namespace
-
-void ExtendInstance(std::vector<const char*>& extensions,
-                    const vk::detail::DispatchLoaderDynamic& dispatch) {
-    Gr2Fsr3::ExtendInstance(extensions, dispatch);
+// Moves the copies of the inputs to the layout XeSS reads, then records XeSS.
+void RecordXess(vk::CommandBuffer cmd) {
+    for (const Image* image : {&g_input_color, &g_input_motion, &g_input_depth}) {
+        ImageBarrier(cmd, image->image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral,
+                     vk::ImageLayout::eShaderReadOnlyOptimal,
+                     vk::PipelineStageFlagBits2::eComputeShader,
+                     vk::AccessFlagBits2::eShaderStorageWrite,
+                     vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead);
+    }
+    const auto image = [](const Image& source) {
+        return Gr2Fsr3::Fsr4Image{.image = source.image, .view = source.view};
+    };
+    const Gr2Fsr3::XessExecuteInfo info{
+        .images =
+            {
+                .color = image(g_input_color),
+                .motion_vectors = image(g_input_motion),
+                .depth = image(g_input_depth),
+                .output = image(g_output),
+            },
+        .render_size = g_render,
+        .output_size = g_output_extent,
+        .jitter_x = g_jitter.x,
+        .jitter_y = g_jitter.y,
+        .reset = g_reset,
+    };
+    if (const std::string failed = Gr2Fsr3::XessExecute(cmd, info); !failed.empty()) {
+        LogFailureOnce(failed);
+    }
 }
 
-void ExtendDevice(vk::PhysicalDevice gpu, const vk::detail::DispatchLoaderDynamic& dispatch,
-                  vk::DeviceCreateInfo& info, vk::PhysicalDeviceFeatures2& features,
-                  vk::PhysicalDeviceVulkan11Features& vk11,
+} // namespace
+
+void ExtendInstance(std::vector<const char*>& extensions, u32 api_version,
+                    const vk::detail::DispatchLoaderDynamic& dispatch) {
+    Gr2Fsr3::ExtendInstance(extensions, dispatch);
+    if (Settings::Get().graphics.upscaler == Settings::Upscaler::Xess) {
+        Gr2Fsr3::ExtendInstanceForXess(extensions, api_version);
+    }
+}
+
+void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
+                  const vk::detail::DispatchLoaderDynamic& dispatch, vk::DeviceCreateInfo& info,
+                  vk::PhysicalDeviceFeatures2& features, vk::PhysicalDeviceVulkan11Features& vk11,
                   vk::PhysicalDeviceVulkan12Features& vk12,
                   vk::PhysicalDeviceVulkan13Features& vk13) {
     const Settings::Upscaler chosen = Settings::Get().graphics.upscaler;
@@ -641,6 +713,10 @@ void ExtendDevice(vk::PhysicalDevice gpu, const vk::detail::DispatchLoaderDynami
         // Streamline makes a private data slot on the device.
         vk13.privateData = supported.get<vk::PhysicalDeviceVulkan13Features>().privateData;
         Gr2Fsr3::ExtendDeviceForDlss(gpu, info, vk12, dispatch);
+        return;
+    }
+    if (chosen == Settings::Upscaler::Xess) {
+        Gr2Fsr3::ExtendDeviceForXess(instance, gpu, info);
         return;
     }
     if (chosen != Settings::Upscaler::Fsr4) {
@@ -765,6 +841,15 @@ bool Start(const Device& device, Memory& memory) {
             return true;
         }
         break;
+    case Settings::Upscaler::Xess:
+        if (const std::string notice =
+                Gr2Fsr3::XessCreate(device.instance, device.gpu, device.device);
+            !notice.empty()) {
+            LOG_WARNING(Render_Vulkan,
+                        "GR2port upscaler: XeSS is off: {}; the game's antialiasing runs", notice);
+            return true;
+        }
+        break;
     default:
         return true;
     }
@@ -814,6 +899,7 @@ bool Start(const Device& device, Memory& memory) {
         }
     }
     g_upscaler = graphics.upscaler;
+    g_round_up = g_upscaler == Settings::Upscaler::Xess;
     g_ratio = Settings::UpscaleRatio(graphics.upscale_quality);
     LOG_INFO(Render_Vulkan, "GR2port upscaler: {} at {:.2f}x", Name(g_upscaler), g_ratio.load());
     return true;
@@ -823,6 +909,7 @@ void Stop() {
     if (g_memory != nullptr) {
         FreeContexts();
     }
+    Gr2Fsr3::XessDestroy();
 }
 
 bool Active() {
@@ -834,8 +921,10 @@ vk::Extent2D RenderExtent(vk::Extent2D output) {
     if (ratio == 1.0f) {
         return output;
     }
-    const auto scaled = [ratio](u32 size) {
-        return std::max(1u, static_cast<u32>(std::lround(static_cast<float>(size) / ratio)));
+    const bool round_up = g_round_up.load(std::memory_order_relaxed);
+    const auto scaled = [ratio, round_up](u32 size) {
+        const float exact = static_cast<float>(size) / ratio;
+        return std::max(1u, static_cast<u32>(round_up ? std::ceil(exact) : std::round(exact)));
     };
     return {scaled(output.width), scaled(output.height)};
 }
@@ -870,6 +959,9 @@ bool Resize(vk::Extent2D render, vk::Extent2D output) {
         break;
     case Settings::Upscaler::Dlss:
         created = CreateDlss(render, output);
+        break;
+    case Settings::Upscaler::Xess:
+        created = CreateXess(render, output);
         break;
     default:
         break;
@@ -951,7 +1043,8 @@ vk::Viewport SceneViewport(vk::Extent2D extent, bool jittered) {
 void Record(vk::CommandBuffer cmd) {
     const bool ready = (g_upscaler == Settings::Upscaler::Fsr3 && g_fsr3 != nullptr) ||
                        (g_upscaler == Settings::Upscaler::Fsr4 && g_fsr4 != nullptr) ||
-                       (g_upscaler == Settings::Upscaler::Dlss && g_dlss_ready);
+                       (g_upscaler == Settings::Upscaler::Dlss && g_dlss_ready) ||
+                       (g_upscaler == Settings::Upscaler::Xess && g_xess_ready);
     if (!ready || !g_output.image) {
         return;
     }
@@ -981,6 +1074,10 @@ void Record(vk::CommandBuffer cmd) {
     case Settings::Upscaler::Dlss:
         RecordInputs(cmd, near_plane, far_plane);
         RecordDlss(cmd);
+        break;
+    case Settings::Upscaler::Xess:
+        RecordInputs(cmd, near_plane, far_plane);
+        RecordXess(cmd);
         break;
     default:
         break;

@@ -939,7 +939,9 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.field_of_view->setCurrentIndex(
         IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
-    dialog.upscaler->setCurrentIndex(static_cast<int>(graphics.upscaler));
+    const int upscaler = static_cast<int>(graphics.upscaler);
+    dialog.upscaler->setCurrentIndex(upscaler < static_cast<int>(UpscalerChoices.size()) ? upscaler
+                                                                                         : 0);
     dialog.upscale_quality->setCurrentIndex(static_cast<int>(graphics.upscale_quality));
 }
 

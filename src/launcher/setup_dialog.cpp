@@ -464,7 +464,8 @@ constexpr std::array Rows{
 // In the order of Settings::VSync.
 constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
 // Indexed by Settings::Upscaler and Settings::UpscaleQuality.
-constexpr std::array<const wchar_t*, 4> UpscalerChoices{L"Off", L"FSR 3.1", L"FSR 4", L"DLSS"};
+constexpr std::array<const wchar_t*, 5> UpscalerChoices{L"Off", L"FSR 3.1", L"FSR 4", L"DLSS",
+                                                        L"XeSS"};
 constexpr std::array<const wchar_t*, 5> UpscaleQualityChoices{L"Native AA", L"Quality", L"Balanced",
                                                               L"Performance", L"Ultra Performance"};
 

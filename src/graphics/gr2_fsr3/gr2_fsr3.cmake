@@ -137,13 +137,17 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
         ${GR2_FSR3_DIR}/fsr4_device.h
         ${GR2_FSR3_DIR}/fsr4_v07_bridge.h
         ${GR2_FSR3_DIR}/vk_trampolines.cpp
-        ${GR2_FSR3_DIR}/vk_trampolines.h)
-    # Streamline's MIT headers. The Streamline and DLSS libraries load at run time from the dlss
-    # folder of the user folder.
+        ${GR2_FSR3_DIR}/vk_trampolines.h
+        ${GR2_FSR3_DIR}/xess_vulkan.h)
+    # Streamline's and XeSS's MIT headers. The Streamline and DLSS libraries load at run time from
+    # the dlss folder of the user folder, and libxess.dll from the xess folder.
     if (WIN32)
-        target_sources(gr2port PRIVATE ${GR2_FSR3_DIR}/dlss_streamline.cpp)
+        target_sources(gr2port PRIVATE
+            ${GR2_FSR3_DIR}/dlss_streamline.cpp
+            ${GR2_FSR3_DIR}/xess_vulkan.cpp)
         target_include_directories(gr2port PRIVATE
-            ${PROJECT_SOURCE_DIR}/third_party/streamline/include)
+            ${PROJECT_SOURCE_DIR}/third_party/streamline/include
+            ${PROJECT_SOURCE_DIR}/third_party/xess/include)
     endif()
     target_include_directories(gr2port PRIVATE ${GR2_FSR3_SHADER_INCLUDE})
     add_dependencies(gr2port gr2_fsr3_shaders)
