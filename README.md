@@ -53,7 +53,7 @@ Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU
 - Verify Game Files under Setup > Paths: reads the four archives in full and compares them with a good dump
 - A dump that differs from the good 1.11 dump is refused at start, and the message names the files. Loose-file dumps (extracted archives) are accepted but not compared
 - Steam Deck preset
-- Impeccable performance, graphical accuracy, and stability
+- A fully native renderer built from the ground up pass by pass, delivering impeccable performance, graphical accuracy, and stability
 - 30-360fps supported, with gameplay timing the same at every frame rate
 - 544p-8k resolution supported
 - Ultrawide and 16:10 supported
