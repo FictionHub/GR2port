@@ -1385,7 +1385,6 @@ public:
             effects.dropped_water++;
             return;
         }
-        const auto handle = [](VAddr object) { return object != 0 ? Textures::Get(object) : 0; };
         const u32 i = effects.water_draws++;
         // The fields are written in order: the packet is write-combined.
         Scene::WaterDraw& out =
@@ -1409,9 +1408,9 @@ public:
         out.mesh.normal = mesh->normal;
         out.mesh.tangent = mesh->tangent;
         out.mesh.vertex_color = mesh->vertex_color;
-        out.mesh.displacement = handle(Load<VAddr>(item + WaterDisplacement));
+        out.mesh.displacement = Textures::Get(Load<VAddr>(item + WaterDisplacement));
         for (u32 t = 0; t < WaterMaps.size(); t++) {
-            out.mesh.textures[t] = handle(Load<VAddr>(item + WaterMaps[t]));
+            out.mesh.textures[t] = Textures::Get(Load<VAddr>(item + WaterMaps[t]));
         }
         out.mesh.reflection = ReflectionCubeOf(view);
         g_water_commands[i] = {
@@ -1505,7 +1504,7 @@ public:
             .normal = mesh->normal,
             .tangent = mesh->tangent,
             .vertex_color = mesh->vertex_color,
-            .displacement = displacement != 0 ? Textures::Get(displacement) : 0,
+            .displacement = Textures::Get(displacement),
         };
         const u32 list = skin.bones != 0 ? 1 : 0;
         g_metaball_commands[list][header.metaball_commands[list]++] = {
@@ -1580,7 +1579,7 @@ public:
         // A texture object's handle, by its T# when the texture hooks never saw the object.
         u32 by_sharp = 0;
         const auto handle = [this, &by_sharp](VAddr object) -> u32 {
-            const u32 known = object != 0 ? Textures::Get(object) : 0;
+            const u32 known = Textures::Get(object);
             if (known != 0 || object == 0) {
                 return known;
             }
@@ -1692,7 +1691,7 @@ public:
         std::memcpy(glass_mesh.elements, elements.data(), sizeof(glass_mesh.elements));
         for (u32 t = 0; t < CharacterGlassMaps.size(); t++) {
             const VAddr object = Load<VAddr>(item + CharacterGlassMaps[t]);
-            glass_mesh.maps[t] = object != 0 ? Textures::Get(object) : 0;
+            glass_mesh.maps[t] = Textures::Get(object);
         }
         out.mesh = glass_mesh;
         g_character_glass_commands[i] = {
@@ -1743,7 +1742,6 @@ public:
             effects.dropped++;
             return;
         }
-        const auto handle = [](VAddr object) { return object != 0 ? Textures::Get(object) : 0; };
         const u32 i = effects.draws++;
         // The fields are written in order: the packet is write-combined.
         Scene::EffectDraw& out =
@@ -1763,9 +1761,9 @@ public:
         out.mesh.normal = mesh->normal;
         out.mesh.tangent = mesh->tangent;
         out.mesh.vertex_color = mesh->vertex_color;
-        out.mesh.displacement = handle(Load<VAddr>(item + EffectDisplacement));
+        out.mesh.displacement = Textures::Get(Load<VAddr>(item + EffectDisplacement));
         for (u32 t = 0; t < 4; t++) {
-            out.mesh.textures[t] = handle(Load<VAddr>(item + EffectColorMaps + t * 8));
+            out.mesh.textures[t] = Textures::Get(Load<VAddr>(item + EffectColorMaps + t * 8));
         }
         g_effect_commands[i] = {
             .index_count = count,
@@ -1807,7 +1805,7 @@ public:
     void AddWorldDecal(VAddr record, const DecalView& view) {
         const VAddr color = Load<VAddr>(record + WorldDecalColor);
         const VAddr normal = Load<VAddr>(record + WorldDecalNormal);
-        const u32 color_map = color != 0 ? Textures::Get(color) : 0;
+        const u32 color_map = Textures::Get(color);
         if (color_map == 0) {
             header.dropped_world_decals++;
             return;
@@ -1834,7 +1832,7 @@ public:
         out.metallic = Load<float>(record + WorldDecalMetallic);
         out.translucency = Load<float>(record + WorldDecalTranslucency);
         out.color_map = color_map;
-        out.normal_map = normal != 0 ? Textures::Get(normal) : 0;
+        out.normal_map = Textures::Get(normal);
     }
 
     // A Branch deformer record: the renderer's kernel sways the instance's copy of the shape's
@@ -2063,7 +2061,7 @@ public:
         std::memcpy(&out.alpha_reference, reinterpret_cast<const void*>(pixel + GrassPixelValues),
                     GrassPixelCount * sizeof(float));
         out.color_map = color_map;
-        out.normal_map = normal != 0 ? Textures::Get(normal) : 0;
+        out.normal_map = Textures::Get(normal);
         header.grass++;
         header.grass_groups =
             std::max(header.grass_groups, (tufts + GrassGroupSize - 1) / GrassGroupSize);
@@ -2612,10 +2610,7 @@ private:
             header.dropped_materials++;
             return 0;
         }
-        const auto handle = [item](u64 field) {
-            const VAddr object = Load<VAddr>(item + field);
-            return object != 0 ? Textures::Get(object) : 0;
-        };
+        const auto handle = [item](u64 field) { return Textures::Get(Load<VAddr>(item + field)); };
         const bool layered = mesh.vertex_color != 0;
         // The fields are written in order: the packet is write-combined.
         Scene::Material& out = materials[header.materials];
@@ -2643,8 +2638,7 @@ private:
         }
         const auto handles = [item](u64 first, u32(&out)[4]) {
             for (u32 layer = 0; layer < 4; layer++) {
-                const VAddr object = Load<VAddr>(item + first + layer * sizeof(VAddr));
-                out[layer] = object != 0 ? Textures::Get(object) : 0;
+                out[layer] = Textures::Get(Load<VAddr>(item + first + layer * sizeof(VAddr)));
             }
         };
         // The fields are written in order: the packet is write-combined.
@@ -2671,10 +2665,7 @@ private:
             header.dropped_materials++;
             return 0;
         }
-        const auto handle = [item](u64 field) {
-            const VAddr object = Load<VAddr>(item + field);
-            return object != 0 ? Textures::Get(object) : 0;
-        };
+        const auto handle = [item](u64 field) { return Textures::Get(Load<VAddr>(item + field)); };
         // The fields are written in order: the packet is write-combined.
         Scene::LayerMaterial& gem = layer_materials[header.layer_materials];
         std::memcpy(gem.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
@@ -2690,10 +2681,7 @@ private:
     // Writes a G2_CH_Main item's constants to the packet and returns their index plus 1; a glow
     // item's blend constant too.
     u32 AddCharacter(VAddr item, VAddr vertex_constants, VAddr pixel_constants, bool glow) {
-        const auto handle = [item](u64 field) {
-            const VAddr object = Load<VAddr>(item + field);
-            return object != 0 ? Textures::Get(object) : 0;
-        };
+        const auto handle = [item](u64 field) { return Textures::Get(Load<VAddr>(item + field)); };
         // The fields are written in order: the packet is write-combined.
         Scene::Character& out = characters[header.characters];
         std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
@@ -2714,8 +2702,7 @@ private:
     // plus 1. A cube map not converted yet has handle 0.
     u32 AddInterior(VAddr item, VAddr pixel_constants) {
         const auto cube = [item](u64 field) {
-            const VAddr object = Load<VAddr>(item + field);
-            return object != 0 ? Textures::GetCube(object) : 0;
+            return Textures::GetCube(Load<VAddr>(item + field));
         };
         // The fields are written in order: the packet is write-combined.
         Scene::Character& out = characters[header.characters];
@@ -3379,10 +3366,9 @@ FogHeader WriteFog(VAddr frame_graph, VAddr view, u8* packet) {
     fog.puddle_range = fog_distance - depth_start;
     const VAddr textures = Load<VAddr>(frame_graph + FrameGraphFogTextures);
     const auto cumulus = [textures](u32 i) {
-        const VAddr object = textures != 0 && i < FogCumulusCount
+        return Textures::Get(textures != 0 && i < FogCumulusCount
                                  ? Load<VAddr>(textures + FogCumulusTextures + i * 8)
-                                 : 0;
-        return object != 0 ? Textures::Get(object) : 0;
+                                 : 0);
     };
     fog.cumulus_texture = cumulus(0);
     const std::array<u64, 2> bake_fields{ViewStratusBake, ViewRegionBake};
@@ -3542,8 +3528,7 @@ u32 WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
         HeaviestTwo(Load<VAddr>(view + ViewAmbientLights), Load<s32>(view + ViewAmbientLightCount),
                     AmbientLightBytes, AmbientLightWeight, [](VAddr) { return true; });
     const auto cube = [](VAddr record, u64 field) {
-        const VAddr object = record != 0 ? Load<VAddr>(record + field) : 0;
-        return object != 0 ? Textures::GetCube(object) : 0;
+        return Textures::GetCube(record != 0 ? Load<VAddr>(record + field) : 0);
     };
     light.radiance[0] = cube(first, AmbientLightRadiance);
     light.irradiance[0] = cube(first, AmbientLightIrradiance);
@@ -3750,7 +3735,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     WriteCamera(view, packet);
     const FogHeader fog = WriteFog(frame_graph, view, packet);
     const VAddr hatching = Load<VAddr>(frame_graph + FrameGraphHatching);
-    writer.SetHatching(hatching != 0 ? Textures::Get(hatching) : 0);
+    writer.SetHatching(Textures::Get(hatching));
     writer.EndPart(Scene::CapturePart::Constants);
     const VAddr records = Load<VAddr>(view + ViewDeformers);
     const VAddr list = Load<VAddr>(view + ViewDeformerList);

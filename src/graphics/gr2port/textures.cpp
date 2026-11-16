@@ -1699,6 +1699,9 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
 namespace {
 
 u32 GetOfKind(VAddr texture, bool cube) {
+    if (texture == 0) {
+        return 0;
+    }
     const u32 handle = Load<u32>(texture + TextureHandle);
     if (handle == 0 || handle >= Capacity) {
         return 0;

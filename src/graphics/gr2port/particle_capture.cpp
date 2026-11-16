@@ -344,8 +344,7 @@ u32 MaterialTexture(VAddr material, u32 i) {
     if (reference == 0 || Load<s32>(reference + 8) == NoTextureKey) {
         return 0;
     }
-    const VAddr object = ReferenceTexture(reference);
-    return object != 0 ? Textures::Get(object) : 0;
+    return Textures::Get(ReferenceTexture(reference));
 }
 
 // The pixel program of an item, as FUN_014c0960 and FUN_014bc300 choose it; Count when it is not

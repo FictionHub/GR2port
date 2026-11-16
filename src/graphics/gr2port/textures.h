@@ -35,7 +35,7 @@ inline constexpr u32 Capacity = 1u << 15;
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
 /// The descriptor of texture, the game's texture object, when it is a 2D texture and ready, else
-/// 0. Any thread; notes that a frame reads the texture.
+/// 0, as for a null object. Any thread; notes that a frame reads the texture.
 u32 Get(VAddr texture);
 
 /// As Get, for a cube map.
