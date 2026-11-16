@@ -13,6 +13,7 @@
 #include "core/memory.h"
 #include "graphics/gr2port/camera_reach.h"
 #include "graphics/gr2port/capture.h"
+#include "graphics/gr2port/comic_camera.h"
 #include "graphics/gr2port/exit_rows.h"
 #include "graphics/gr2port/field_of_view.h"
 #include "graphics/gr2port/float_spin.h"
@@ -133,6 +134,7 @@ void Install(VAddr module_base) {
     HairFlutter::Install(module_base, c, StubAreaSize);
     GravityKick::Install(module_base, c, StubAreaSize);
     GravitySlide::Install(module_base, c, StubAreaSize);
+    ComicCamera::Install(module_base, c, StubAreaSize);
     ScriptTimers::Install(module_base, c, StubAreaSize);
     WaterSplashes::Install(module_base, c, StubAreaSize);
     FloatSpin::Install(module_base, c, StubAreaSize);

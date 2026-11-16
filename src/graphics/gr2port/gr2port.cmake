@@ -73,6 +73,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/gravity_kick.h
     ${CMAKE_CURRENT_LIST_DIR}/gravity_slide.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gravity_slide.h
+    ${CMAKE_CURRENT_LIST_DIR}/comic_camera.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/comic_camera.h
     ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.h
     ${CMAKE_CURRENT_LIST_DIR}/water_splashes.cpp
