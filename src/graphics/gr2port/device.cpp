@@ -315,6 +315,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     };
     Upscaler::ExtendDevice(d.instance, d.gpu, d.dispatch, info, features, features11, features12,
                            features13);
+    const u64 setup = DeviceSetup(info);
     const auto [result, device] = d.gpu.createDevice(info, nullptr, d.dispatch);
     if (result != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: no device: {}", vk::to_string(result));
@@ -341,7 +342,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
              properties.deviceName.data(), d.queue_family, d.checkpoints, d.device_fault,
              d.dynamic_blend, driver.driverName.data(), driver.driverInfo.data());
     GraphicsMenu::SetGpuVendor(properties.vendorID);
-    LoadPipelineCache(d);
+    LoadPipelineCache(d, setup);
     return true;
 }
 

@@ -118,8 +118,13 @@ struct BuildProgress {
 };
 BuildProgress PipelineBuildProgress();
 
-/// After the device is made: creates its pipeline cache from the file an earlier run saved.
-void LoadPipelineCache(Device& device);
+/// Before the device is made from info: a number for its extensions and features, which the
+/// pipeline cache's file is named after.
+u64 DeviceSetup(const vk::DeviceCreateInfo& info);
+
+/// After the device is made: creates its pipeline cache from the file an earlier run saved for
+/// the device's setup.
+void LoadPipelineCache(Device& device, u64 setup);
 
 /// Any thread: writes the pipeline cache to its file, with every pipeline made so far, when the
 /// cache holds pipelines the file does not.

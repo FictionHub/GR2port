@@ -10,7 +10,9 @@
 #include <initializer_list>
 #include <mutex>
 #include <shared_mutex>
+#include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -25,10 +27,16 @@ namespace Gr2Port {
 
 namespace {
 
-// The pipeline cache's file, in the emulator's shader folder, and the lock of its writes.
-std::filesystem::path PipelineCachePath() {
-    return Common::FS::GetUserPath(Common::FS::PathType::ShaderDir) / "gr2port_pipelines.bin";
+// The pipeline cache's file, in the shader folder. Each device setup, its extensions and features,
+// keeps a file of its own: the pipelines in a cache are compiled for the device that made them.
+// The lock is of the file's writes.
+std::filesystem::path PipelineCachePath(u64 setup) {
+    return Common::FS::GetUserPath(Common::FS::PathType::ShaderDir) /
+           fmt::format("gr2port_pipelines_{:016x}.bin", setup);
 }
+// A cache file without a setup in its name holds pipelines of an unknown setup.
+constexpr const char* SharedCacheFile = "gr2port_pipelines.bin";
+std::filesystem::path g_cache_path;
 std::mutex g_cache_file;
 // Bytes in the cache file as last read or written. The driver's cache data grows with each
 // pipeline it adds, so the same size means the file holds them all.
@@ -396,8 +404,58 @@ void DestroyPipeline(const Device& d, Pipeline& pipeline) {
     pipeline = {};
 }
 
-void LoadPipelineCache(Device& d) {
-    const std::filesystem::path path = PipelineCachePath();
+u64 DeviceSetup(const vk::DeviceCreateInfo& info) {
+    u64 hash = 0xcbf29ce484222325ULL;
+    const auto mix = [&hash](const void* bytes, size_t size) {
+        for (const u8 byte : std::span{static_cast<const u8*>(bytes), size}) {
+            hash = (hash ^ byte) * 0x100000001b3ULL;
+        }
+    };
+    // The features from the first to the last, which a struct holds next to each other.
+    const auto mix_features = [&mix](const vk::Bool32& first, const vk::Bool32& last) {
+        mix(&first, reinterpret_cast<const u8*>(&last + 1) - reinterpret_cast<const u8*>(&first));
+    };
+    std::vector<std::string_view> names(info.ppEnabledExtensionNames,
+                                        info.ppEnabledExtensionNames + info.enabledExtensionCount);
+    std::ranges::sort(names);
+    for (const std::string_view name : names) {
+        mix(name.data(), name.size() + 1);
+    }
+    for (auto* next = static_cast<const vk::BaseInStructure*>(info.pNext); next != nullptr;
+         next = next->pNext) {
+        mix(&next->sType, sizeof(next->sType));
+        switch (next->sType) {
+        case vk::StructureType::ePhysicalDeviceFeatures2: {
+            const auto& f = reinterpret_cast<const vk::PhysicalDeviceFeatures2*>(next)->features;
+            mix_features(f.robustBufferAccess, f.inheritedQueries);
+            break;
+        }
+        case vk::StructureType::ePhysicalDeviceVulkan11Features: {
+            const auto& f = *reinterpret_cast<const vk::PhysicalDeviceVulkan11Features*>(next);
+            mix_features(f.storageBuffer16BitAccess, f.shaderDrawParameters);
+            break;
+        }
+        case vk::StructureType::ePhysicalDeviceVulkan12Features: {
+            const auto& f = *reinterpret_cast<const vk::PhysicalDeviceVulkan12Features*>(next);
+            mix_features(f.samplerMirrorClampToEdge, f.subgroupBroadcastDynamicId);
+            break;
+        }
+        case vk::StructureType::ePhysicalDeviceVulkan13Features: {
+            const auto& f = *reinterpret_cast<const vk::PhysicalDeviceVulkan13Features*>(next);
+            mix_features(f.robustImageAccess, f.maintenance4);
+            break;
+        }
+        default:
+            break;
+        }
+    }
+    return hash;
+}
+
+void LoadPipelineCache(Device& d, u64 setup) {
+    const std::filesystem::path path = PipelineCachePath(setup);
+    std::error_code error;
+    std::filesystem::remove(path.parent_path() / SharedCacheFile, error);
     std::vector<u8> data;
     const Common::FS::IOFile file{path, Common::FS::FileAccessMode::Read};
     if (file.IsOpen()) {
@@ -413,6 +471,7 @@ void LoadPipelineCache(Device& d) {
     if (result == vk::Result::eSuccess) {
         d.pipeline_cache = cache;
         std::scoped_lock lock{g_cache_file};
+        g_cache_path = path;
         g_file_size = data.size();
     }
     LOG_INFO(Render_Vulkan, "GR2port: pipeline cache of {} bytes from {}", data.size(),
@@ -481,7 +540,7 @@ void SavePipelineCache(const Device& d) {
         return;
     }
     // Written beside the last file and renamed over it, so that a run ending mid-write keeps it.
-    const std::filesystem::path path = PipelineCachePath();
+    const std::filesystem::path& path = g_cache_path;
     std::filesystem::path written = path;
     written += ".new";
     std::error_code error;
