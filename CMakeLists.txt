@@ -446,8 +446,6 @@ set(SYSTEM_LIBS src/core/libraries/system/commondialog.cpp
                 src/core/libraries/disc_map/disc_map.cpp
                 src/core/libraries/disc_map/disc_map.h
                 src/core/libraries/disc_map/disc_map_codes.h
-                src/core/libraries/ngs2/ngs2.cpp
-                src/core/libraries/ngs2/ngs2.h
                 src/core/libraries/ngs2/ngs2_error.h
                 src/core/libraries/ngs2/ngs2_impl.cpp
                 src/core/libraries/ngs2/ngs2_impl.h
@@ -459,10 +457,6 @@ set(SYSTEM_LIBS src/core/libraries/system/commondialog.cpp
                 src/core/libraries/ngs2/ngs2_mixer.cpp
                 src/core/libraries/ngs2/ngs2_mixer.h
                 src/core/libraries/ngs2/ngs2_vag_coefs.h
-                src/core/libraries/ajm/ajm_error.h
-                src/core/libraries/audio3d/audio3d.cpp
-                src/core/libraries/audio3d/audio3d.h
-                src/core/libraries/audio3d/audio3d_error.h
                 src/core/libraries/game_live_streaming/gamelivestreaming.cpp
                 src/core/libraries/game_live_streaming/gamelivestreaming.h
                 src/core/libraries/remote_play/remoteplay.cpp
@@ -1135,10 +1129,6 @@ add_executable(gr2port
     ${EMULATOR}
     ${SHADNET}
     src/main.cpp
-    src/GR2port.cpp
-    src/GR2port.h
-    src/sdl_window.h
-    src/sdl_window.cpp
 )
 
 create_target_directory_groups(gr2port)
