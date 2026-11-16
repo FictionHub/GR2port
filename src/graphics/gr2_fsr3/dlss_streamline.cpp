@@ -493,15 +493,14 @@ void OnDeviceCreated(vk::Instance instance, vk::PhysicalDevice physical_device, 
     g_api.slGetFeatureVersion(sl::kFeatureDLSS, version);
 
     // The dispatcher loaded its device functions just before and does not load them again.
-    auto& dispatcher = dispatch;
-    dispatcher.vkQueuePresentKHR = g_proxies.queue_present;
-    dispatcher.vkCreateSwapchainKHR = g_proxies.create_swapchain;
-    dispatcher.vkDestroySwapchainKHR = g_proxies.destroy_swapchain;
-    dispatcher.vkGetSwapchainImagesKHR = g_proxies.get_swapchain_images;
-    dispatcher.vkAcquireNextImageKHR = g_proxies.acquire_next_image;
-    dispatcher.vkDeviceWaitIdle = g_proxies.device_wait_idle;
-    dispatcher.vkCreateWin32SurfaceKHR = g_proxies.create_win32_surface;
-    dispatcher.vkDestroySurfaceKHR = g_proxies.destroy_surface;
+    dispatch.vkQueuePresentKHR = g_proxies.queue_present;
+    dispatch.vkCreateSwapchainKHR = g_proxies.create_swapchain;
+    dispatch.vkDestroySwapchainKHR = g_proxies.destroy_swapchain;
+    dispatch.vkGetSwapchainImagesKHR = g_proxies.get_swapchain_images;
+    dispatch.vkAcquireNextImageKHR = g_proxies.acquire_next_image;
+    dispatch.vkDeviceWaitIdle = g_proxies.device_wait_idle;
+    dispatch.vkCreateWin32SurfaceKHR = g_proxies.create_win32_surface;
+    dispatch.vkDestroySurfaceKHR = g_proxies.destroy_surface;
     g_stage.store(Stage::Running, std::memory_order_release);
     LOG_INFO(Render_Vulkan,
              "GR2 DLSS: NGX ready in {:.0f} ms, sl.dlss {}, NGX {}; presentation goes through "

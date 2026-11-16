@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "common/logging/log.h"
+#include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/deformers.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/meshes.h"
@@ -55,12 +56,7 @@ constexpr u64 GridBytes = u64{Scene::GridCells} * Scene::GridEntries * 4;
 constexpr u32 LoggedInstances = 4;
 static_assert(Capacity <= 0x80000000u);
 
-template <typename T>
-T Load(VAddr address) {
-    T value;
-    std::memcpy(&value, reinterpret_cast<const void*>(address), sizeof(T));
-    return value;
-}
+using Capture::Load;
 
 u64 Aligned(u64 bytes) {
     return (bytes + CopyAlignment - 1) & ~(CopyAlignment - 1);

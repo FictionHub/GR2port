@@ -403,8 +403,8 @@ bool Thread::Init() {
                                                        .fragment = CHARACTER_FRAG,
                                                        .color = Look::SceneFormat,
                                                        .depth = DepthFormat,
-                                                       .depth_test = true,
                                                        .cull = vk::CullModeFlagBits::eBack,
+                                                       .depth_test = true,
                                                        .push_constant_bytes = sizeof(CharacterPush),
                                                        .set_layouts = set_layouts,
                                                    });

@@ -108,13 +108,18 @@ struct Building {
     }
 };
 
+// FNV-1a: hash carried on over bytes.
+constexpr u64 FnvBasis = 0xcbf29ce484222325;
+u64 Fnv1a(u64 hash, std::span<const std::byte> bytes) {
+    for (const std::byte byte : bytes) {
+        hash = (hash ^ std::to_integer<u64>(byte)) * 0x100000001b3;
+    }
+    return hash;
+}
+
 // FNV-1a over the code's bytes, which tells the shaders apart in a report.
 u64 CodeSum(std::span<const u32> code) {
-    u64 sum = 0xcbf29ce484222325;
-    for (const std::byte byte : std::as_bytes(code)) {
-        sum = (sum ^ std::to_integer<u64>(byte)) * 0x100000001b3;
-    }
-    return sum;
+    return Fnv1a(FnvBasis, std::as_bytes(code));
 }
 
 std::string Describe(const Stages& building) {
@@ -414,11 +419,9 @@ void DestroyPipeline(const Device& d, Pipeline& pipeline) {
 }
 
 u64 DeviceSetup(const vk::DeviceCreateInfo& info) {
-    u64 hash = 0xcbf29ce484222325ULL;
+    u64 hash = FnvBasis;
     const auto mix = [&hash](const void* bytes, size_t size) {
-        for (const u8 byte : std::span{static_cast<const u8*>(bytes), size}) {
-            hash = (hash ^ byte) * 0x100000001b3ULL;
-        }
+        hash = Fnv1a(hash, {static_cast<const std::byte*>(bytes), size});
     };
     // The features from the first to the last, which a struct holds next to each other.
     const auto mix_features = [&mix](const vk::Bool32& first, const vk::Bool32& last) {

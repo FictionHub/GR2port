@@ -18,6 +18,7 @@
 #include <fmt/format.h>
 
 #include "common/logging/log.h"
+#include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/meshes.h"
@@ -118,12 +119,7 @@ constexpr u8 Evicting = 1;
 constexpr u8 Evicted = 2;
 constexpr u8 Rescued = 3;
 
-template <typename T>
-T Load(VAddr address) {
-    T value;
-    std::memcpy(&value, reinterpret_cast<const void*>(address), sizeof(T));
-    return value;
-}
+using Capture::Load;
 
 std::array<Mesh, Capacity> g_meshes;
 

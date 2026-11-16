@@ -39,13 +39,16 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
     // ImGui's windows, and the prompts among them, reach the renderer from here.
     ImGui::Core::NewFrame(is_reusing_frame);
     ImGui::Core::Render();
-    if (!is_reusing_frame) {
-        last_frame = frame;
+    if (is_reusing_frame) {
+        return;
+    }
+    last_frame = frame;
+    {
         std::scoped_lock lock{free_mutex};
         free_queue.push(frame);
         free_cv.notify_one();
     }
-    if (!is_reusing_frame && is_game_frame) {
+    if (is_game_frame) {
         DebugState.IncFlipFrameNum();
     }
 }

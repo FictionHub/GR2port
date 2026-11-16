@@ -21,6 +21,7 @@
 #include "graphics/amdgpu/pixel_format.h"
 #include "graphics/amdgpu/resource.h"
 #include "graphics/amdgpu/tiling.h"
+#include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/movies.h"
@@ -154,12 +155,7 @@ struct TilingParams {
 };
 static_assert(sizeof(TilingParams) <= ParamsBytes);
 
-template <typename T>
-T Load(VAddr address) {
-    T value;
-    std::memcpy(&value, reinterpret_cast<const void*>(address), sizeof(T));
-    return value;
-}
+using Capture::Load;
 
 // What a capture reads of a texture at each draw that names it. It is apart from the rest of the
 // texture so that four textures share a cache line.

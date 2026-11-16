@@ -58,28 +58,6 @@ constexpr std::pair<Quality, std::string_view> QualityNames[] = {
     {Quality::Off, "off"},
 };
 
-Quality ReadQuality(const json& section, const char* key, Quality fallback) {
-    const auto it = section.find(key);
-    if (it == section.end() || !it->is_string()) {
-        return fallback;
-    }
-    for (const auto& [quality, name] : QualityNames) {
-        if (it->get<std::string>() == name) {
-            return quality;
-        }
-    }
-    return fallback;
-}
-
-std::string QualityName(Quality quality) {
-    for (const auto& [value, name] : QualityNames) {
-        if (value == quality) {
-            return std::string(name);
-        }
-    }
-    return "original";
-}
-
 constexpr std::pair<Upscaler, std::string_view> UpscalerNames[] = {
     {Upscaler::Off, "off"},   {Upscaler::Fsr3, "fsr3"}, {Upscaler::Fsr4, "fsr4"},
     {Upscaler::Dlss, "dlss"}, {Upscaler::Xess, "xess"},
@@ -124,7 +102,7 @@ Quality ReadSwitchedQuality(const json& section, const char* key, Quality fallba
     if (it != section.end() && it->is_boolean()) {
         return it->get<bool>() ? Quality::Original : Quality::Off;
     }
-    return ReadQuality(section, key, fallback);
+    return ReadName(section, key, fallback, QualityNames);
 }
 
 void ReadGraphics(const json& section, Graphics& graphics) {
@@ -132,8 +110,8 @@ void ReadGraphics(const json& section, Graphics& graphics) {
         preset != section.end() && preset->is_string()) {
         graphics.preset = preset->get<std::string>();
     }
-    graphics.shadows = ReadQuality(section, "shadow_quality", graphics.shadows);
-    graphics.fog = ReadQuality(section, "fog_quality", graphics.fog);
+    graphics.shadows = ReadName(section, "shadow_quality", graphics.shadows, QualityNames);
+    graphics.fog = ReadName(section, "fog_quality", graphics.fog, QualityNames);
     if (graphics.fog == Quality::Off) {
         graphics.fog = Quality::Low;
     }
@@ -277,10 +255,10 @@ json ToJson(const Values& values) {
         {"prompts", values.mouse.prompts},
         {"control_type", values.mouse.control_type},
         {"graphics_preset", values.graphics.preset},
-        {"shadow_quality", QualityName(values.graphics.shadows)},
-        {"fog_quality", QualityName(values.graphics.fog)},
-        {"ambient_occlusion", QualityName(values.graphics.ambient_occlusion)},
-        {"motion_blur", QualityName(values.graphics.motion_blur)},
+        {"shadow_quality", NameOf(values.graphics.shadows, QualityNames)},
+        {"fog_quality", NameOf(values.graphics.fog, QualityNames)},
+        {"ambient_occlusion", NameOf(values.graphics.ambient_occlusion, QualityNames)},
+        {"motion_blur", NameOf(values.graphics.motion_blur, QualityNames)},
         {"antialiasing", values.graphics.antialiasing},
         {"bloom", values.graphics.bloom},
         {"outlines", values.graphics.outlines},
