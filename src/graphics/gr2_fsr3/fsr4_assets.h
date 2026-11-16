@@ -11,10 +11,30 @@
 #include <vector>
 
 #include "common/types.h"
-#include "graphics/gr2_fsr3/fsr4_device.h"
 #include "graphics/renderer_vulkan/vk_common.h"
 
 namespace Gr2Fsr3 {
+
+/// Features the Vulkan device was created with that FSR 4 v07 shaders can need.
+struct Fsr4DeviceFeatures {
+    bool shader_float16{};
+    bool shader_float64{};
+    bool shader_int8{};
+    bool shader_int16{};
+    bool shader_int64{};
+    bool shader_integer_dot_product{};
+    bool storage_buffer_8bit{};
+    bool uniform_storage_buffer_8bit{};
+    bool storage_buffer_16bit{};
+    bool uniform_storage_buffer_16bit{};
+    bool image_gather_extended{};
+    bool storage_image_extended_formats{};
+    bool storage_image_read_without_format{};
+    bool storage_image_write_without_format{};
+    bool compute_shader_derivatives{}; ///< VK_KHR_compute_shader_derivatives is enabled.
+    bool derivative_group_linear{};
+    bool derivative_group_quads{};
+};
 
 /// What the device offers the files of a model set.
 struct Fsr4DeviceLimits {

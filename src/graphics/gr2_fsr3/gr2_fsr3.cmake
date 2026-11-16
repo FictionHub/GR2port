@@ -130,11 +130,9 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
     # provider call.
     target_sources(gr2port PRIVATE
         ${GR2_FSR3_DIR}/dlss_streamline.h
-        ${GR2_FSR3_DIR}/fsr3_types.h
         ${GR2_FSR3_DIR}/fsr4_assets.cpp
         ${GR2_FSR3_DIR}/fsr4_assets.h
         ${GR2_FSR3_DIR}/fsr4_context.h
-        ${GR2_FSR3_DIR}/fsr4_device.h
         ${GR2_FSR3_DIR}/fsr4_v07_bridge.h
         ${GR2_FSR3_DIR}/vk_trampolines.cpp
         ${GR2_FSR3_DIR}/vk_trampolines.h

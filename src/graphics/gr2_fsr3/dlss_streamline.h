@@ -9,11 +9,13 @@
 #include <vector>
 
 #include "common/types.h"
-#include "graphics/gr2_fsr3/fsr3_types.h"
 #include "graphics/gr2_fsr3/fsr4_context.h"
 #include "graphics/renderer_vulkan/vk_common.h"
 
 namespace Gr2Fsr3 {
+
+/// Preset of DLSS. The values are the dlssPreset names; Default lets the DLSS library choose.
+enum class DlssPreset : u8 { Default, E, J, K, L, M };
 
 /// DLSS quality modes, numbered as sl::DLSSMode.
 enum class DlssMode : u32 {
@@ -34,7 +36,7 @@ struct DlssRange {
     vk::Extent2D max{};
 };
 
-/// One DLSS evaluation of the images of a context. Trivially copyable, for Scheduler::Record.
+/// One DLSS evaluation of the images of a context.
 struct DlssEvaluateInfo {
     Fsr4Images images;
     vk::Extent2D render_size{};
