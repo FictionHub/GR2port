@@ -224,20 +224,54 @@ Form FormOf(std::string_view name, std::initializer_list<IBackend*> roots) {
     return folder ? Form::Folder : Form::Missing;
 }
 
-// Names the folders searched, one to a line: the executable's and, when the player chose one,
-// the chosen folder.
-std::string NoGame(const std::filesystem::path& beside, const std::filesystem::path& chosen) {
+// The folders searched, one to a line: the executable's and, when the player chose one, the
+// chosen folder.
+std::string Searched(const std::filesystem::path& beside, const std::filesystem::path& chosen) {
     std::string folders = Common::FS::PathToUTF8String(beside);
     if (!chosen.empty()) {
         folders += '\n' + Common::FS::PathToUTF8String(chosen);
     }
+    return folders;
+}
+
+std::string NoGame(const std::filesystem::path& beside, const std::filesystem::path& chosen) {
     return Say(
         "No CUSAXXXXX and/or CUSAXXXXX-patch folder found in\n{}\n\nPut Gravity Rush 2 and its "
         "1.11 update beside Gravity Rush 2\xE2\x84\xA2"
         ".exe: either two folders, the game and the update (for example CUSA04934 and "
         "CUSA04934-patch), or one folder with the update copied over the game. Folders and .zar "
         "archives both work.\n\n{}",
-        folders, Language::Text(PkgNote));
+        Searched(beside, chosen), Language::Text(PkgNote));
+}
+
+// A folder or archive's own name, as the player sees it.
+std::string NameOf(const std::filesystem::path& root) {
+    return Common::FS::PathToUTF8String(root.filename());
+}
+
+// The searched folders hold folders named as dumps, and none of them holds a param.sfo. Each name
+// is listed once.
+std::string NoViableGame(const std::filesystem::path& beside, const std::filesystem::path& chosen,
+                         const std::vector<std::filesystem::path>& unusable) {
+    std::vector<std::string> names;
+    std::string listing;
+    for (const std::filesystem::path& root : unusable) {
+        if (std::ranges::find(names, NameOf(root)) == names.end()) {
+            names.push_back(NameOf(root));
+            listing += (listing.empty() ? "" : "\n") + names.back();
+        }
+    }
+    return Say("No viable CUSAXXXXX and CUSAXXXXX-patch folder found in\n{}\n\nThese folders have "
+               "no sce_sys\\param.sfo directly inside them:\n{}\n\nIf the game's files are one "
+               "folder deeper, move them up a level.\n\n{}",
+               Searched(beside, chosen), listing, Language::Text(PkgNote));
+}
+
+// The game's or the update's folder is there, without a param.sfo.
+std::string NotViable(const std::filesystem::path& root) {
+    return Say("{} has no sce_sys\\param.sfo directly inside it, so GR2port cannot use it. If its "
+               "files are one folder deeper, move them up a level.\n\n{}",
+               NameOf(root), Language::Text(PkgNote));
 }
 
 // Tells the player that no game is found. Where the launcher has the dialog for it, the player
@@ -252,9 +286,33 @@ std::optional<std::filesystem::path> AskFolder(const std::string& text) {
 #endif
 }
 
-// A folder's or archive's own name, as the player sees it.
-std::string NameOf(const std::filesystem::path& root) {
-    return Common::FS::PathToUTF8String(root.filename());
+// Whether name starts with prefix, in either case of the ASCII letters.
+bool StartsWith(std::string_view name, std::string_view prefix) {
+    const auto lower = [](char c) { return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c; };
+    return name.size() >= prefix.size() &&
+           std::ranges::equal(name.substr(0, prefix.size()), prefix, {}, lower, lower);
+}
+
+// Whether a folder or archive is named as the game's dumps are: CUSA and five digits first.
+bool NamedAsDump(const std::filesystem::path& root) {
+    const std::string name = NameOf(root);
+    return StartsWith(name, "CUSA") && name.size() >= 9 &&
+           std::ranges::all_of(std::string_view{name}.substr(4, 5),
+                               [](char c) { return c >= '0' && c <= '9'; });
+}
+
+// Title id's game folder, or its update folder named id-patch, among the folders without a
+// param.sfo.
+std::optional<std::filesystem::path> FindUnusable(
+    const std::vector<std::filesystem::path>& unusable, const std::string& id, bool update) {
+    const auto found = std::ranges::find_if(unusable, [&](const std::filesystem::path& root) {
+        const std::string name = NameOf(root);
+        return StartsWith(name, id) && StartsWith(name, id + "-patch") == update;
+    });
+    if (found == unusable.end()) {
+        return std::nullopt;
+    }
+    return *found;
 }
 
 // What a folder or archive holds of the game.
@@ -267,8 +325,10 @@ struct Dump {
 };
 
 // The dumps in folder, in the order of their names. Its param.sfo tells what a folder or a .zar
-// archive holds, whatever it is called.
-std::vector<Dump> ListDumps(const std::filesystem::path& folder) {
+// archive holds, whatever it is called. The folders and archives named as dumps that hold no
+// param.sfo go to unusable.
+std::vector<Dump> ListDumps(const std::filesystem::path& folder,
+                            std::vector<std::filesystem::path>* unusable = nullptr) {
     std::vector<std::filesystem::path> roots;
     std::error_code ignored;
     for (const std::filesystem::directory_entry& entry :
@@ -279,14 +339,24 @@ std::vector<Dump> ListDumps(const std::filesystem::path& folder) {
     }
     std::ranges::sort(roots);
     std::vector<Dump> dumps;
+    const auto note_unusable = [unusable](const std::filesystem::path& root) {
+        if (unusable != nullptr && NamedAsDump(root)) {
+            unusable->push_back(root);
+        }
+    };
     for (const std::filesystem::path& root : roots) {
         // A folder without the file is not opened, so other folders cost one look each.
         if (std::filesystem::is_directory(root, ignored) &&
             !std::filesystem::exists(root / "sce_sys" / "param.sfo", ignored)) {
+            note_unusable(root);
             continue;
         }
         const std::unique_ptr<IBackend> files = Core::FileSys::OpenGameBackend(root);
         if (files == nullptr) {
+            continue;
+        }
+        if (!files->Exists("sce_sys/param.sfo")) {
+            note_unusable(root);
             continue;
         }
         const std::optional<std::vector<u8>> bytes = files->ReadFile("sce_sys/param.sfo");
@@ -309,15 +379,21 @@ std::vector<Dump> ListDumps(const std::filesystem::path& folder) {
     return dumps;
 }
 
+// unusable holds the folders beside root and update_root named as dumps that hold no param.sfo.
 std::optional<Game> Check(const std::string& id, const std::optional<std::filesystem::path>& root,
-                          const std::optional<std::filesystem::path>& update_root) {
+                          const std::optional<std::filesystem::path>& update_root,
+                          const std::vector<std::filesystem::path>& unusable) {
     // The names the folders have, or those the messages suggest for the missing one.
     const std::string game_name = root ? NameOf(*root) : id;
     const std::string update_name = update_root ? NameOf(*update_root) : id + "-patch";
     if (!root) {
-        Tell(Say("No {} folder found beside {}. GR2port needs the game as well as its update: "
-                 "put the game beside it as {}, or copy the update over the game folder.\n\n{}",
-                 id, update_name, id, Language::Text(PkgNote)));
+        if (const auto folder = FindUnusable(unusable, id, false)) {
+            Tell(NotViable(*folder));
+        } else {
+            Tell(Say("No {} folder found beside {}. GR2port needs the game as well as its update: "
+                     "put the game beside it as {}, or copy the update over the game folder.\n\n{}",
+                     id, update_name, id, Language::Text(PkgNote)));
+        }
         return std::nullopt;
     }
     const std::unique_ptr<IBackend> game = Core::FileSys::OpenGameBackend(*root);
@@ -332,10 +408,14 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
     // Without an update beside the game, the update is copied over it and its version shows it.
     if (update == nullptr) {
         if (const auto version = AppVersion(*game); version && *version != Version) {
-            Tell(Say("No {} folder found. {} holds version {} of the game, and GR2port needs "
-                     "the 1.11 update: put it beside the game as {}, or copy it over the game "
-                     "folder.\n\n{}",
-                     update_name, game_name, *version, update_name, Language::Text(PkgNote)));
+            if (const auto folder = FindUnusable(unusable, id, true)) {
+                Tell(NotViable(*folder));
+            } else {
+                Tell(Say("No {} folder found. {} holds version {} of the game, and GR2port needs "
+                         "the 1.11 update: put it beside the game as {}, or copy it over the game "
+                         "folder.\n\n{}",
+                         update_name, game_name, *version, update_name, Language::Text(PkgNote)));
+            }
             return std::nullopt;
         }
     } else if (const auto version = AppVersion(*update); version && *version != Version) {
@@ -411,8 +491,11 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
 }
 
 // Checks the dump in folder of the first title that has one there. Returns whether there is one.
-bool CheckIn(const std::filesystem::path& folder, std::optional<Game>& game) {
-    const std::vector<Dump> dumps = ListDumps(folder);
+// Without one, the folders there named as dumps that hold no param.sfo are added to unusable.
+bool CheckIn(const std::filesystem::path& folder, std::optional<Game>& game,
+             std::vector<std::filesystem::path>& unusable) {
+    std::vector<std::filesystem::path> here;
+    const std::vector<Dump> dumps = ListDumps(folder, &here);
     for (const std::string& id : TitleIds()) {
         std::optional<std::filesystem::path> root;
         std::optional<std::filesystem::path> update;
@@ -423,10 +506,11 @@ bool CheckIn(const std::filesystem::path& folder, std::optional<Game>& game) {
             }
         }
         if (root || update) {
-            game = Check(id, root, update);
+            game = Check(id, root, update, here);
             return true;
         }
     }
+    unusable.insert(unusable.end(), here.begin(), here.end());
     return false;
 }
 
@@ -437,8 +521,10 @@ std::optional<Game> Find() {
     std::filesystem::path chosen = EmulatorSettings.GetGameDirectory();
     std::optional<Game> game;
     for (;;) {
+        // The searched folders' folders named as dumps that hold no param.sfo.
+        std::vector<std::filesystem::path> unusable;
         // The folder the player chose counts before the executable's.
-        if (!chosen.empty() && CheckIn(chosen, game)) {
+        if (!chosen.empty() && CheckIn(chosen, game, unusable)) {
             // The settings keep a chosen folder once its dump passes the checks.
             if (game && chosen != EmulatorSettings.GetGameDirectory()) {
                 EmulatorSettings.SetGameDirectory(chosen);
@@ -446,10 +532,11 @@ std::optional<Game> Find() {
             }
             break;
         }
-        if (CheckIn(beside, game)) {
+        if (CheckIn(beside, game, unusable)) {
             break;
         }
-        const std::optional<std::filesystem::path> folder = AskFolder(NoGame(beside, chosen));
+        const std::optional<std::filesystem::path> folder = AskFolder(
+            unusable.empty() ? NoGame(beside, chosen) : NoViableGame(beside, chosen, unusable));
         if (!folder) {
             break;
         }
