@@ -330,7 +330,7 @@ std::vector<Extra> Extras() {
     for (const pugi::xml_node patch : doc.child("Patch").children("Metadata")) {
         const std::string_view name = patch.attribute("Name").value();
         if (IsFrameRatePatch(name) || IsResolutionPatch(patch.attribute("Category").value()) ||
-            name == DlcPatch || name == LooseFilesPatch) {
+            name == DlcPatch || name == LooseFilesPatch || name == GnfCheckPatch) {
             continue;
         }
         extras.push_back({std::string(name), patch.attribute("isEnabled").as_bool()});
@@ -341,6 +341,9 @@ std::vector<Extra> Extras() {
 bool IsEnabled(std::string_view name, std::string_view category, bool listed_on) {
     if (name == LooseFilesPatch) {
         return GameCheck::LooseFiles();
+    }
+    if (name == GnfCheckPatch) {
+        return true;
     }
     const Settings::Game game = Settings::Get().game;
     if (IsFrameRatePatch(name)) {

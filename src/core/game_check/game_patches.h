@@ -75,6 +75,8 @@ inline constexpr std::string_view ShadNetTrophies = "https://shadnet.shadps4.net
 inline constexpr std::string_view DlcPatch = "Unlock All DLC";
 inline constexpr std::string_view LooseFilesPatch =
     "Boot with loose files exclusively (READ NOTES)";
+/// Applies for everyone: the texture-descriptor guard against the game's random crash.
+inline constexpr std::string_view GnfCheckPatch = "30 fps Crash fix (GNF readiness check)";
 
 struct Extra {
     std::string name;
@@ -83,7 +85,7 @@ struct Extra {
 };
 
 /// The patches the Cheats & extras tab lists, in the patch file's order: all but the frame rate,
-/// resolution, DLC and loose-files patches.
+/// resolution, DLC, loose-files and GNF check patches.
 std::vector<Extra> Extras();
 
 /// Whether the built-in patch named name, of category category, applies. listed_on is its flag in
