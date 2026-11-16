@@ -10,18 +10,21 @@ namespace Gr2Port::Scene {
 
 /// The draws, shadow casters, world draws with a material and world draws of four mixed layers
 /// that a packet has room for, and whether the caster command lists of a cascade share one region.
-/// Each count is a multiple of 1024, which keeps the arrays aligned.
+/// Each count is a multiple of 1024, which keeps the arrays aligned. A frame whose draws hold more
+/// than frame_indices indices is not drawn: its items are not what the capture expects.
 struct Room {
     u32 draws;
     u32 casters;
     u32 materials;
     u32 layer_materials;
     bool packed_casters;
+    u64 frame_indices;
 };
 /// The room at the game's own level of detail, and the room with a level of detail setting at its
-/// finest, where the game's frame holds several times the items.
-inline constexpr Room BaseRoom{32768, 4096, 8192, 1024, false};
-inline constexpr Room MostRoom{49152, 16384, 49152, 4096, true};
+/// finest, where the game's frame holds several times the items. Far Environment LOD at 400% sends
+/// frames of more than 76 million indices from the edge of Jirga Para Lhao.
+inline constexpr Room BaseRoom{32768, 4096, 8192, 1024, false, u64{48} << 20};
+inline constexpr Room MostRoom{49152, 16384, 49152, 4096, true, u64{192} << 20};
 /// The room of this run's packets. The renderer sets it before it hands out the scene ring.
 inline Room g_room = BaseRoom;
 /// The most room, which the capture's own arrays hold.

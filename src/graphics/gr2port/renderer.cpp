@@ -110,10 +110,8 @@ constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
 // The scene's size until a world frame names the game's target for its picture: the game's own.
 constexpr vk::Extent2D DefaultSceneExtent{1920, 1080};
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
-// BaseFrameIndices is the limit for the base room, and it grows with the room for draws.
-constexpr u64 BaseFrameIndices = 48u << 20;
 u64 MaxFrameIndices() {
-    return BaseFrameIndices * Scene::g_room.draws / Scene::BaseRoom.draws;
+    return Scene::g_room.frame_indices;
 }
 
 struct CharacterPush {
