@@ -5,13 +5,13 @@
 
 #include "graphics/gr2_fsr3/vk_trampolines.h"
 
-// The FidelityFX libraries and the FSR 4 v07 provider call these Vulkan commands directly, and the
-// emulator links no Vulkan loader. Each definition forwards to the dispatcher of GR2port's device
+// The FidelityFX libraries and the FSR 4 v07 provider call these Vulkan commands directly, and
+// GR2port links no Vulkan loader. Each definition forwards to the dispatcher of GR2port's device
 // once its upscaler starts, and is checked against its PFN_ type because VK_NO_PROTOTYPES hides the
 // prototypes.
 namespace {
 
-// The emulated GPU's dispatcher until GR2port's upscaler sets its own.
+// The default dispatcher until GR2port's upscaler sets its own.
 const vk::detail::DispatchLoaderDynamic* g_dispatcher = &VULKAN_HPP_DEFAULT_DISPATCHER;
 
 const vk::detail::DispatchLoaderDynamic& Dispatcher() {

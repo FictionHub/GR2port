@@ -6,7 +6,7 @@
 #include "common/types.h"
 
 // A renderer for Gravity Rush 2 that draws the game's scene with its own device, memory and
-// shaders, apart from the emulated GPU.
+// shaders.
 namespace Gr2Port {
 
 /// Installs the hooks when module_base is the Gravity Rush 2 executable.

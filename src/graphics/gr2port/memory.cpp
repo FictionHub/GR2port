@@ -31,8 +31,8 @@ namespace Gr2Port {
 
 namespace {
 
-// Device-local memory the renderer leaves free for the driver and the emulator.
-constexpr u64 OffHeadroom = 64_MB;
+// Device-local memory the renderer leaves free for the driver.
+constexpr u64 HeadroomBytes = 64_MB;
 // A device-local heap at most this size beside the main one is the host-visible BAR window.
 constexpr u64 MaxBarHeap = 512_MB;
 // Small blocks keep the memory the allocator holds close to what the renderer uses.
@@ -285,7 +285,7 @@ void Memory::Refresh(u64 frame) {
 }
 
 u64 Memory::Headroom() const {
-    return OffHeadroom;
+    return HeadroomBytes;
 }
 
 bool Memory::Reserve(u64 bytes) {

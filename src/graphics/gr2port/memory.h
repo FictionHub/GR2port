@@ -55,8 +55,8 @@ public:
     bool Create();
 
     /// The memory the GPU draws from: its device-local heaps, or every heap of an integrated GPU,
-    /// whose memory is all RAM. The process's use and budget (both renderers share the process),
-    /// and the renderer's own use, as of the last Refresh.
+    /// whose memory is all RAM. The process's use and budget, and the renderer's own use, as of the
+    /// last Refresh.
     struct Budget {
         u64 usage;
         u64 budget;
@@ -73,7 +73,7 @@ public:
     /// Whether bytes more device-local memory leave the process a headroom under its budget;
     /// if so, they count as used until the next Refresh.
     bool Reserve(u64 bytes);
-    /// The device-local memory Reserve leaves free for the emulated GPU's renderer.
+    /// The device-local memory Reserve leaves free for the driver.
     u64 Headroom() const;
 
     /// A buffer the GPU reads by device address as well as by binding.

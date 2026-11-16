@@ -10,8 +10,7 @@ struct SDL_Window;
 
 namespace Gr2Port {
 
-/// The renderer's own Vulkan instance and device, apart from the emulated GPU's. Every call goes
-/// through dispatch: the default dispatcher holds the emulated GPU's device.
+/// The renderer's Vulkan instance and device. Every call goes through dispatch.
 struct Device {
     vk::detail::DispatchLoaderDynamic dispatch;
     vk::Instance instance;

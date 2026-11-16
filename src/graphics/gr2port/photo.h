@@ -20,8 +20,7 @@ void Record(Memory& memory, vk::CommandBuffer cmd, const Scene::Header& header, 
 void Collect(u32 slot);
 
 /// On the encoder's thread: waits for a photo newer than the last one taken and gives its pixels,
-/// rows of pitch bytes in B8G8R8A8 order. False while GR2fork's emulation runs, which reads the
-/// game's own target, or when no photo comes.
+/// rows of pitch bytes in B8G8R8A8 order. False when no photo comes.
 bool Read(std::vector<u8>& pixels, u32& width, u32& height, u32& pitch);
 
 } // namespace Gr2Port::Photo
