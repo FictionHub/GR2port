@@ -64,6 +64,7 @@ Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU
 - GR2fork Halloween items
 - FSR 3.1 + FSR 4.1 support (Windows + Linux) + DLSS and XeSS support (Windows Only)
 - Keyboard, XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2
+- Auto update checker on launcher startup
 
 <img width="789" height="523" alt="image" src="https://github.com/user-attachments/assets/38b3f128-b28f-4862-b502-2a0ce746af1e" /> <b>
 
