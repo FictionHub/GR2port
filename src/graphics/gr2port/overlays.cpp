@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
-#include <cstdlib>
 #include <cstring>
 
 #ifdef _WIN32
@@ -18,38 +18,6 @@
 namespace Gr2Port {
 
 namespace {
-
-// The variables that keep RTSS's and MangoHud's implicit Vulkan layers out of an instance, as
-// their layer manifests name them.
-constexpr std::array<const char*, 2> LayerSwitches{"DISABLE_RTSS_LAYER", "DISABLE_MANGOHUD"};
-
-// The Vulkan loader reads the process environment itself, so on Windows these go through the
-// Win32 block rather than the C runtime's copy.
-std::optional<std::string> ReadVariable(const char* name) {
-#ifdef _WIN32
-    char value[256];
-    const DWORD length = GetEnvironmentVariableA(name, value, sizeof(value));
-    if (length == 0 || length >= sizeof(value)) {
-        return std::nullopt;
-    }
-    return std::string(value, length);
-#else
-    const char* value = std::getenv(name);
-    return value != nullptr ? std::optional<std::string>{value} : std::nullopt;
-#endif
-}
-
-void WriteVariable(const char* name, const std::optional<std::string>& value) {
-#ifdef _WIN32
-    SetEnvironmentVariableA(name, value ? value->c_str() : nullptr);
-#else
-    if (value) {
-        setenv(name, value->c_str(), 1);
-    } else {
-        unsetenv(name);
-    }
-#endif
-}
 
 #ifdef _WIN32
 
@@ -159,19 +127,6 @@ void KeepOverlayOffOtherAdapters(u32 vendor, u32 device) {
 #else
 void KeepOverlayOffOtherAdapters(u32, u32) {}
 #endif
-
-OverlaysOutOfInstance::OverlaysOutOfInstance() {
-    for (std::size_t i = 0; i < LayerSwitches.size(); i++) {
-        saved[i] = ReadVariable(LayerSwitches[i]);
-        WriteVariable(LayerSwitches[i], "1");
-    }
-}
-
-OverlaysOutOfInstance::~OverlaysOutOfInstance() {
-    for (std::size_t i = 0; i < LayerSwitches.size(); i++) {
-        WriteVariable(LayerSwitches[i], saved[i]);
-    }
-}
 
 void LogOverlays() {
 #ifdef _WIN32
