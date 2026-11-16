@@ -70,9 +70,8 @@ constexpr VAddr MoveNode = 0x1395e30;
 constexpr VAddr AttachText = 0x13967a0;
 constexpr VAddr SetTextKey = 0x1390fb0;
 
-// The text manager, the heap of the interface, and the list of live interface objects with its
-// mutex: a load that ends after its object left the list does not reach the object.
-constexpr VAddr Texts = 0x1f270a0;
+// The heap of the interface, and the list of live interface objects with its mutex: a load that
+// ends after its object left the list does not reach the object.
 constexpr VAddr Heap = 0x1cdf970;
 constexpr VAddr LiveObjects = 0x1ee2c88;
 constexpr u64 LiveFirst = 0x08;

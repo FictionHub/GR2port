@@ -750,7 +750,6 @@ constexpr u64 GradationColor = 0xb0;
 constexpr u64 AlphaStepFlag = 0x1fc;
 constexpr std::array<float, 4> NoScale{1.0f, 1.0f, 1.0f, 1.0f};
 constexpr std::array<float, 4> NoTransform{0.0f, 0.0f, 1.0f, 1.0f};
-constexpr u32 BatchedCategory = 15;
 constexpr u64 MatrixBytes = 64;
 
 std::atomic<u64> g_frames{0};
@@ -880,6 +879,11 @@ void RescaleInverseSize(u32& inverse_width, u32& inverse_height) {
     const std::array<float, 4> render = RenderSize(1.0f / width, 1.0f / height);
     inverse_width = std::bit_cast<u32>(render[2]);
     inverse_height = std::bit_cast<u32>(render[3]);
+}
+
+// The item a sort key of the view names, in the view's item pool.
+VAddr KeyItem(VAddr items, u32 key) {
+    return items + (static_cast<u64>(key & ItemKeyOffsetMask) << ItemKeyOffsetShift);
 }
 
 // The view's point lights that the packet holds and the programs count.
@@ -1106,36 +1110,23 @@ public:
             material_index = AddLayers(item, constants, material);
             alpha_tested = material_index != 0 && Load<float>(material + LayerPunchThrough) < 1.0f;
         }
+        // These categories' materials each take a Character.
+        if ((category.character || category.interior || category.lambert || category.vision) &&
+            (material == 0 || header.characters == Scene::MaxCharacters)) {
+            header.dropped_characters += material != 0;
+            header.dropped++;
+            return;
+        }
         if (category.character) {
-            if (material == 0 || header.characters == Scene::MaxCharacters) {
-                header.dropped_characters += material != 0;
-                header.dropped++;
-                return;
-            }
             material_index = AddCharacter(item, constants, material, category.glow);
         }
         if (category.interior) {
-            if (material == 0 || header.characters == Scene::MaxCharacters) {
-                header.dropped_characters += material != 0;
-                header.dropped++;
-                return;
-            }
             material_index = AddInterior(item, material);
         }
         if (category.lambert) {
-            if (material == 0 || header.characters == Scene::MaxCharacters) {
-                header.dropped_characters += material != 0;
-                header.dropped++;
-                return;
-            }
             material_index = AddLambert(constants, material);
         }
         if (category.vision) {
-            if (material == 0 || header.characters == Scene::MaxCharacters) {
-                header.dropped_characters += material != 0;
-                header.dropped++;
-                return;
-            }
             const VAddr screen = VisionScreenObject(item);
             texture = ScreenTexture(screen, true);
             texcoord_transform = VisionTexcoord.data();
@@ -1328,9 +1319,7 @@ public:
                     header.effects.unported++;
                     continue;
                 }
-                const u64 at = static_cast<u64>(entries[i].key & ItemKeyOffsetMask)
-                               << ItemKeyOffsetShift;
-                AddEffect(items + at, list, point_lights);
+                AddEffect(KeyItem(items, entries[i].key), list, point_lights);
             }
         }
         std::memcpy(packet + Scene::EffectCommandsOffset, g_effect_commands.data(),
@@ -3162,7 +3151,6 @@ void WriteSky(VAddr frame_graph, VAddr view, u8* packet, Writer& writer) {
 // targets hold at +0x92d0.
 void WriteParticleColorScene(VAddr view, u8* packet) {
     constexpr u64 ViewTargets = 0x10b0;
-    constexpr u64 TargetsSize = 0x92d0;
     constexpr float Quarter = 0.25f;
     const auto view_matrix = Load<std::array<float, 16>>(view + ViewMatrix);
     const auto projection = Load<std::array<float, 16>>(view + ViewProjection);
@@ -3627,8 +3615,6 @@ Scene::BranchTiming ReadBranchTiming() {
     };
 }
 
-} // namespace
-
 // The view's target for the world's picture; the back buffer when 0.
 constexpr u64 ViewWorldTarget = 0xfe0;
 
@@ -3644,6 +3630,21 @@ struct PendingPacket {
 PendingPacket g_pending;
 // The frame graph ran without a packet: the frame's screen drawing has none either.
 bool g_skipped_frame = false;
+
+// The nanoseconds from start to now.
+u32 NanosecondsSince(std::chrono::steady_clock::time_point start) {
+    return static_cast<u32>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::steady_clock::now() - start)
+                                .count());
+}
+
+// The nanoseconds from the last frame's capture to this one's, which began at start.
+u32 FrameGap(std::chrono::steady_clock::time_point start) {
+    const s64 gap =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(start - g_last_frame_start).count();
+    g_last_frame_start = start;
+    return static_cast<u32>(std::min<s64>(gap, std::numeric_limits<u32>::max()));
+}
 
 void PublishPending() {
     if (g_pending.packet != nullptr) {
@@ -3693,7 +3694,7 @@ void UpdateScreens(VAddr view) {
     const s32 count = Load<s32>(view + ViewCategoryCount + VisionCategory.index * 4);
     const VAddr key = keys + static_cast<s64>(first - Load<s32>(view + ViewKeyCount)) * 4;
     for (s32 i = 0; i < count; i++) {
-        const VAddr item = items + (static_cast<u64>(Load<u32>(key + i * 4) & 0x3fffff) << 6);
+        const VAddr item = KeyItem(items, Load<u32>(key + i * 4));
         const VAddr source = Load<VAddr>(item + VisionSource);
         const VAddr player = source != 0 ? Load<VAddr>(source) : 0;
         if (Load<s32>(item + VisionUpdates) >= 0 || player == 0) {
@@ -3704,6 +3705,8 @@ void UpdateScreens(VAddr view) {
         update(player);
     }
 }
+
+} // namespace
 
 void OnFrame(VAddr frame_graph, VAddr view) {
     PublishPending();
@@ -3782,9 +3785,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     const auto keyed = [items, keys, key_count, view](u32 category) {
         const s32 first = Load<s32>(view + ViewCategoryFirst + category * 4);
         const VAddr key = keys + static_cast<s64>(first - key_count) * 4;
-        return [items, key](s32 i) {
-            return items + (static_cast<u64>(Load<u32>(key + i * 4) & 0x3fffff) << 6);
-        };
+        return [items, key](s32 i) { return KeyItem(items, Load<u32>(key + i * 4)); };
     };
     for (const CasterCategory& category : CasterCategories) {
         const s32 count = Load<s32>(view + ViewCategoryCount + category.index * 4);
@@ -3901,10 +3902,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();
     header.frame = frame;
-    header.frame_gap_ns = static_cast<u32>(std::min<s64>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(start - g_last_frame_start).count(),
-        std::numeric_limits<u32>::max()));
-    g_last_frame_start = start;
+    header.frame_gap_ns = FrameGap(start);
     header.point_lights = point_lights;
     header.fog = fog.flags;
     for (u32 i = 0; i < 2; i++) {
@@ -3918,9 +3916,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         const s32 count = Load<s32>(view + ViewCategoryCount + c * 4);
         header.category_items[c] = static_cast<u16>(std::clamp(count, 0, 0xffff));
     }
-    header.capture_ns = static_cast<u32>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                             std::chrono::steady_clock::now() - start)
-                                             .count());
+    header.capture_ns = NanosecondsSince(start);
     g_pending.packet = packet;
     g_pending.view = view;
     g_pending.world_target = Load<VAddr>(view + ViewWorldTarget);
@@ -3936,10 +3932,7 @@ void OnParticleList(VAddr fx) {
     if (g_pending.packet != nullptr) {
         const auto start = std::chrono::steady_clock::now();
         ParticleCapture::Write(fx, g_pending.view, g_pending.packet, g_pending.header);
-        g_pending.header.particles.capture_ns =
-            static_cast<u32>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                 std::chrono::steady_clock::now() - start)
-                                 .count());
+        g_pending.header.particles.capture_ns = NanosecondsSince(start);
     }
 }
 
@@ -3963,18 +3956,11 @@ void OnFrameEnd() {
         g_pending = {.packet = packet, .frame = frame};
         g_pending.header.frame = frame;
         g_pending.header.ui.only = 1;
-        g_pending.header.frame_gap_ns = static_cast<u32>(std::min<s64>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(start - g_last_frame_start)
-                .count(),
-            std::numeric_limits<u32>::max()));
-        g_last_frame_start = start;
+        g_pending.header.frame_gap_ns = FrameGap(start);
     }
     UiCapture::Write(g_pending.packet, SceneRing::Address(g_pending.packet), g_pending.header,
                      g_pending.world_target);
-    g_pending.header.capture_ns +=
-        static_cast<u32>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                             std::chrono::steady_clock::now() - start)
-                             .count());
+    g_pending.header.capture_ns += NanosecondsSince(start);
     PublishPending();
 }
 
