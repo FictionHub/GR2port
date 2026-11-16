@@ -123,7 +123,6 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
     add_custom_target(gr2_fsr3_shaders
         DEPENDS ${GR2_FSR3_SHADER_HEADERS}
         SOURCES
-            ${GR2_FSR3_DIR}/shaders/fsr3_color.glsl
             ${GR2_FSR3_DIR}/shaders/fsr4_inputs.comp)
 
     # vk_trampolines.cpp defines the Vulkan commands that the FidelityFX libraries and the FSR 4 v07

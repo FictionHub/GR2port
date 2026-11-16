@@ -74,8 +74,6 @@ struct Camera {
 struct InputsPush {
     std::array<u32, 2> size;
     u32 flags;
-    float near_plane;
-    float far_plane;
 };
 
 // The inputs pass writes 1 - depth with this flag: FSR 4 takes the nearer depth as the smaller.
@@ -454,7 +452,7 @@ bool CreateXess(vk::Extent2D render, vk::Extent2D output) {
 }
 
 // Copies the toned colour, the velocity and the depth into the images FSR 4, DLSS and XeSS read.
-void RecordInputs(vk::CommandBuffer cmd, float near_plane, float far_plane) {
+void RecordInputs(vk::CommandBuffer cmd) {
     const auto& dl = g_device->dispatch;
     constexpr auto Compute = vk::PipelineStageFlagBits2::eComputeShader;
     for (const Image* image : {&g_input_color, &g_input_motion, &g_input_depth}) {
@@ -466,8 +464,6 @@ void RecordInputs(vk::CommandBuffer cmd, float near_plane, float far_plane) {
     const InputsPush push{
         .size = {g_render.width, g_render.height},
         .flags = g_upscaler == Settings::Upscaler::Fsr4 ? InputsDepthInverted : 0u,
-        .near_plane = near_plane,
-        .far_plane = far_plane,
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_inputs.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_inputs.layout, 0, g_inputs_set, {},
@@ -528,7 +524,7 @@ void ReadCamera(const u8* packet) {
     g_camera_seen = true;
 }
 
-void RecordFsr3(vk::CommandBuffer cmd, float camera_near, float camera_far, float fov) {
+void RecordFsr3(vk::CommandBuffer cmd) {
     constexpr auto Depth = vk::ImageAspectFlagBits::eDepth;
     const FfxVkPortableUpscaleDispatchInfo info{
         .structSize = sizeof(FfxVkPortableUpscaleDispatchInfo),
@@ -558,9 +554,9 @@ void RecordFsr3(vk::CommandBuffer cmd, float camera_near, float camera_far, floa
         .outputSize = {g_output_extent.width, g_output_extent.height},
         .frameTimeMilliseconds = g_frame_ms,
         .preExposure = 1.0f,
-        .cameraNear = camera_near,
-        .cameraFar = camera_far,
-        .cameraVerticalFovRadians = fov,
+        .cameraNear = g_camera.near_plane,
+        .cameraFar = g_camera.far_plane,
+        .cameraVerticalFovRadians = g_camera.fov,
         .viewSpaceToMeters = 1.0f,
         .reset = g_reset ? VK_TRUE : VK_FALSE,
         .frameId = g_frame_id++,
@@ -625,18 +621,22 @@ void RecordFsr4(vk::CommandBuffer cmd) {
     g_fsr4_frames.push_back({.id = g_frame_id++, .frame = g_renderer_frame});
 }
 
-void RecordDlss(vk::CommandBuffer cmd) {
+// The copies of the inputs and the output, as DLSS and XeSS take them.
+Gr2Fsr3::Fsr4Images InputImages() {
     const auto image = [](const Image& source) {
         return Gr2Fsr3::Fsr4Image{.image = source.image, .view = source.view};
     };
+    return {
+        .color = image(g_input_color),
+        .motion_vectors = image(g_input_motion),
+        .depth = image(g_input_depth),
+        .output = image(g_output),
+    };
+}
+
+void RecordDlss(vk::CommandBuffer cmd) {
     const Gr2Fsr3::DlssEvaluateInfo info{
-        .images =
-            {
-                .color = image(g_input_color),
-                .motion_vectors = image(g_input_motion),
-                .depth = image(g_input_depth),
-                .output = image(g_output),
-            },
+        .images = InputImages(),
         .render_size = g_render,
         .output_size = g_output_extent,
         .jitter_x = g_jitter.x,
@@ -660,17 +660,8 @@ void RecordXess(vk::CommandBuffer cmd) {
                      vk::AccessFlagBits2::eShaderStorageWrite,
                      vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead);
     }
-    const auto image = [](const Image& source) {
-        return Gr2Fsr3::Fsr4Image{.image = source.image, .view = source.view};
-    };
     const Gr2Fsr3::XessExecuteInfo info{
-        .images =
-            {
-                .color = image(g_input_color),
-                .motion_vectors = image(g_input_motion),
-                .depth = image(g_input_depth),
-                .output = image(g_output),
-            },
+        .images = InputImages(),
         .render_size = g_render,
         .output_size = g_output_extent,
         .jitter_x = g_jitter.x,
@@ -1061,22 +1052,20 @@ void Record(vk::CommandBuffer cmd) {
     ImageBarrier(cmd, g_output.image, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
                  vk::ImageLayout::eGeneral, Compute, vk::AccessFlagBits2::eShaderSampledRead,
                  Compute, vk::AccessFlagBits2::eShaderStorageWrite);
-    const float near_plane = g_camera.near_plane;
-    const float far_plane = g_camera.far_plane;
     switch (g_upscaler) {
     case Settings::Upscaler::Fsr3:
-        RecordFsr3(cmd, near_plane, far_plane, g_camera.fov);
+        RecordFsr3(cmd);
         break;
     case Settings::Upscaler::Fsr4:
-        RecordInputs(cmd, near_plane, far_plane);
+        RecordInputs(cmd);
         RecordFsr4(cmd);
         break;
     case Settings::Upscaler::Dlss:
-        RecordInputs(cmd, near_plane, far_plane);
+        RecordInputs(cmd);
         RecordDlss(cmd);
         break;
     case Settings::Upscaler::Xess:
-        RecordInputs(cmd, near_plane, far_plane);
+        RecordInputs(cmd);
         RecordXess(cmd);
         break;
     default:
