@@ -11,6 +11,7 @@
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/mouse_camera.h"
 #include "graphics/gr2port/settings.h"
+#include "graphics/gr2port/stick_tilt.h"
 
 namespace Gr2Port::MouseCamera {
 
@@ -117,8 +118,12 @@ bool StickTurnsCamera() {
 
 // Turns the orientation quaternion at address by the mouse's movement since the last call, in the
 // space of frame: yaw before the orientation, pitch after it. Returns whether the mouse moved.
-// While the game ignores the stick, the movement is dropped, as the stick's would be.
+// While the game ignores the stick, the movement is dropped, as the stick's would be. While a comic
+// page shows, the camera leaves the mouse to the right stick, which tilts the page.
 bool TurnByMouse(VAddr orientation, const Quaternion& frame, const Speeds& speeds, bool takes) {
+    if (StickTilt::ComicPageShown()) {
+        return false;
+    }
     const auto [dx, dy] = Input::MouseLook::Take();
     if (!takes || (dx == 0.0f && dy == 0.0f)) {
         return false;
