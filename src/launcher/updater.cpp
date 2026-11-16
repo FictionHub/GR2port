@@ -42,6 +42,11 @@ constexpr std::string_view UserFolder = "userdata/";
 // GitHub answers no request without a User-Agent.
 const httplib::Headers Headers{{"User-Agent", "GR2port"}};
 
+// The zip arrives whole in memory, up to the 2 GiB GitHub allows a release's file. It comes
+// through a receiver of the updater's own: a response httplib keeps itself stops at 100 MB on the
+// server a redirect leads to.
+constexpr size_t LargestZip = size_t{2} << 30;
+
 #ifndef _WIN32
 // The files Linux systems keep their certificate authorities in. The TLS library looks in a
 // folder of its own, which no system has.
@@ -221,8 +226,17 @@ bool InstallNow(const Release& release, Download& download) {
     Prepare(client);
     // GitHub sends the download on to the server that holds the file.
     client.set_follow_location(true);
-    const httplib::Result result =
-        client.Get(release.zip.substr(path), Headers, [&download](size_t received, size_t size) {
+    std::string zip;
+    const httplib::Result result = client.Get(
+        release.zip.substr(path), Headers,
+        [&zip](const char* bytes, size_t size) {
+            if (size > LargestZip - zip.size()) {
+                return false;
+            }
+            zip.append(bytes, size);
+            return true;
+        },
+        [&download](size_t received, size_t size) {
             download.received = received;
             download.size = size;
             return !download.stopped;
@@ -232,7 +246,7 @@ bool InstallNow(const Release& release, Download& download) {
                   result ? std::to_string(result->status) : httplib::to_string(result.error()));
         return false;
     }
-    if (download.stopped || !Extract(result->body)) {
+    if (download.stopped || !Extract(zip)) {
         LOG_ERROR(Loader, "GR2port: the update's files are not in place");
         return false;
     }
