@@ -1037,10 +1037,6 @@ set(GRAPHICS src/graphics/amdgpu/pixel_format.cpp
              src/graphics/amdgpu/pixel_format.h
              src/graphics/amdgpu/pm4_cmds.h
              src/graphics/amdgpu/pm4_opcodes.h
-             src/graphics/amdgpu/regs_color.h
-             src/graphics/amdgpu/regs_depth.h
-             src/graphics/amdgpu/regs_primitive.h
-             src/graphics/amdgpu/regs_vertex.h
              src/graphics/amdgpu/resource.h
              src/graphics/amdgpu/tiling.cpp
              src/graphics/amdgpu/tiling.h

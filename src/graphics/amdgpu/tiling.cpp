@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <bit>
@@ -45,43 +46,6 @@ PipeConfig GetPipeConfig(TileMode tile_mode) {
     case TileMode::Thick3DThickPrt:
     case TileMode::Thick3DXThick:
         return PipeConfig::P8_32x32_8x16;
-    case TileMode::DisplayLinearGeneral:
-        return PipeConfig::P2;
-    default:
-        UNREACHABLE_MSG("Unknown tile mode = {}", u32(tile_mode));
-    }
-}
-
-PipeConfig GetAltPipeConfig(TileMode tile_mode) {
-    switch (tile_mode) {
-    case TileMode::Depth2DThin64:
-    case TileMode::Depth2DThin128:
-    case TileMode::Depth2DThin256:
-    case TileMode::Depth2DThin512:
-    case TileMode::Depth2DThin1K:
-    case TileMode::Depth1DThin:
-    case TileMode::Depth2DThinPrt256:
-    case TileMode::Depth2DThinPrt1K:
-    case TileMode::DisplayLinearAligned:
-    case TileMode::Display1DThin:
-    case TileMode::Display2DThin:
-    case TileMode::DisplayThinPrt:
-    case TileMode::Display2DThinPrt:
-    case TileMode::Thin1DThin:
-    case TileMode::Thin2DThin:
-    case TileMode::Thin3DThin:
-    case TileMode::ThinThinPrt:
-    case TileMode::Thin2DThinPrt:
-    case TileMode::Thin3DThinPrt:
-    case TileMode::Thick1DThick:
-    case TileMode::Thick2DThick:
-    case TileMode::Thick3DThick:
-    case TileMode::ThickThickPrt:
-    case TileMode::Thick2DThickPrt:
-    case TileMode::Thick3DThickPrt:
-    case TileMode::Thick2DXThick:
-    case TileMode::Thick3DXThick:
-        return PipeConfig::P16_32x32_8x16;
     case TileMode::DisplayLinearGeneral:
         return PipeConfig::P2;
     default:
@@ -270,57 +234,6 @@ u32 GetMacrotileAspect(MacroTileMode mode) {
     }
 }
 
-u32 GetAltBankHeight(MacroTileMode mode) {
-    switch (mode) {
-    case MacroTileMode::Mode_1x1_8:
-    case MacroTileMode::Mode_1x1_4:
-    case MacroTileMode::Mode_1x1_2:
-    case MacroTileMode::Mode_1x1_2_Dup:
-    case MacroTileMode::Mode_1x1_16_Dup2:
-    case MacroTileMode::Mode_1x1_8_Dup:
-    case MacroTileMode::Mode_1x1_4_Dup:
-    case MacroTileMode::Mode_1x1_2_Dup2:
-    case MacroTileMode::Mode_1x1_2_Dup3:
-        return 1;
-    case MacroTileMode::Mode_1x1_16:
-    case MacroTileMode::Mode_1x1_16_Dup:
-    case MacroTileMode::Mode_1x2_16_Dup:
-        return 2;
-    case MacroTileMode::Mode_1x4_16:
-    case MacroTileMode::Mode_1x2_16:
-    case MacroTileMode::Mode_1x8_16:
-    case MacroTileMode::Mode_1x4_16_Dup:
-        return 4;
-    default:
-        UNREACHABLE_MSG("Unknown macro tile mode = {}", u32(mode));
-    }
-}
-
-u32 GetAltMacrotileAspect(MacroTileMode mode) {
-    switch (mode) {
-    case MacroTileMode::Mode_1x1_16:
-    case MacroTileMode::Mode_1x1_16_Dup:
-    case MacroTileMode::Mode_1x1_8:
-    case MacroTileMode::Mode_1x1_4:
-    case MacroTileMode::Mode_1x1_2:
-    case MacroTileMode::Mode_1x1_2_Dup:
-    case MacroTileMode::Mode_1x2_16_Dup:
-    case MacroTileMode::Mode_1x1_16_Dup2:
-    case MacroTileMode::Mode_1x1_8_Dup:
-    case MacroTileMode::Mode_1x1_4_Dup:
-    case MacroTileMode::Mode_1x1_2_Dup2:
-    case MacroTileMode::Mode_1x1_2_Dup3:
-        return 1;
-    case MacroTileMode::Mode_1x4_16:
-    case MacroTileMode::Mode_1x2_16:
-    case MacroTileMode::Mode_1x8_16:
-    case MacroTileMode::Mode_1x4_16_Dup:
-        return 2;
-    default:
-        UNREACHABLE_MSG("Unknown macro tile mode = {}", u32(mode));
-    }
-}
-
 bool IsPrt(ArrayMode array_mode) {
     switch (array_mode) {
     case ArrayMode::ArrayPrtTiledThin1:
@@ -343,20 +256,6 @@ bool IsPrt(ArrayMode array_mode) {
         return false;
     default:
         UNREACHABLE_MSG("Unknown array mode = {}", u32(array_mode));
-    }
-}
-
-u32 GetPipeCount(PipeConfig pipe_cfg) {
-    switch (pipe_cfg) {
-    case PipeConfig::P2:
-        return 2;
-    case PipeConfig::P8_32x32_8x16:
-    case PipeConfig::P8_32x32_16x16:
-        return 8;
-    case PipeConfig::P16_32x32_8x16:
-        return 16;
-    default:
-        UNREACHABLE_MSG("Unknown pipe config = {}", u32(pipe_cfg));
     }
 }
 

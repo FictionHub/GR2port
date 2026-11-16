@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -414,37 +415,5 @@ constexpr void ComputeImageSize(u32 pitch, u32 height, u32 depth, u32 levels, u3
         *out_size += mip_info.size;
     }
 }
-
-struct TableEntry {
-    u32 guest_size;
-    u32 micro_tiled_mips;
-    std::array<MipInfo, MAX_MIPS> mips_layout;
-};
-
-static constexpr u32 MAX_DIM_LOG2 = 12;
-
-constexpr auto Pow2Bcn64ImageTable = [] {
-    std::array<TableEntry, MAX_DIM_LOG2> entry{};
-    for (u32 i = 0; i < MAX_DIM_LOG2; ++i) {
-        const u32 pitch = 1 << i;
-        ComputeImageSize(pitch, pitch, 1, std::bit_width(pitch), 1, 64, 1, true, true, false,
-                         AmdGpu::TileMode::Thin1DThin, AmdGpu::ArrayMode::Array1DTiledThin1,
-                         &entry[i].guest_size, &entry[i].micro_tiled_mips,
-                         entry[i].mips_layout.data());
-    }
-    return entry;
-}();
-
-constexpr auto Pow2Bcn128ImageTable = [] {
-    std::array<TableEntry, MAX_DIM_LOG2> entry{};
-    for (u32 i = 0; i < MAX_DIM_LOG2; ++i) {
-        const u32 pitch = 1 << i;
-        ComputeImageSize(pitch, pitch, 1, std::bit_width(pitch), 1, 128, 1, true, true, false,
-                         AmdGpu::TileMode::Thin1DThin, AmdGpu::ArrayMode::Array1DTiledThin1,
-                         &entry[i].guest_size, &entry[i].micro_tiled_mips,
-                         entry[i].mips_layout.data());
-    }
-    return entry;
-}();
 
 } // namespace VideoCore

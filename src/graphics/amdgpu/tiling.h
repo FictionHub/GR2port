@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -281,8 +282,6 @@ std::string_view NameOf(TileMode tile_mode);
 
 PipeConfig GetPipeConfig(TileMode tile_mode);
 
-PipeConfig GetAltPipeConfig(TileMode tile_mode);
-
 u32 GetSampleSplit(TileMode tile_mode);
 
 u32 GetTileSplitHw(TileMode tile_mode);
@@ -295,13 +294,7 @@ u32 GetNumBanks(MacroTileMode mode);
 
 u32 GetMacrotileAspect(MacroTileMode mode);
 
-u32 GetAltBankHeight(MacroTileMode mode);
-
-u32 GetAltMacrotileAspect(MacroTileMode mode);
-
 bool IsPrt(ArrayMode array_mode);
-
-u32 GetPipeCount(PipeConfig pipe_cfg);
 
 u32 CalculateTileSplit(TileMode tile_mode, ArrayMode array_mode, MicroTileMode micro_tile_mode,
                        u32 bpp);

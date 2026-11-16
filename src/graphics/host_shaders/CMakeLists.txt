@@ -1,4 +1,5 @@
 # SPDX-FileCopyrightText: Copyright 2023 Citra Emulator Project
+# SPDX-FileCopyrightText: Copyright 2026 GR2port
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 if (TARGET glslang-standalone)
@@ -38,7 +39,7 @@ function(add_host_shader FILENAME SHADER_NAME)
     set(SHADER_FILES ${SHADER_FILES} ${FILENAME} PARENT_SCOPE)
 endfunction()
 
-foreach(BPP IN ITEMS 8 16 32 64 96 128)
+foreach(BPP IN ITEMS 8 16 32 64 128)
     add_host_shader(tiling.comp tiling_micro_${BPP}_comp BITS_PER_PIXEL=${BPP} IS_MACRO_TILED=0)
     add_host_shader(tiling.comp tiling_macro_${BPP}_comp BITS_PER_PIXEL=${BPP} IS_MACRO_TILED=1)
 endforeach()
