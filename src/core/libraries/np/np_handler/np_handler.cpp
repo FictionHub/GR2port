@@ -148,12 +148,12 @@ void NpHandler::Initialize() {
             switch (probe.result) {
             case ShadNet::ProbeResult::VersionMismatch:
                 LOG_WARNING(NpHandler,
-                            "shadNet server {}:{} protocol version mismatch (server v{}, emulator "
+                            "shadNet server {}:{} protocol version mismatch (server v{}, GR2port "
                             "v{}); disabling shadNet for this run (saved setting unchanged)",
                             host, port, probe.server_version, ShadNet::SHAD_PROTOCOL_VERSION);
                 ImGui::ShadNetNotify::Push(
                     ImGui::ShadNetNotify::Kind::Info,
-                    fmt::format("shadNet protocol version mismatch (server v{}, emulator v{}). "
+                    fmt::format("shadNet protocol version mismatch (server v{}, GR2port v{}). "
                                 "Please update GR2port. Online features are disabled for this "
                                 "session.",
                                 probe.server_version, ShadNet::SHAD_PROTOCOL_VERSION));
@@ -286,12 +286,12 @@ bool NpHandler::ConnectUser(s32 user_id, const std::string& host, u16 port, cons
         EmulatorSettings.SetShadNetSessionDisabled(true);
         if (server_ver != 0) {
             LOG_ERROR(NpHandler,
-                      "shadNet protocol version mismatch (server v{}, emulator v{}); disabling "
+                      "shadNet protocol version mismatch (server v{}, GR2port v{}); disabling "
                       "shadNet for this run (saved setting unchanged)",
                       server_ver, ShadNet::SHAD_PROTOCOL_VERSION);
             ImGui::ShadNetNotify::Push(
                 ImGui::ShadNetNotify::Kind::Info,
-                fmt::format("shadNet protocol version mismatch (server v{}, emulator v{}). "
+                fmt::format("shadNet protocol version mismatch (server v{}, GR2port v{}). "
                             "Please update GR2port. Online features are disabled for this "
                             "session.",
                             server_ver, ShadNet::SHAD_PROTOCOL_VERSION));

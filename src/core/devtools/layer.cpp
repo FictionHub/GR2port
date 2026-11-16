@@ -51,7 +51,7 @@ void L::DrawMenuBar() {
 
     if (BeginMainMenuBar()) {
         if (BeginMenu("Options")) {
-            if (MenuItemEx("Emulator Paused", nullptr, nullptr, isSystemPaused)) {
+            if (MenuItemEx("Game Paused", nullptr, nullptr, isSystemPaused)) {
                 if (isSystemPaused) {
                     DebugState.ResumeGuestThreads();
                 } else {
@@ -209,7 +209,7 @@ void L::Draw() {
     if (DebugState.IsGuestThreadsPaused()) {
         ImVec2 pos = ImVec2(10, 10);
         ImU32 color = IM_COL32(255, 255, 255, 255);
-        ImGui::GetForegroundDrawList()->AddText(pos, color, "Emulation Paused");
+        ImGui::GetForegroundDrawList()->AddText(pos, color, "Game Paused");
     }
 
     if (show_simple_fps) {

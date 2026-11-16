@@ -101,7 +101,7 @@ Gate AskGate() {
 std::string Describe(const Gate& gate) {
     switch (gate.verdict) {
     case Verdict::Outdated:
-        return "Your version of the emulator is outdated, please update to the latest version to "
+        return "Your version of GR2port is outdated, please update to the latest version to "
                "access network services.";
     case Verdict::Banned: {
         std::string text = "You have been banned from the online server.";
