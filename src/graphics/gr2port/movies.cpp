@@ -23,7 +23,6 @@ namespace {
 
 using Capture::Load;
 
-constexpr VAddr GoldHenBase = 0x400000;
 // FUN_01519400(player): returns 1 when it copied a new frame. The player holds the frame's record
 // at +0x90 when done; a record holds its texture at +0x28, whose first word is the surface.
 constexpr Hooks::Entry Update{0x1519400, 6, Hooks::FramePrologue};
@@ -262,7 +261,7 @@ void Walk(VAddr commands, Packet&& packet) {
 // The compute user data registers the job's commands set.
 UserData ReadUserData() {
     UserData user{};
-    Walk(g_base + Commands - GoldHenBase, [&user](u32 opcode, u32 count, const u32* body) {
+    Walk(g_base + Commands - Hooks::CodeBase, [&user](u32 opcode, u32 count, const u32* body) {
         if (opcode != OpSetShReg) {
             return;
         }
@@ -303,7 +302,7 @@ void PS4_SYSV_ABI OnUpdate(u32, const Hooks::Arguments* arguments, u64 result) {
     const VAddr record = Load<VAddr>(arguments->rdi + PlayerRecord);
     const VAddr texture = record != 0 ? Load<VAddr>(record + RecordTexture) : 0;
     const VAddr surface = texture != 0 ? Load<VAddr>(texture) : 0;
-    const VAddr engine = g_base + Engine - GoldHenBase;
+    const VAddr engine = g_base + Engine - Hooks::CodeBase;
     const VAddr table = Load<VAddr>(engine + EngineTable);
     const UserData user = ReadUserData();
     const VAddr source = ResourceBase(engine, table, TableSource, user);
@@ -343,7 +342,7 @@ void PS4_SYSV_ABI OnKeep(u32, const Hooks::Arguments*, u64 result) {
         return;
     }
     VAddr source = 0;
-    Walk(g_base + KeepCommands - GoldHenBase,
+    Walk(g_base + KeepCommands - Hooks::CodeBase,
          [surface, &source](u32 opcode, u32 count, const u32* body) {
              if (opcode != OpDmaData || count < 5 || source != 0) {
                  return;
@@ -379,16 +378,12 @@ void PS4_SYSV_ABI OnKeep(u32, const Hooks::Arguments*, u64 result) {
     Publish(slot, surface, source, copied, values);
 }
 
-bool Hooked(Hooks::Result result) {
-    return result == Hooks::Result::Hooked || result == Hooks::Result::Chained;
-}
-
 } // namespace
 
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     g_base = module_base;
-    return Hooked(Hooks::ObserveReturn(module_base, Update, c, capacity, &OnUpdate, 0)) &&
-           Hooked(Hooks::ObserveReturn(module_base, Keep, c, capacity, &OnKeep, 0));
+    return Hooks::Hooked(Hooks::ObserveReturn(module_base, Update, c, capacity, &OnUpdate, 0)) &&
+           Hooks::Hooked(Hooks::ObserveReturn(module_base, Keep, c, capacity, &OnKeep, 0));
 }
 
 Job Peek(u32 slot) {

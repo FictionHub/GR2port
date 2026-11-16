@@ -15,8 +15,6 @@ namespace Gr2Port::ScriptTimers {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // The game step's time in seconds, a float.
 constexpr VAddr StepTime = 0x1efb104;
 
@@ -154,13 +152,13 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     g_base = module_base;
     const Hooks::Result loaded =
         Hooks::ObserveReturn(module_base, LoadFunction, c, capacity, &OnLoaded, 0);
-    if (loaded != Hooks::Result::Hooked && loaded != Hooks::Result::Chained) {
+    if (!Hooks::Hooked(loaded)) {
         LOG_ERROR(Render_Vulkan, "GR2port: the script loader is not the expected code");
         return false;
     }
     const Hooks::Result freed =
         Hooks::ObserveEntry(module_base, FreeFunction, c, capacity, &OnFree, 0);
-    if (freed != Hooks::Result::Hooked && freed != Hooks::Result::Chained) {
+    if (!Hooks::Hooked(freed)) {
         LOG_ERROR(Render_Vulkan, "GR2port: the script release is not the expected code");
         return false;
     }
@@ -171,7 +169,7 @@ void OnFrame() {
     if (g_base == 0) {
         return;
     }
-    const float step = Read<float>(g_base + StepTime - GoldHenBase);
+    const float step = Read<float>(g_base + StepTime - Hooks::CodeBase);
     const double frames = std::clamp(static_cast<double>(step * ScriptRate), 0.0, 1.0);
     std::scoped_lock lock{g_mutex};
     for (const Loaded& loaded : g_loaded) {

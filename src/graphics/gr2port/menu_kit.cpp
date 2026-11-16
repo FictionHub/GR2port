@@ -10,6 +10,7 @@
 
 #include "core/language/language.h"
 
+#include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/menu_kit.h"
 
 namespace Gr2Port::MenuKit {
@@ -74,7 +75,7 @@ void SetBase(VAddr module_base) {
 }
 
 VAddr Game(VAddr address) {
-    return g_base + address - GoldHenBase;
+    return g_base + address - Hooks::CodeBase;
 }
 
 std::vector<u8> MakeRecord(u64 model, std::string_view text) {

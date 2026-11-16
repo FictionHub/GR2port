@@ -20,8 +20,6 @@ namespace Gr2Port::StickTilt {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // void FUN_01397200(input, bool reset): a menu input's tilt. The reference quaternion R at
 // input + 0x120, which a reset sets to the inverse of the pad's orientation Q, gives the tilt
 // R * Q. Its X and -Z components, each held within the sine of half the angle at input + 0x184
@@ -105,11 +103,11 @@ Quaternion Turn(const std::array<float, 2>& stick, float amount) {
 
 // The right stick of the pad's state that menus copy: x right, y up, each -1 to 1.
 std::array<float, 2> PadRightStick() {
-    const u64 manager = Load<u64>(g_module_base + PadManager - GoldHenBase);
+    const u64 manager = Load<u64>(g_module_base + PadManager - Hooks::CodeBase);
     if (manager == 0) {
         return {};
     }
-    const u64 user = Load<u64>(g_module_base + PadUser - GoldHenBase);
+    const u64 user = Load<u64>(g_module_base + PadUser - Hooks::CodeBase);
     const auto state_of =
         reinterpret_cast<PadStateFunction>(Load<u64>(Load<u64>(manager) + PadState));
     const u64 state = state_of(manager, user, (user & 0xff00000000ULL) != 0 ? 1 : 0);

@@ -13,8 +13,6 @@ namespace Gr2Port::CameraReach {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // vaddss xmm0, xmm0, [0x18c5ea8]: the camera's distance in xmm0 plus 0.1 m, which the hit's
 // distance in xmm3 is compared with next. The collision state is in r15.
 constexpr Hooks::Entry Reach{0x155f037, 8, {0xc5, 0xfa, 0x58, 0x05, 0x69, 0x6e, 0x36, 0x00}};
@@ -46,7 +44,7 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     c.push(rdx);
     c.lea(rsp, ptr[rsp - 16]);
     c.vmovups(ptr[rsp], xmm1);
-    c.mov(rcx, module_base + FrameTimes - GoldHenBase);
+    c.mov(rcx, module_base + FrameTimes - Hooks::CodeBase);
     c.mov(edx, dword[r15 + StateTimeGroup]);
     c.vmovss(xmm1, dword[rcx + rdx * 4]);
     c.vmulss(xmm1, xmm1, dword[rip + per_second]);
@@ -56,7 +54,7 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     c.lea(rsp, ptr[rsp + 16]);
     c.pop(rdx);
     c.pop(rcx);
-    c.jmp(reinterpret_cast<const void*>(module_base + ReachNext - GoldHenBase));
+    c.jmp(Hooks::Code(module_base, ReachNext));
     c.L(per_second);
     c.dd(std::bit_cast<u32>(ReachPerSecond));
     c.L(of_frame);

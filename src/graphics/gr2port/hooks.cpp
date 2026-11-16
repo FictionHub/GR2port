@@ -12,8 +12,6 @@ namespace Gr2Port::Hooks {
 
 namespace {
 
-// Addresses are GoldHEN patch addresses: the executable's first segment at 0x400000.
-constexpr u64 CodeBase = 0x400000;
 constexpr u32 JmpSize = 5;
 constexpr u8 ReturnOpcode = 0xc3;
 
@@ -23,18 +21,26 @@ struct Site {
     bool chained;
 };
 
+// The entry's bytes in the executable, or null when they lie outside it.
+u8* At(VAddr module_base, const Entry& entry) {
+    if (entry.address < CodeBase ||
+        entry.address - CodeBase + entry.size > MemoryPatcher::g_eboot_image_size) {
+        return nullptr;
+    }
+    return reinterpret_cast<u8*>(module_base + entry.address - CodeBase);
+}
+
 // Finds where a stub for entry continues: the earlier hook a jump at the entry leads to, or a
 // trampoline written to c that runs the covered instructions and jumps past them.
 Result Prepare(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator& c, size_t capacity,
                Site& site) {
-    if (entry.address < CodeBase ||
-        entry.address - CodeBase + entry.size > MemoryPatcher::g_eboot_image_size) {
+    site.entry = At(module_base, entry);
+    if (site.entry == nullptr) {
         return Result::Mismatch;
     }
     if (capacity - c.getSize() < MaxStubBytes) {
         return Result::NoRoom;
     }
-    site.entry = reinterpret_cast<u8*>(module_base + entry.address - CodeBase);
     site.chained = site.entry[0] == 0xe9;
     if (site.chained) {
         s32 displacement;
@@ -55,12 +61,9 @@ Result Prepare(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator& c, s
 
 // The function's entry, when it holds the instructions the entry expects.
 u8* Expected(VAddr module_base, const Entry& entry) {
-    if (entry.address < CodeBase ||
-        entry.address - CodeBase + entry.size > MemoryPatcher::g_eboot_image_size) {
-        return nullptr;
-    }
-    u8* const site = reinterpret_cast<u8*>(module_base + entry.address - CodeBase);
-    return std::memcmp(site, entry.bytes.data(), entry.size) == 0 ? site : nullptr;
+    u8* const site = At(module_base, entry);
+    return site != nullptr && std::memcmp(site, entry.bytes.data(), entry.size) == 0 ? site
+                                                                                     : nullptr;
 }
 
 void Patch(const Site& site, const Entry& entry, const u8* stub) {
@@ -74,12 +77,16 @@ void Patch(const Site& site, const Entry& entry, const u8* stub) {
 
 } // namespace
 
+bool Holds(VAddr module_base, const Entry& entry) {
+    return Expected(module_base, entry) != nullptr;
+}
+
 Result ObserveEntry(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator& c, size_t capacity,
                     EntryObserver observer, u32 id) {
     using namespace Xbyak::util;
     Site site{};
     const Result result = Prepare(module_base, entry, c, capacity, site);
-    if (result != Result::Hooked && result != Result::Chained) {
+    if (!Hooked(result)) {
         return result;
     }
     const u8* stub = c.getCurr();
@@ -117,7 +124,7 @@ Result ObserveReturn(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator
     using namespace Xbyak::util;
     Site site{};
     const Result result = Prepare(module_base, entry, c, capacity, site);
-    if (result != Result::Hooked && result != Result::Chained) {
+    if (!Hooked(result)) {
         return result;
     }
     const u8* stub = c.getCurr();
@@ -196,11 +203,10 @@ Result Return(VAddr module_base, const Entry& entry) {
 }
 
 Result SetReturning(VAddr module_base, const Entry& entry, bool returning) {
-    if (entry.address < CodeBase || entry.size == 0 ||
-        entry.address - CodeBase + entry.size > MemoryPatcher::g_eboot_image_size) {
+    u8* const site = At(module_base, entry);
+    if (site == nullptr || entry.size == 0) {
         return Result::Mismatch;
     }
-    u8* const site = reinterpret_cast<u8*>(module_base + entry.address - CodeBase);
     if ((site[0] != entry.bytes[0] && site[0] != ReturnOpcode) ||
         std::memcmp(site + 1, entry.bytes.data() + 1, entry.size - 1) != 0) {
         return Result::Mismatch;

@@ -14,8 +14,6 @@ namespace Gr2Port::FieldOfView {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // FUN_015d7100, the camera manager's frame in r15: after FUN_015edda0 blends the cameras into the
 // output at +0x1d0, mov eax, [r15 + 0x1d0]; mov [r14], eax keeps its field of view at +0x20, where
 // the next frame's blend starts. eax, r14, xmm0 and the flags are written before they are read.
@@ -57,7 +55,9 @@ static_assert(std::atomic_ref<float>::is_always_lock_free);
 
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     using namespace Xbyak::util;
-    const auto game = [module_base](VAddr address) { return module_base + address - GoldHenBase; };
+    const auto game = [module_base](VAddr address) {
+        return module_base + address - Hooks::CodeBase;
+    };
     if (capacity - c.getSize() < StubBytes) {
         LOG_ERROR(Render_Vulkan, "GR2port: no room for the hook of the field of view");
         return false;

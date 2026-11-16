@@ -17,8 +17,6 @@ namespace Gr2Port::MouseCamera {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // bool FUN_0155be10(float weight, state, float4* orientation, const float4* frame, up, out): the
 // orientation and frame are quaternions (x, y, z, w); it returns whether the stick turned it.
 constexpr Hooks::Entry Turn{0x155be10, 6, Hooks::FramePrologue};
@@ -101,8 +99,7 @@ Quaternion AboutAxis(float x, float y, float z, float angle) {
 template <typename T>
 T Read(VAddr address) {
     T value;
-    std::memcpy(&value, reinterpret_cast<const void*>(g_base + address - GoldHenBase),
-                sizeof(value));
+    std::memcpy(&value, Hooks::Code(g_base, address), sizeof(value));
     return value;
 }
 
@@ -165,8 +162,8 @@ bool TurnByMouse(VAddr orientation, const Quaternion& frame, const Speeds& speed
 
 bool PS4_SYSV_ABI OnTurn(float weight, u64 state, u64 orientation, u64 frame, u64 up, u64 out) {
     const VAddr caller = reinterpret_cast<VAddr>(__builtin_return_address(0));
-    const bool shifting = caller >= g_base + ShiftCameraStart - GoldHenBase &&
-                          caller < g_base + ShiftCameraEnd - GoldHenBase;
+    const bool shifting = caller >= g_base + ShiftCameraStart - Hooks::CodeBase &&
+                          caller < g_base + ShiftCameraEnd - Hooks::CodeBase;
     const bool turned = g_turn(weight, state, orientation, frame, up, out);
     Quaternion base;
     std::memcpy(&base, reinterpret_cast<const void*>(frame), sizeof(base));
@@ -195,7 +192,7 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     g_turn = reinterpret_cast<TurnFunction>(const_cast<void*>(original));
     const Hooks::Result follow =
         Hooks::ObserveEntry(module_base, Follow, c, capacity, &OnFollow, 0);
-    if (follow != Hooks::Result::Hooked && follow != Hooks::Result::Chained) {
+    if (!Hooks::Hooked(follow)) {
         LOG_ERROR(Render_Vulkan, "GR2port: the camera on foot is not the expected code");
     }
     LOG_INFO(Render_Vulkan, "GR2port: the mouse turns the camera");

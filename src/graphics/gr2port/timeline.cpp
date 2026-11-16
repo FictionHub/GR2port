@@ -17,8 +17,6 @@ namespace Gr2Port::Timeline {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // The timeline player, FUN_010f7320(node).
 constexpr Hooks::Entry Player{0x10f7320, 6, Hooks::FramePrologue};
 
@@ -127,7 +125,7 @@ T Read(u64 address) {
 }
 
 u8* Code(VAddr address) {
-    return reinterpret_cast<u8*>(g_base + address - GoldHenBase);
+    return reinterpret_cast<u8*>(g_base + address - Hooks::CodeBase);
 }
 
 template <size_t N>
@@ -149,12 +147,12 @@ bool Playing() {
 
 // The part of a frame since the node's count last moved.
 float Fraction() {
-    const float remainder = Read<float>(g_base + Remainder - GoldHenBase);
+    const float remainder = Read<float>(g_base + Remainder - Hooks::CodeBase);
     return remainder > 0.0f ? std::min(remainder, 0.999f) : 0.0f;
 }
 
 u32 CurrentFrame() {
-    return Read<u32>(g_base + GameFrame - GoldHenBase);
+    return Read<u32>(g_base + GameFrame - Hooks::CodeBase);
 }
 
 void PS4_SYSV_ABI OnPlayer(u32, const Hooks::Registers* registers, u64) {
@@ -232,7 +230,7 @@ bool Unset(const u8* camera) {
 }
 
 void PS4_SYSV_ABI OnApply(u64 node, u64 data) {
-    if (Read<u64>(g_base + ActiveNode - GoldHenBase) != node || data == 0) {
+    if (Read<u64>(g_base + ActiveNode - Hooks::CodeBase) != node || data == 0) {
         g_apply(node, data);
         return;
     }
@@ -308,10 +306,6 @@ const void* ClipStub(Xbyak::CodeGenerator& c, const Xbyak::Address& frame_in_cli
     return stub;
 }
 
-bool Hooked(Hooks::Result result) {
-    return result == Hooks::Result::Hooked || result == Hooks::Result::Chained;
-}
-
 bool InstallSampling(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     using namespace Xbyak::util;
     if (!Holds(StepCall, StepCallBytes) || !Holds(StepCave, StepCaveBytes) ||
@@ -322,7 +316,7 @@ bool InstallSampling(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity
     }
     for (const Hooks::Entry& entry :
          {Stepped, Gate, ActorClip, CameraClip, ActorRoot, ActorProperties, ActorSpin}) {
-        if (std::memcmp(Code(entry.address), entry.bytes.data(), entry.size) != 0) {
+        if (!Hooks::Holds(module_base, entry)) {
             LOG_ERROR(Render_Vulkan, "GR2port: the timeline player is not the expected code");
             return false;
         }
@@ -333,7 +327,7 @@ bool InstallSampling(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity
         return false;
     }
     const void* original = nullptr;
-    if (!Hooked(Hooks::ObserveEntry(module_base, Player, c, capacity, &OnPlayer, 0)) ||
+    if (!Hooks::Hooked(Hooks::ObserveEntry(module_base, Player, c, capacity, &OnPlayer, 0)) ||
         Hooks::Replace(module_base, Curves, c, capacity, reinterpret_cast<const void*>(&OnCurves),
                        &original) != Hooks::Result::Hooked) {
         LOG_ERROR(Render_Vulkan, "GR2port: the timeline player is not the expected code");

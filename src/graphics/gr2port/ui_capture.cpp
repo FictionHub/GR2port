@@ -17,6 +17,7 @@
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/capture_math.h"
+#include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/ui_capture.h"
 
@@ -26,8 +27,6 @@ namespace {
 
 using Capture::Load;
 
-// The executable's addresses are GoldHEN's, which assume this base.
-constexpr VAddr GoldHenBase = 0x400000;
 // The draw thread's contexts and the indices of the frame's and the last frame's. A context begins
 // with its command stream: its first word, its end and where the next command goes.
 constexpr VAddr Contexts = 0x1f315d8;
@@ -324,7 +323,7 @@ u32 ObjectTarget(VAddr object) {
 
 // The target of the photo the frame drew, plus one, or 0.
 u32 PhotoTarget(const Scene::UiHeader& ui) {
-    const VAddr manager = Load<VAddr>(g_base + PhotoManager - GoldHenBase);
+    const VAddr manager = Load<VAddr>(g_base + PhotoManager - Hooks::CodeBase);
     if (manager == 0) {
         return 0;
     }
@@ -839,8 +838,8 @@ void SetScrollBar(const ScrollBar& bar) {
 }
 
 void OnFrameGraphEnd() {
-    const u32 index = Load<u32>(g_base + ContextIndex - GoldHenBase);
-    g_context = g_base + Contexts - GoldHenBase + u64{index} * ContextBytes;
+    const u32 index = Load<u32>(g_base + ContextIndex - Hooks::CodeBase);
+    g_context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
     g_start = Load<VAddr>(g_context + StreamNext);
     // The state the screen drawing does not send again.
     const auto viewport = Load<std::array<s32, 4>>(g_context + ContextViewport);
@@ -952,8 +951,8 @@ void MarkTargets(Scene::Header& header) {
 
 void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     const auto start = std::chrono::steady_clock::now();
-    const u32 index = Load<u32>(g_base + PreviousContextIndex - GoldHenBase);
-    const VAddr context = g_base + Contexts - GoldHenBase + u64{index} * ContextBytes;
+    const u32 index = Load<u32>(g_base + PreviousContextIndex - Hooks::CodeBase);
+    const VAddr context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
     const VAddr begin = Load<VAddr>(context + StreamBegin);
     const VAddr end = Load<VAddr>(context + StreamEnd);
     const VAddr next = Load<VAddr>(context + StreamNext);
@@ -963,7 +962,7 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
 
     Scene::UiHeader& ui = header.ui;
     const u32 picture =
-        ObjectTarget(g_base + BackBuffers - GoldHenBase + u64{index} * BackBufferBytes);
+        ObjectTarget(g_base + BackBuffers - Hooks::CodeBase + u64{index} * BackBufferBytes);
     ui.picture = picture == Scene::MaxUiTargets ? 0 : picture;
     const u32 world_target = world != 0 ? ObjectTarget(world) : ui.picture;
     ui.world = world_target == Scene::MaxUiTargets ? ui.picture : world_target;

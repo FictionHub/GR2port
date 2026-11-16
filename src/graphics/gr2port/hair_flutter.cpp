@@ -12,8 +12,6 @@ namespace Gr2Port::HairFlutter {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // The game step's time in seconds, a float.
 constexpr VAddr StepTime = 0x1efb104;
 
@@ -38,9 +36,7 @@ constexpr size_t StubBytes = 96;
 
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     using namespace Xbyak::util;
-    const auto code = [module_base](VAddr address) {
-        return reinterpret_cast<const u8*>(module_base + address - GoldHenBase);
-    };
+    const auto code = [module_base](VAddr address) { return Hooks::Code(module_base, address); };
     if (capacity - c.getSize() < StubBytes) {
         LOG_ERROR(Render_Vulkan, "GR2port: no room for the hair's hook");
         return false;

@@ -20,6 +20,14 @@ class CodeGenerator;
 // of its buffer, which a rel32 jump from the executable reaches.
 namespace Gr2Port::Hooks {
 
+/// GoldHEN patch addresses put the executable's first byte at this address.
+inline constexpr VAddr CodeBase = 0x400000;
+
+/// The executable's bytes at a GoldHEN address, with the executable loaded at module_base.
+inline const u8* Code(VAddr module_base, VAddr address) {
+    return reinterpret_cast<const u8*>(module_base + address - CodeBase);
+}
+
 /// A function entry: its GoldHEN address and the instructions that cover its first 5 bytes,
 /// which address nothing relative to rip.
 struct Entry {
@@ -76,6 +84,14 @@ enum class Result {
     Mismatch,
     NoRoom,
 };
+
+/// Whether a hook went in, on its own or ahead of an earlier one.
+inline bool Hooked(Result result) {
+    return result == Result::Hooked || result == Result::Chained;
+}
+
+/// Whether the function at entry holds the instructions the entry expects.
+bool Holds(VAddr module_base, const Entry& entry);
 
 /// Calls observer(id, ...) at each call of the function at entry, before it runs. The observer
 /// sees every general register as the caller left it.

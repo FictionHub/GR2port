@@ -1685,10 +1685,7 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         Hooks::ObserveEntry(module_base, Destroy, c, capacity, &OnDestroy, 0);
     const Hooks::Result text =
         Hooks::ObserveReturn(module_base, TextJob, c, capacity, &OnTextJob, 0);
-    const auto ok = [](Hooks::Result r) {
-        return r == Hooks::Result::Hooked || r == Hooks::Result::Chained;
-    };
-    if (!ok(init) || !ok(destroy) || !ok(text)) {
+    if (!Hooks::Hooked(init) || !Hooks::Hooked(destroy) || !Hooks::Hooked(text)) {
         LOG_ERROR(Render_Vulkan, "GR2port: the texture init, the texture destroy or the text job "
                                  "is not the expected code");
         return false;

@@ -16,8 +16,6 @@ namespace Gr2Port::ComicCamera {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // The game step's time in seconds, a float.
 constexpr VAddr StepTime = 0x1efb104;
 
@@ -58,8 +56,7 @@ VAddr g_module_base = 0;
 // The game step's time in 30 fps frames, between ShortestStep and 1.
 float StepFrames() {
     float step;
-    std::memcpy(&step, reinterpret_cast<const void*>(g_module_base + StepTime - GoldHenBase),
-                sizeof(step));
+    std::memcpy(&step, Hooks::Code(g_module_base, StepTime), sizeof(step));
     const float frames = step * GameRate;
     return frames >= 1.0f ? 1.0f : frames > ShortestStep ? frames : ShortestStep;
 }
@@ -119,9 +116,7 @@ const void* FractionStub(Xbyak::CodeGenerator& c, const Xbyak::Xmm& from, const 
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     using namespace Xbyak::util;
     g_module_base = module_base;
-    const auto code = [module_base](VAddr address) {
-        return reinterpret_cast<const u8*>(module_base + address - GoldHenBase);
-    };
+    const auto code = [module_base](VAddr address) { return Hooks::Code(module_base, address); };
     if (capacity - c.getSize() < StubBytes) {
         LOG_ERROR(Render_Vulkan, "GR2port: no room for the comic camera's hooks");
         return false;

@@ -13,8 +13,6 @@ namespace Gr2Port::MotionEnds {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // FUN_008f6430, for each motion of a layer: mov edx, [rcx + 0x3c] loads how many more times the
 // motion plays, 0 for once, and add eax, r15d adds the layer's step in ticks to the playhead in
 // eax. esi holds the motion's length in ticks, at least 1. The game writes r13d, xmm5 and xmm7
@@ -73,7 +71,7 @@ T Load(u64 address) {
 // The layer at index of Kat's motion player, or 0 when player is another one or has no such
 // layer.
 u64 KatLayer(u64 player, u32 index) {
-    const u64 puppet = Load<u64>(g_module_base + Puppet - GoldHenBase);
+    const u64 puppet = Load<u64>(g_module_base + Puppet - Hooks::CodeBase);
     if (puppet == 0 || Load<u64>(puppet + PuppetMotions) + MotionsPlayer != player) {
         return 0;
     }
@@ -117,9 +115,7 @@ u64 PS4_SYSV_ABI OnPlay(float blend, u64 player, u64 layer, u64 motion, u64 repe
 
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     using namespace Xbyak::util;
-    const auto code = [module_base](VAddr address) {
-        return reinterpret_cast<const u8*>(module_base + address - GoldHenBase);
-    };
+    const auto code = [module_base](VAddr address) { return Hooks::Code(module_base, address); };
     if (capacity - c.getSize() < StubBytes) {
         LOG_ERROR(Render_Vulkan, "GR2port: no room for the hook of the motions' ends");
         return false;

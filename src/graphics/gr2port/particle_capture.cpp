@@ -15,6 +15,7 @@
 #include "common/logging/log.h"
 #include "common/memory_patcher.h"
 #include "graphics/gr2port/capture_math.h"
+#include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/particle_capture.h"
 #include "graphics/gr2port/particles.h"
@@ -295,7 +296,7 @@ constexpr u64 LibraryDescriptions = 0x30a8;
 constexpr u64 LibraryMaterials = 0x30e0;
 constexpr u64 LibraryCurves = 0x31d8;
 // Where __GLOBAL_CB__ of the game's move program lies, relative to the executable's start.
-constexpr u64 NoiseTables = 0x1c7915c - 0x400000;
+constexpr u64 NoiseTables = 0x1c7915c - Hooks::CodeBase;
 
 // The sampled meshes the log names, from the first on.
 constexpr u32 LoggedSamples = 32;

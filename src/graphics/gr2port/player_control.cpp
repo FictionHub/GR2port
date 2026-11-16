@@ -14,8 +14,6 @@ namespace Gr2Port::PlayerControl {
 
 namespace {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // void FUN_008f6430(controls, ...): the player's controls, once a frame.
 constexpr Hooks::Entry Controls{0x8f6430, 6, Hooks::FramePrologue};
 
@@ -29,7 +27,7 @@ VAddr g_base = 0;
 std::atomic<u32> g_kept_type{0};
 
 void PS4_SYSV_ABI OnControls(u32, const Hooks::Registers* registers, u64) {
-    const u32 type = *reinterpret_cast<const u32*>(g_base + ControlType - GoldHenBase);
+    const u32 type = *reinterpret_cast<const u32*>(g_base + ControlType - Hooks::CodeBase);
     const u32 style = *reinterpret_cast<const u32*>(registers->rdi + StyleOffset);
     if (type >= Input::GameFunctions::TypeCount || style > 2) {
         return;
@@ -51,7 +49,7 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     Input::GameFunctions::SetControlType(type);
     const Hooks::Result result =
         Hooks::ObserveEntry(module_base, Controls, c, capacity, &OnControls, 0);
-    if (result != Hooks::Result::Hooked && result != Hooks::Result::Chained) {
+    if (!Hooks::Hooked(result)) {
         LOG_ERROR(Render_Vulkan, "GR2port: the player's controls are not the expected code");
         return false;
     }

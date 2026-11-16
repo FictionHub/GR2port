@@ -117,7 +117,7 @@ void Install(VAddr module_base) {
     Xbyak::CodeGenerator c(StubAreaSize, area);
     const Hooks::Result frame =
         Hooks::ObserveEntry(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraph, 0);
-    if (frame != Hooks::Result::Hooked && frame != Hooks::Result::Chained) {
+    if (!Hooks::Hooked(frame)) {
         LOG_ERROR(Render_Vulkan, "GR2port: the frame graph's entry is not the expected code");
         return;
     }

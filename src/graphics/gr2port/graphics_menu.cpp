@@ -1322,13 +1322,6 @@ void PS4_SYSV_ABI OnEndSystem(u64 system) {
     g_end_system(system);
 }
 
-// Whether the entry holds the instructions it expects. With room in the stub area for each, the
-// hooks go in all together or not at all.
-bool Holds(VAddr module_base, const Hooks::Entry& entry) {
-    const VAddr site = module_base + entry.address - GoldHenBase;
-    return std::memcmp(reinterpret_cast<const void*>(site), entry.bytes.data(), entry.size) == 0;
-}
-
 template <typename Function>
 bool Replace(VAddr module_base, const Hooks::Entry& entry, Xbyak::CodeGenerator& c, size_t capacity,
              Function target, Function& original) {
@@ -1347,10 +1340,12 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     SetBase(module_base);
     g_started = Settings::Get();
     g_plate_scale = static_cast<float>(CanvasWidth) / CanvasHeight / GamePatches::AspectRatio();
+    // With room in the stub area for each and every entry as expected, the hooks go in all
+    // together or not at all.
     const std::array entries{PlaceRows, SystemFrame, SlideRows, EndSystem};
     if (capacity - c.getSize() < entries.size() * Hooks::MaxStubBytes ||
         !std::ranges::all_of(
-            entries, [&](const Hooks::Entry& entry) { return Holds(module_base, entry); }) ||
+            entries, [&](const Hooks::Entry& entry) { return Hooks::Holds(module_base, entry); }) ||
         !Replace(module_base, PlaceRows, c, capacity, &OnPlaceRows, g_place_rows) ||
         !Replace(module_base, SystemFrame, c, capacity, &OnSystemFrame, g_system_frame) ||
         !Replace(module_base, SlideRows, c, capacity, &OnSlideRows, g_slide_rows) ||

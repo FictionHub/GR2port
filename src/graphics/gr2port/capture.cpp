@@ -21,6 +21,7 @@
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/deformers.h"
 #include "graphics/gr2port/frame_stats.h"
+#include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/particle_capture.h"
 #include "graphics/gr2port/scene.h"
@@ -498,7 +499,7 @@ constexpr u64 VisionUpdates = 0x30;
 constexpr u64 PlayerUpdate = 0xa8;
 using PlayerUpdateFunction = u8 PS4_SYSV_ABI (*)(VAddr player);
 // The overlay's scroll per unit of time, x then y, DAT_01f0c700.
-constexpr u64 VisionScroll = 0x1f0c700 - 0x400000;
+constexpr u64 VisionScroll = 0x1f0c700 - Hooks::CodeBase;
 // The vertex program flips the texture's v.
 constexpr std::array<float, 4> VisionTexcoord{0.0f, 1.0f, 1.0f, -1.0f};
 // A texture object's memory, width and height, and T#; the word at +0x3c, the T#'s fourth, is
@@ -710,10 +711,10 @@ constexpr u32 BranchVertexBytes = 16;
 constexpr u32 BranchStateBytes = 12;
 constexpr u32 BranchGroupSize = 64;
 // The literal operands of the Branch kernel's program at 0x1c1a8d0, as in Scene::BranchTiming.
-constexpr u64 BranchSteadyPhase = 0x1c1b134 - 0x400000;
-constexpr u64 BranchShakenPhase = 0x1c1b15c - 0x400000;
-constexpr u64 BranchStartPhase = 0x1c1b1a0 - 0x400000;
-constexpr u64 BranchShakeFrames = 0x1c1b1a8 - 0x400000;
+constexpr u64 BranchSteadyPhase = 0x1c1b134 - Hooks::CodeBase;
+constexpr u64 BranchShakenPhase = 0x1c1b15c - Hooks::CodeBase;
+constexpr u64 BranchStartPhase = 0x1c1b1a0 - Hooks::CodeBase;
+constexpr u64 BranchShakeFrames = 0x1c1b1a8 - Hooks::CodeBase;
 constexpr u32 PositionHalfFloat = 7;
 // A branch ribbon item: the texture, hull and domain constants as a leaf item's. Its hull constants
 // start with its segments, its domain constants hold the eye +0x80, then the texture's range, the

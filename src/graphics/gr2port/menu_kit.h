@@ -16,8 +16,6 @@
 // pad input its menus read, its clips, text records, sounds and dialog.
 namespace Gr2Port::MenuKit {
 
-constexpr VAddr GoldHenBase = 0x400000;
-
 // The pause menu, which holds the input its pages read.
 constexpr VAddr PauseMenu = 0x1eee178;
 constexpr u64 PauseMenuInput = 0xd0;
