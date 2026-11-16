@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -74,7 +75,6 @@ using Libraries::Font::Internal::Param;
 
 constexpr u16 kTextSourceMagic = 0x0F04;
 constexpr u32 kWritingFormHorizontal = 0x10;
-constexpr u32 kWritingFormHorizontalRtl = 0x11;
 constexpr u32 kWritingFormHorizontalLtr = 0x12;
 constexpr u16 kFontStringMagic = 0x0F05;
 constexpr u16 kFontWritingMagic = 0x0F06;
@@ -4902,7 +4902,6 @@ s32 PS4_SYSV_ABI sceFontOpenFontSet(OrbisFontLib library, u32 fontSetType, u32 o
             st.system_font_id = *primary_entry;
             font_ids.push_back(st.system_font_id);
             LOG_INFO(Lib_Font, "OpenFontSet: stage=sysfonts_primary_opened");
-            u32 opened_fallbacks = 0;
             for (auto& fb : st.system_fallback_faces) {
                 if (!fb.ready || !fb.ft_face) {
                     continue;
@@ -4914,7 +4913,6 @@ s32 PS4_SYSV_ABI sceFontOpenFontSet(OrbisFontLib library, u32 fontSetType, u32 o
                 fb.font_id = *fb_entry;
                 font_ids.push_back(fb.font_id);
                 LOG_INFO(Lib_Font, "OpenFontSet: stage=sysfonts_fallback_opened");
-                ++opened_fallbacks;
             }
             LOG_INFO(Lib_Font, "OpenFontSet: stage=sysfonts_fallbacks_opened");
 

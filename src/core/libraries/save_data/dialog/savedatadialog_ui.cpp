@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <fmt/chrono.h>
@@ -286,8 +287,6 @@ SaveDialogState::ErrorCodeState::ErrorCodeState(const OrbisSaveDataDialogParam& 
 }
 SaveDialogState::ProgressBarState::ProgressBarState(const SaveDialogState& state,
                                                     const OrbisSaveDataDialogParam& param) {
-    static auto fw_ver = ElfInfo::Instance().FirmwareVer();
-
     this->progress = 0;
 
     auto& bar = *param.progressBarParam;

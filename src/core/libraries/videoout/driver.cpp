@@ -19,19 +19,6 @@ extern std::unique_ptr<Gr2Port::Presenter> presenter;
 
 namespace Libraries::VideoOut {
 
-constexpr static bool Is32BppPixelFormat(PixelFormat format) {
-    switch (format) {
-    case PixelFormat::A8R8G8B8Srgb:
-    case PixelFormat::A8B8G8R8Srgb:
-    case PixelFormat::A2R10G10B10:
-    case PixelFormat::A2R10G10B10Srgb:
-    case PixelFormat::A2R10G10B10Bt2020Pq:
-        return true;
-    default:
-        return false;
-    }
-}
-
 constexpr u32 PixelFormatBpp(PixelFormat pixel_format) {
     switch (pixel_format) {
     case PixelFormat::A16R16G16B16Float:

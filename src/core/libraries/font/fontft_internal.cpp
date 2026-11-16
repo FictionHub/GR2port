@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "core/libraries/font/fontft_internal.h"
@@ -562,60 +563,10 @@ static void ApplyGlyphSpecialCaseAdjust(int font_id, int glyph_index, int* inout
     }
 }
 
-static std::uintptr_t AcquireRendererSelectionLock(RendererOpaque* renderer) {
-    if (!renderer) {
-        return 0;
-    }
-
-    constexpr std::uintptr_t kLocked = std::numeric_limits<std::uintptr_t>::max();
-    for (;;) {
-        const std::uintptr_t cur = reinterpret_cast<std::uintptr_t>(renderer->selection);
-        if (cur != kLocked) {
-            std::atomic_ref<void*> ref(renderer->selection);
-            void* expected = reinterpret_cast<void*>(cur);
-            if (ref.compare_exchange_weak(expected, reinterpret_cast<void*>(kLocked),
-                                          std::memory_order_acq_rel)) {
-                return cur;
-            }
-        }
-        Libraries::Kernel::sceKernelUsleep(0x1e);
-    }
-}
-
-static std::uint64_t ResolveGposTagForCode(u32 codepoint) {
-    (void)codepoint;
-    return 0;
-}
-
-static float SysFontScaleFactor(u32 font_id) {
-    (void)font_id;
-    return 1.0f;
-}
-
-static float SysFontShiftValueF32(u32 font_id) {
-    (void)font_id;
-    return 0.0f;
-}
-
-static u8 SysFontHasAltFlag(u32 font_id) {
-    (void)font_id;
-    return 0;
-}
-
 const std::uint8_t* FindSysFontRangeRecord(u32 font_id, u32 codepoint) {
     (void)font_id;
     (void)codepoint;
     return nullptr;
-}
-
-static u32 ResolveSysFontMapping(const void* record, int table_id, u32 codepoint,
-                                 u32* out_codepoint) {
-    (void)record;
-    (void)table_id;
-    if (out_codepoint) {
-        *out_codepoint = codepoint;
-    }
-    return 0;
 }
 
 u32 ResolveSysFontCodepoint(const void* record, u64 code, u32 flags, u32* out_font_id) {
@@ -1653,56 +1604,11 @@ s32 GetCharGlyphMetrics(OrbisFontHandle fontHandle, u32 code, OrbisFontGlyphMetr
     return ORBIS_OK;
 }
 
-static StyleFrameScaleState ResolveStyleFrameScaleFromCachedStyle(const OrbisFontStyleFrame* style,
-                                                                  float base_scale_w,
-                                                                  float base_scale_h,
-                                                                  u32 base_dpi_x, u32 base_dpi_y) {
-    StyleFrameScaleState resolved{
-        .scale_w = base_scale_w,
-        .scale_h = base_scale_h,
-        .dpi_x = base_dpi_x,
-        .dpi_y = base_dpi_y,
-        .scale_overridden = false,
-        .dpi_overridden = false,
-    };
-    if (!style || style->magic != kStyleFrameMagic) {
-        return resolved;
-    }
-    if (style->hDpi != 0) {
-        resolved.dpi_x = style->hDpi;
-        resolved.dpi_overridden = true;
-    }
-    if (style->vDpi != 0) {
-        resolved.dpi_y = style->vDpi;
-        resolved.dpi_overridden = true;
-    }
-    if ((style->flags1 & kStyleFrameFlagScale) == 0) {
-        return resolved;
-    }
-    resolved.scale_overridden = true;
-
-    const bool unit_is_pixel = (style->scaleUnit == 0);
-    if (unit_is_pixel) {
-        resolved.scale_w = style->scalePixelW;
-        resolved.scale_h = style->scalePixelH;
-    } else {
-        const u32 dpi_x = style->hDpi;
-        const u32 dpi_y = style->vDpi;
-        resolved.scale_w = dpi_x ? PointsToPixels(style->scalePixelW, dpi_x) : style->scalePixelW;
-        resolved.scale_h = dpi_y ? PointsToPixels(style->scalePixelH, dpi_y) : style->scalePixelH;
-    }
-    return resolved;
-}
-
 namespace {
 
 static inline RenderSurfaceSystemUse* GetSurfaceSystemUse(
     Libraries::Font::OrbisFontRenderSurface* surf) {
     return surf ? reinterpret_cast<RenderSurfaceSystemUse*>(surf->reserved_q) : nullptr;
-}
-static inline const RenderSurfaceSystemUse* GetSurfaceSystemUse(
-    const Libraries::Font::OrbisFontRenderSurface* surf) {
-    return surf ? reinterpret_cast<const RenderSurfaceSystemUse*>(surf->reserved_q) : nullptr;
 }
 
 static const StyleStateBlock* ResolveSurfaceStyleState(
@@ -2597,63 +2503,6 @@ static bool ResolveSfntBaseOffset(const u8* data, std::size_t size, u32 subFontI
     }
     out_base = base;
     return true;
-}
-
-static bool FindSfntTable(const u8* data, std::size_t size, u32 base, u32 tag, u32& out_off,
-                          u32& out_len) {
-    out_off = 0;
-    out_len = 0;
-    if (!data || base > size || (size - base) < 0x0C) {
-        return false;
-    }
-
-    const u8* sfnt = data + base;
-    const std::size_t sfnt_size = size - base;
-
-    if (sfnt_size < sizeof(SfntOffsetTable)) {
-        return false;
-    }
-    const auto* offset_table = static_cast<const SfntOffsetTable*>(static_cast<const void*>(sfnt));
-    const u16 num_tables = offset_table->num_tables.value();
-    const std::size_t dir_off = sizeof(SfntOffsetTable);
-    const std::size_t record_size = sizeof(SfntTableRecord);
-    const std::size_t dir_size = dir_off + static_cast<std::size_t>(num_tables) * record_size;
-    if (dir_size > sfnt_size) {
-        return false;
-    }
-
-    for (u16 i = 0; i < num_tables; i++) {
-        const auto* rec = static_cast<const SfntTableRecord*>(
-            static_cast<const void*>(sfnt + dir_off + static_cast<std::size_t>(i) * record_size));
-        const u32 rec_tag = rec->tag.value();
-        if (rec_tag != tag) {
-            continue;
-        }
-        const u32 off = rec->offset.value();
-        const u32 len = rec->length.value();
-        if (off > sfnt_size || len > (sfnt_size - off)) {
-            return false;
-        }
-        out_off = base + off;
-        out_len = len;
-        return true;
-    }
-    return false;
-}
-
-static bool ReadUnitsPerEm(const u8* data, std::size_t size, u32 base, u16& out_units) {
-    out_units = 0;
-    u32 head_off = 0;
-    u32 head_len = 0;
-    if (!FindSfntTable(data, size, base, MakeTag('h', 'e', 'a', 'd'), head_off, head_len)) {
-        return false;
-    }
-    if (head_len < 0x14 || head_off + 0x14 > size) {
-        return false;
-    }
-    out_units =
-        static_cast<const BeU16*>(static_cast<const void*>(data + head_off + 0x12))->value();
-    return out_units != 0;
 }
 
 static std::mutex g_font_obj_sidecars_mutex;

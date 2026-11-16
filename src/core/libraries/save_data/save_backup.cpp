@@ -23,7 +23,6 @@
 #include "common/polyfill_thread.h"
 #include "common/thread.h"
 
-constexpr std::string_view sce_sys = "sce_sys";               // system folder inside save
 constexpr std::string_view backup_dir = "sce_backup";         // backup folder
 constexpr std::string_view backup_dir_tmp = "sce_backup_tmp"; // in-progress backup folder
 constexpr std::string_view backup_dir_old = "sce_backup_old"; // previous backup folder

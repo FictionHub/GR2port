@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "camera_helpers.h"
@@ -7,10 +8,6 @@ namespace Libraries::Camera {
 
 static inline u8 ClampU8(int v) {
     return static_cast<u8>(v < 0 ? 0 : (v > 255 ? 255 : v));
-}
-
-static inline u16 ClampU16(int v) {
-    return static_cast<u16>(v < 0 ? 0 : (v > 65535 ? 65535 : v));
 }
 
 static inline u8 RgbaToLuma(const u8* px) {

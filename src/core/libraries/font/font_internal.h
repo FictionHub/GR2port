@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -148,7 +149,6 @@ template <typename T>
 ParamRecord MakeParamRecord(std::string name, T&& value) {
     using Clean = std::remove_cvref_t<T>;
     if constexpr (is_change_tracked<Clean>::value) {
-        using ValueType = typename Clean::value_type;
         return ParamRecord{std::move(name), DescribeValue(value.before),
                            DescribeValue(value.after)};
     } else {

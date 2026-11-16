@@ -1,4 +1,5 @@
 //  SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 //  SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "frame_graph.h"
@@ -77,8 +78,6 @@ void FrameGraph::Draw() {
     if (Begin("Video debug info", &is_open)) {
         const auto& ctx = *GImGui;
         const auto& io = ctx.IO;
-        const auto& window = *ctx.CurrentWindow;
-        auto& draw_list = *window.DrawList;
 
         auto isSystemPaused = DebugState.IsGuestThreadsPaused();
 

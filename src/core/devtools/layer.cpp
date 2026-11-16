@@ -44,9 +44,6 @@ static Widget::ModuleList module_list;
 static Widget::GpuMemoryViewer gpu_memory;
 
 void L::DrawMenuBar() {
-    const auto& ctx = *GImGui;
-    const auto& io = ctx.IO;
-
     auto isSystemPaused = DebugState.IsGuestThreadsPaused();
 
     if (BeginMainMenuBar()) {

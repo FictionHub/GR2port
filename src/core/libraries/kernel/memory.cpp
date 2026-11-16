@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <bit>
@@ -624,7 +625,6 @@ s32 PS4_SYSV_ABI sceKernelMemoryPoolReserve(void* addr_in, u64 len, u64 alignmen
     }
 
     auto* memory = Core::Memory::Instance();
-    const VAddr in_addr = reinterpret_cast<VAddr>(addr_in);
     const auto map_flags = static_cast<Core::MemoryMapFlags>(flags);
     u64 map_alignment = alignment == 0 ? 2_MB : alignment;
 

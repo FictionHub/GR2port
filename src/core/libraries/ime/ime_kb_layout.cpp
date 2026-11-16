@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "core/libraries/ime/ime_kb_layout.h"
@@ -40,10 +41,6 @@ namespace {
 #define KEYHOTGLYPH(r, c, hotkey, glyph, action)                                                   \
     ImeKbKeySpec {                                                                                 \
         r, c, 1, 1, nullptr, hotkey, ImeKbKeyAction::action, ImeKbKeyGlyph::glyph                  \
-    }
-#define KEYSPANGLYPH(r, c, cs, rs, glyph, action)                                                  \
-    ImeKbKeySpec {                                                                                 \
-        r, c, cs, rs, nullptr, nullptr, ImeKbKeyAction::action, ImeKbKeyGlyph::glyph               \
     }
 #define KEYSPANHOTGLYPH(r, c, cs, rs, hotkey, glyph, action)                                       \
     ImeKbKeySpec {                                                                                 \
@@ -990,7 +987,6 @@ const ImeTopPanelLayoutConfig& GetDefaultTopPanelLayoutConfig() {
 #undef KEYSPANHOT
 #undef KEYGLYPH
 #undef KEYHOTGLYPH
-#undef KEYSPANGLYPH
 #undef KEYSPANHOTGLYPH
 
 } // namespace

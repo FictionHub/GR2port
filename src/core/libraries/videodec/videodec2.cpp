@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/alignment.h"
@@ -23,14 +24,6 @@ static u64 ComputeFrameSizeBytes(s32 width, s32 height) {
 
     const u64 pixels = (u64)aligned_width * (u64)aligned_height;
     return (pixels * 3) / 2;
-}
-
-static s32 ComputeDpbCount(const OrbisVideodec2DecoderConfigInfo& cfg) {
-    if (cfg.max_dpb_frame_count > 0) {
-        return cfg.max_dpb_frame_count;
-    }
-
-    return 8;
 }
 
 static void ComputeWorstCaseDimensions(const OrbisVideodec2DecoderConfigInfo& cfg, s32& out_width,

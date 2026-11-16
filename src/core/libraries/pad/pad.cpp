@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/elf_info.h"
@@ -580,7 +581,6 @@ int PS4_SYSV_ABI scePadSetLightBar(s32 handle, const OrbisPadLightBarParam* pPar
             return ORBIS_PAD_ERROR_INVALID_LIGHTBAR_SETTING;
         }
 
-        auto& controllers = *Common::Singleton<GameControllers>::Instance();
         controller.SetLightBarRGB(pParam->r, pParam->g, pParam->b);
         return ORBIS_OK;
     }

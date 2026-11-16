@@ -1,4 +1,5 @@
 //  SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 //  SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -75,7 +76,6 @@ private:
     u32 m_random_c{};
     u32 m_random_d{};
 
-    u8 m_figure_order = 0;
     std::queue<std::array<u8, 32>> m_figure_added_removed_responses;
 };
 
@@ -107,7 +107,6 @@ private:
 
     std::shared_ptr<DimensionsToypad> m_dimensions_toypad = std::make_shared<DimensionsToypad>();
 
-    std::array<u8, 9> m_endpoint_out_extra = {0x09, 0x21, 0x11, 0x01, 0x00, 0x01, 0x22, 0x1d, 0x00};
     std::vector<libusb_endpoint_descriptor> m_endpoint_descriptors = {
         {0x7, 0x5, 0x81, 0x3, 0x20, 0x1, 0x0, 0x0}, {0x7, 0x5, 0x1, 0x3, 0x20, 0x1, 0x0, 0x0}};
     std::vector<libusb_interface_descriptor> m_interface_descriptors = {

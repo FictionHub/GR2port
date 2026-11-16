@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
@@ -1041,25 +1042,6 @@ static Error SetupDialogState(OrbisImeDialogParam* param, OrbisImeParamExtended*
 
     LOG_INFO(Lib_ImeDialog, "sceImeDialogInit: successful, status now=Running");
     return Error::OK;
-}
-
-static Error InitDialogCommon(OrbisImeDialogParam* param, OrbisImeParamExtended* extended,
-                              bool internal) {
-    if (param == nullptr) {
-        LOG_ERROR(Lib_ImeDialog, "param is null");
-        return Error::INVALID_ADDRESS;
-    }
-    if (g_ime_dlg_client != nullptr || g_ime_dlg_status != OrbisImeDialogStatus::None) {
-        LOG_ERROR(Lib_ImeDialog, "busy (status={})", (u32)g_ime_dlg_status);
-        return Error::BUSY;
-    }
-
-    const Error vret = ValidateImeDialogParam(param, extended, internal);
-    if (vret != Error::OK) {
-        return vret;
-    }
-
-    return SetupDialogState(param, extended, internal);
 }
 
 Error PS4_SYSV_ABI sceImeDialogInit(OrbisImeDialogParam* param, OrbisImeParamExtended* extended) {

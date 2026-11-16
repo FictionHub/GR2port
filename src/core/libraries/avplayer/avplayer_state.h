@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -83,8 +84,6 @@ private:
     std::atomic<AvState> m_current_state;
     std::atomic<AvState> m_previous_state;
     std::atomic_bool m_eof_stop_event_sent{false};
-    u32 m_thread_priority;
-    u32 m_thread_affinity;
     std::atomic_uint32_t m_some_event_result{};
 
     std::shared_mutex m_source_mutex{};

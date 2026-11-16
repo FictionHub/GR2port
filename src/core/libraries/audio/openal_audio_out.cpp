@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -53,7 +54,6 @@ constexpr u64 TIMING_RESYNC_THRESHOLD_US = 100000; // Resync if >100ms behind
 
 // OpenAL constants
 constexpr ALsizei NUM_BUFFERS = 6;
-constexpr ALsizei BUFFER_QUEUE_THRESHOLD = 2; // Queue more buffers when below this
 
 // Channel positions
 enum ChannelPos : u8 {

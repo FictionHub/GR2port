@@ -25,7 +25,6 @@ MemoryManager::MemoryManager() {
 
     // Construct vma_map using the regions reserved by the address space
     auto regions = impl.GetUsableRegions();
-    u64 total_usable_space = 0;
     for (auto region : regions) {
         vma_map.emplace(region.lower(),
                         VirtualMemoryArea{region.lower(), region.upper() - region.lower()});
@@ -598,7 +597,7 @@ s32 MemoryManager::PoolCommit(VAddr virtual_addr, u64 size, MemoryProt prot, s32
         MergeAdjacent(new_vma.phys_areas, new_vma.phys_areas.find(current_addr - mapped_addr));
 
         // Perform an address space mapping for each physical area
-        void* out_addr = impl.Map(current_addr, size_to_map, new_dmem_area.base);
+        impl.Map(current_addr, size_to_map, new_dmem_area.base);
 
         // Tracy memory tracking breaks from merging memory areas. Disabled for now.
         // TRACK_ALLOC(out_addr, size_to_map, "VMEM");
@@ -642,7 +641,6 @@ MemoryManager::VMAHandle MemoryManager::CreateArea(VAddr virtual_addr, u64 size,
     // Create a memory area representing this mapping.
     const auto new_vma_handle = CarveVMA(virtual_addr, size);
     auto& new_vma = new_vma_handle->second;
-    const bool is_exec = True(prot & MemoryProt::CpuExec);
     if (True(prot & MemoryProt::CpuWrite)) {
         // On PS4, read is appended to write mappings.
         prot |= MemoryProt::CpuRead;
@@ -762,7 +760,7 @@ s32 MemoryManager::MapMemory(void** out_addr, VAddr virtual_addr, u64 size, Memo
             MergeAdjacent(new_vma.phys_areas, new_vma.phys_areas.find(current_addr - mapped_addr));
 
             // Perform an address space mapping for each physical area
-            void* out_addr = impl.Map(current_addr, size_to_map, new_fmem_area.base, is_exec);
+            impl.Map(current_addr, size_to_map, new_fmem_area.base, is_exec);
 
             // Tracy memory tracking breaks from merging memory areas. Disabled for now.
             // TRACK_ALLOC(out_addr, size_to_map, "VMEM");
@@ -1053,7 +1051,6 @@ u64 MemoryManager::UnmapBytesFromEntry(VAddr virtual_addr, VirtualMemoryArea vma
         return size_in_vma;
     }
 
-    VAddr current_addr = virtual_addr;
     if (vma_base.phys_areas.size() > 0) {
         u64 size_to_free = size_in_vma;
         auto phys_handle = std::prev(vma_base.phys_areas.upper_bound(start_in_vma));
@@ -1261,11 +1258,6 @@ s32 MemoryManager::Protect(VAddr addr, u64 size, MemoryProt prot) {
     if (addr + size > vend) {
         size = vend - addr;
     }
-
-    // Appropriately restrict flags.
-    constexpr static MemoryProt flag_mask =
-        MemoryProt::CpuReadWrite | MemoryProt::CpuExec | MemoryProt::GpuReadWrite;
-    MemoryProt valid_flags = prot & flag_mask;
 
     // Protect all VMAs between addr and addr + size.
     s64 protected_bytes = 0;

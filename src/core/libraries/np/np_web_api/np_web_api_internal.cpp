@@ -108,7 +108,6 @@ bool isContextBusy(OrbisNpWebApiContext* context) {
 
 bool areContextHandlesBusy(OrbisNpWebApiContext* context) {
     std::scoped_lock lk{context->contextLock};
-    bool is_busy = false;
     for (auto& handle : context->handles) {
         if (handle.second->userCount > 0) {
             return true;
@@ -353,7 +352,6 @@ bool isUserContextBusy(OrbisNpWebApiUserContext* userContext) {
 
 bool areUserContextRequestsBusy(OrbisNpWebApiUserContext* userContext) {
     std::scoped_lock lk{userContext->parentContext->contextLock};
-    bool is_busy = false;
     for (auto& request : userContext->requests) {
         request.second->userCount++;
         bool req_busy = isRequestBusy(request.second);
@@ -1218,7 +1216,6 @@ s32 deleteHandleInternal(OrbisNpWebApiContext* context, s32 handleId) {
     context->handles.erase(handleId);
 
     if (g_sdk_ver >= Common::ElfInfo::FW_300 && context->timerHandles.contains(handleId)) {
-        auto& timer_handle = context->timerHandles[handleId];
         context->timerHandles.erase(handleId);
     }
 

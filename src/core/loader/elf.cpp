@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <fmt/format.h>
@@ -10,29 +11,6 @@
 namespace Core::Loader {
 
 using namespace Common::FS;
-
-static std::string_view GetProgramTypeName(program_type_es type) {
-    switch (type) {
-    case PT_FAKE:
-        return "PT_FAKE";
-    case PT_NPDRM_EXEC:
-        return "PT_NPDRM_EXEC";
-    case PT_NPDRM_DYNLIB:
-        return "PT_NPDRM_DYNLIB";
-    case PT_SYSTEM_EXEC:
-        return "PT_SYSTEM_EXEC";
-    case PT_SYSTEM_DYNLIB:
-        return "PT_SYSTEM_DYNLIB";
-    case PT_HOST_KERNEL:
-        return "PT_HOST_KERNEL";
-    case PT_SECURE_MODULE:
-        return "PT_SECURE_MODULE";
-    case PT_SECURE_KERNEL:
-        return "PT_SECURE_KERNEL";
-    default:
-        return "INVALID";
-    }
-}
 
 static std::string_view GetIdentClassName(ident_class_es elf_class) {
     switch (elf_class) {

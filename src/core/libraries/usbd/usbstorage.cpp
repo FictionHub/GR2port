@@ -27,8 +27,6 @@ constexpr s32 ORBIS_AUTO_MOUNTER_ERROR_NOENT = static_cast<s32>(0x80f40004);
 constexpr s32 ORBIS_AUTO_MOUNTER_ERROR_NOTSUP = static_cast<s32>(0x80f40005);
 
 // Flags for OrbisUsbStorageDeviceInfo additional_features
-constexpr u64 ORBIS_USB_STORAGE_FEATURE_READ_ONLY = 1ull << 4;
-constexpr u64 ORBIS_USB_STORAGE_FEATURE_FAT = 1ull << 6;
 constexpr u64 ORBIS_USB_STORAGE_FEATURE_EXFAT = 1ull << 7;
 
 struct OrbisUsbStorageDeviceInfo {

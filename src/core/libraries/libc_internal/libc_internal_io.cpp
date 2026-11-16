@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <cstdarg>
@@ -106,7 +107,6 @@ OrbisFILE* PS4_SYSV_ABI internal__Foprep(const char* path, const char* mode, Orb
     // Parse inputted mode string
     const char* mode_str = mode;
     u16 calc_mode = 0;
-    u16 access_mode = 0;
     if (mode_str[0] == 'r') {
         calc_mode = 1 | file_mode;
     } else if (mode_str[0] == 'w') {

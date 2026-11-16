@@ -618,7 +618,6 @@ void Module::LoadSymbols() {
              sym++) {
             const u8 bind = sym->GetBind();
             const u8 type = sym->GetType();
-            const u8 visibility = sym->GetVisibility();
             const auto id = std::string(dynamic_info.str_table + sym->st_name);
             const auto ids = Common::SplitString(id, '#');
             if (ids.size() != 3) {

@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/alignment.h"
@@ -201,7 +202,6 @@ AjmJob AjmJobFromBatchBuffer(u32 instance_id, AjmBatchBuffer batch_buffer) {
     std::optional<AjmJobFlags> job_flags = {};
     std::optional<AjmChunkBuffer> input_control_buffer = {};
     std::optional<AjmChunkBuffer> output_control_buffer = {};
-    std::optional<AjmChunkBuffer> inline_buffer = {};
 
     AjmJob job;
     job.instance_id = instance_id;

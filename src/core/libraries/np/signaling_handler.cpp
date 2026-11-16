@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "core/libraries/np/signaling_handler.h"
@@ -34,9 +35,6 @@ constexpr auto kMatching2StepInterval = std::chrono::milliseconds(500);
 constexpr auto kMatching2Timeout = std::chrono::seconds(30);
 constexpr auto kMatching2EstablishDelay = std::chrono::milliseconds(1000);
 constexpr auto kStunPingInterval = std::chrono::seconds(5);
-constexpr s64 kHandshakeConnectTimeoutMs = 30'000;
-constexpr s64 kHandshakeRetransmitMs = 500;
-constexpr s64 kKeepaliveIntervalMs = 45'000;
 
 void HandleControlPacket(u32 from_addr, u16 from_port, const NpSignaling::SignalingControl& pkt);
 void HandleHandshakePacket(u32 from_addr, u16 from_port,
@@ -709,7 +707,6 @@ void CloseTransportAndDispatchDead(s32 transport_id, s32 sig_error_code, s32 mat
 }
 
 void EstablishConnection(s32 transport_id, bool peer_activated_hint) {
-    bool first_establish = false;
     NpSignaling::SignalingControl established_pkt{};
     bool send_established = false;
     u32 peer_addr = 0;
@@ -731,7 +728,6 @@ void EstablishConnection(s32 transport_id, bool peer_activated_hint) {
             SetTransportStateLocked(*transport, NpSignaling::ConnState::Established);
             transport->transport_established_fired = true;
             transport->last_peer_rx_us = NpSignaling::NowUs();
-            first_establish = true;
 
             if (transport->addr != 0 && transport->port != 0) {
                 established_pkt =

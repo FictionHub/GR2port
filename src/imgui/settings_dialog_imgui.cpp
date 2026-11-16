@@ -18,7 +18,6 @@
 
 CMRC_DECLARE(res);
 
-constexpr float gameImageSize = 200.f;
 constexpr float settingsIconSize = 125.f;
 
 namespace ImGuiEmuSettings {

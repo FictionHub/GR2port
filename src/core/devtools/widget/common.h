@@ -88,33 +88,6 @@ void DrawValueRowList(const char* text, V arg, Extra&&... extra_args) {
     }
 }
 
-template <typename... Args>
-static void DoTooltip(const char* str_id, Args&&... args) {
-    if (ImGui::BeginTooltip()) {
-        if (ImGui::BeginTable(str_id, 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            DrawMultipleRow(std::forward<Args>(args)...);
-            ImGui::EndTable();
-        }
-        ImGui::EndTooltip();
-    }
-}
-
-static bool IsDrawCall(AmdGpu::PM4ItOpcode opcode) {
-    using AmdGpu::PM4ItOpcode;
-    switch (opcode) {
-    case PM4ItOpcode::DrawIndex2:
-    case PM4ItOpcode::DrawIndexOffset2:
-    case PM4ItOpcode::DrawIndexAuto:
-    case PM4ItOpcode::DrawIndirect:
-    case PM4ItOpcode::DrawIndexIndirect:
-    case PM4ItOpcode::DispatchDirect:
-    case PM4ItOpcode::DispatchIndirect:
-        return true;
-    default:
-        return false;
-    }
-}
-
 inline std::optional<std::string> exec_cli(const char* cli) {
     std::array<char, 64> buffer{};
     std::string output;

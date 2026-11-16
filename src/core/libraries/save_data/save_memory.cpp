@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "save_memory.h"
@@ -26,7 +27,6 @@ namespace fs = std::filesystem;
 constexpr std::string_view sce_sys = "sce_sys"; // system folder inside save
 constexpr std::string_view StandardDirnameSaveDataMemory = "sce_sdmemory";
 constexpr std::string_view FilenameSaveDataMemory = "memory.dat";
-constexpr std::string_view IconName = "icon0.png";
 constexpr std::string_view CorruptFileName = "corrupted";
 
 namespace Libraries::SaveData::SaveMemory {

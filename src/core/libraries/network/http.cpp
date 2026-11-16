@@ -3701,7 +3701,6 @@ int PS4_SYSV_ABI sceHttpUriMerge(char* mergedUrl, char* url, char* relativeUri, 
     u64 relativeUriLength;
     u64 totalLength;
     u64 combinedLength;
-    int parseResult;
     u64 localSizeRelativeUri;
     u64 localSizeBaseUrl;
     OrbisHttpUriElement parsedUriElement;

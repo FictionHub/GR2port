@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/assert.h"
@@ -9,9 +10,6 @@
 #include "core/tls.h"
 
 namespace Libraries::Kernel {
-
-static constexpr size_t TlsTcbSize = 0x40;
-static constexpr size_t TlsTcbAlign = 0x20;
 
 static std::shared_mutex RtldLock;
 

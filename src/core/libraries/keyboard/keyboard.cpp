@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/logging/log.h"
@@ -86,7 +87,6 @@ s32 PS4_SYSV_ABI sceKeyboardReadState(s32 handle, OrbisKeyboardData* data) {
         data->nkeys = 0;
         return ORBIS_OK;
     }
-    static bool prev_state[SDL_SCANCODE_COUNT]{};
     s32 numkeys;
     auto buf = SDL_GetKeyboardState(&numkeys);
     int j = 0;

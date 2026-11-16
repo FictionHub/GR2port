@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <thread>
@@ -433,7 +434,6 @@ s32 PS4_SYSV_ABI posix_pthread_mutexattr_getprotocol(PthreadMutexAttrT* mattr,
 
 s32 PS4_SYSV_ABI posix_pthread_mutexattr_setpshared(PthreadMutexAttrT* attr, s32 pshared) {
     constexpr s32 POSIX_PTHREAD_PROCESS_PRIVATE = 0;
-    constexpr s32 POSIX_PTHREAD_PROCESS_SHARED = 1;
     if (!attr || !*attr || pshared != POSIX_PTHREAD_PROCESS_PRIVATE) {
         return POSIX_EINVAL;
     }

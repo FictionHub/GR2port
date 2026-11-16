@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <chrono>
@@ -93,7 +94,7 @@ int PS4_SYSV_ABI sceRtcConvertUtcToLocalTime(OrbisRtcTick* pTickUtc, OrbisRtcTic
         return ORBIS_RTC_ERROR_INVALID_POINTER;
 
     Kernel::OrbisKernelTimezone timeZone;
-    int returnValue = Kernel::sceKernelGettimezone(&timeZone);
+    Kernel::sceKernelGettimezone(&timeZone);
 
     sceRtcTickAddMinutes(pTickLocal, pTickUtc, timeZone.tz_minuteswest + timeZone.tz_dsttime);
 
@@ -435,8 +436,6 @@ int PS4_SYSV_ABI sceRtcGetCurrentClockLocalTime(OrbisRtcDateTime* pTime) {
     int returnValue = Kernel::sceKernelGettimezone(&timeZone);
 
     if (returnValue >= 0) {
-        Kernel::OrbisKernelTimespec clocktime;
-
         // calculate total timezone offset for converting UTC to local time
         int tzOffset = timeZone.tz_minuteswest + timeZone.tz_dsttime;
 

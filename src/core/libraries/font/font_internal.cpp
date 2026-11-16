@@ -473,33 +473,6 @@ static std::optional<std::filesystem::path> ResolveKnownSysFontAliasImpl(
     return std::nullopt;
 }
 
-static std::mutex g_sysfont_file_cache_mutex;
-static std::unordered_map<std::string, std::shared_ptr<std::vector<unsigned char>>>
-    g_sysfont_file_cache;
-
-static std::shared_ptr<std::vector<unsigned char>> GetCachedFontBytes(
-    const std::filesystem::path& host_path) {
-    const std::string key = host_path.string();
-    {
-        std::scoped_lock lock(g_sysfont_file_cache_mutex);
-        if (auto it = g_sysfont_file_cache.find(key); it != g_sysfont_file_cache.end()) {
-            return it->second;
-        }
-    }
-
-    std::vector<unsigned char> bytes;
-    if (!LoadGuestFileBytes(host_path, bytes) || bytes.empty()) {
-        return {};
-    }
-
-    auto shared = std::make_shared<std::vector<unsigned char>>(std::move(bytes));
-    {
-        std::scoped_lock lock(g_sysfont_file_cache_mutex);
-        g_sysfont_file_cache.emplace(key, shared);
-    }
-    return shared;
-}
-
 } // namespace
 
 std::optional<std::filesystem::path> ResolveKnownSysFontAlias(
@@ -602,7 +575,6 @@ bool BuildTrueOutline(GeneratedGlyph& gg) {
     }
 
     u32 resolved_code = gg.codepoint;
-    u32 resolved_font_id = 0;
     FT_Face resolved_face = primary_face;
     float resolved_scale_factor = 1.0f;
     float range_scale = 1.0f;
@@ -623,7 +595,6 @@ bool BuildTrueOutline(GeneratedGlyph& gg) {
             return false;
         }
 
-        resolved_font_id = mapped_font_id;
         if (!is_internal_fontset_record) {
             resolved_scale_factor = st->system_font_scale_factor;
         }

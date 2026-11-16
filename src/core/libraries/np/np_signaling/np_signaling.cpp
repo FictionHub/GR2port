@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <cstring>
@@ -133,7 +134,7 @@ s32 PS4_SYSV_ABI sceNpSignalingCreateContext(const void* npId, void* callback, v
         return ORBIS_NP_SIGNALING_ERROR_INVALID_ARGUMENT;
     }
 
-    const bool transport_ready = Transport::EnsureTransport();
+    Transport::EnsureTransport();
 
     s32 ctx_id = 0;
     {
@@ -195,7 +196,7 @@ s32 PS4_SYSV_ABI sceNpSignalingCreateContextA(s32 userId, void* callback, void* 
         return ORBIS_NP_ERROR_USER_NOT_FOUND;
     }
 
-    const bool transport_ready = Transport::EnsureTransport();
+    Transport::EnsureTransport();
 
     s32 ctx_id = 0;
     {

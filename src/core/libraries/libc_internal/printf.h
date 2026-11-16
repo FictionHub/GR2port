@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2014-2018 Marco Paland (info@paland.com)
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: MIT
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -727,29 +728,6 @@ static inline int _vsnprintf(out_fct_type out, char* buffer, const char* format,
 
     // return written chars without terminating \0
     return (int)idx;
-}
-
-static int printf_ctx(Common::VaCtx* ctx) {
-    const char* format = vaArgPtr<const char>(&ctx->va_list);
-    char buffer[256];
-    int result = _vsnprintf(_out_buffer, buffer, format, &ctx->va_list);
-    printf("%s", buffer);
-    return result;
-}
-
-static int fprintf_ctx(Common::VaCtx* ctx, char* buf) {
-    const char* format = vaArgPtr<const char>(&ctx->va_list);
-    char buffer[256];
-    int result = _vsnprintf(_out_buffer, buffer, format, &ctx->va_list);
-    std::strcpy(buf, buffer);
-    return result;
-}
-
-static int vsnprintf_ctx(char* s, size_t n, const char* format, Common::VaList* arg) {
-    std::vector<char> buffer(n);
-    int result = _vsnprintf(_out_buffer, buffer.data(), format, arg);
-    std::strcpy(s, buffer.data());
-    return result;
 }
 
 static int snprintf_ctx(char* s, size_t n, Common::VaCtx* ctx) {

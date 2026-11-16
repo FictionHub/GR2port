@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <shared_mutex>
@@ -35,10 +36,6 @@ static int GetPortId(s32 handle) {
     }
 
     return port_id;
-}
-
-static s32 GetPortType(s32 handle) {
-    return (handle >> 16) & 0xFF;
 }
 
 static int AllocatePort(OrbisAudioInType type) {

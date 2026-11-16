@@ -1,4 +1,5 @@
 //  SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 //  SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -65,7 +66,6 @@ private:
     static bool IsBlockNumberValid(u8 block);
 
     bool m_activated = true;
-    bool m_status_updated = false;
     u8 m_interrupt_counter = 0;
     SkylanderLEDColor m_color_right = {};
     SkylanderLEDColor m_color_left = {};

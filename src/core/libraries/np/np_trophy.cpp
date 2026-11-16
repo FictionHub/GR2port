@@ -534,7 +534,6 @@ int PS4_SYSV_ABI sceNpTrophyGetGameInfo(OrbisNpTrophyContext context, OrbisNpTro
     if (!ctx.registered)
         return ORBIS_NP_TROPHY_ERROR_NOT_REGISTERED;
     const auto& trophy_file = ctx.trophy_xml_path;
-    const auto& trophy_save_file = ctx.xml_save_file;
 
     pugi::xml_document doc;
     pugi::xml_parse_result result = doc.load_file(trophy_file.native().c_str());
@@ -1082,7 +1081,6 @@ int PS4_SYSV_ABI sceNpTrophyUnlockTrophy(OrbisNpTrophyContext context, OrbisNpTr
     const auto& ctx = contexts_internal[contextkey];
     if (!ctx.registered)
         return ORBIS_NP_TROPHY_ERROR_NOT_REGISTERED;
-    const auto& xml_dir = ctx.xml_dir;
     const auto& trophy_file = ctx.trophy_xml_path;
 
     pugi::xml_document save_doc;
