@@ -12,7 +12,7 @@
 #include "input/game_functions.h"
 #include "input/input_handler.h"
 #include "input/pad_bindings.h"
-#include "launcher/qt/input_config.h"
+#include "launcher/input_config.h"
 
 namespace Gr2Port::Launcher {
 

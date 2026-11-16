@@ -43,6 +43,7 @@
 #include "launcher/art.h"
 #include "launcher/avatar.h"
 #include "launcher/folder_picker.h"
+#include "launcher/input_config.h"
 #include "launcher/key_bindings.h"
 #include "launcher/setup_dialog.h"
 #include "launcher/trophy_viewer.h"
@@ -299,8 +300,6 @@ constexpr int SliderTop = 16;
 constexpr int SliderHeight = 26;
 constexpr int SliderOverhang = 6;
 constexpr int SliderValueWidth = 36;
-constexpr int DeadzoneLow = 1;
-constexpr int DeadzoneHigh = 127;
 
 struct Toggle {
     int id;
@@ -363,9 +362,6 @@ constexpr std::array Sticks{
            Slider{IdRightMaxLabel, IdRightMax, IdRightMaxValue, L"Max Deadzone (def:127 max:127)",
                   127, 348}}},
 };
-
-// The minimum and maximum deadzone of each stick.
-using Deadzones = std::array<std::array<int, 2>, Sticks.size()>;
 
 // The Mouse && Keyboard tab: each camera's mouse look speeds, in percent of the base speed.
 constexpr int SpeedLow = 10;
@@ -578,10 +574,6 @@ struct Modes {
     u32 current_height = 0;
     u32 current_rate = 0;
 };
-
-// The keys and the pad buttons that open the trophy list in the game, as an input config line's
-// inputs; empty for none.
-using TrophyListInputs = std::array<std::string, 2>;
 
 struct Dialog {
     const Art* art = nullptr;
@@ -979,149 +971,6 @@ void ToggleWholeRead(HWND window, Dialog& dialog) {
     UpdateWholeRead(window, dialog, false);
 }
 
-// A config line without its comment and spaces, as the input config parser reads it.
-std::string Compact(std::string_view line) {
-    std::string compact(line.substr(0, line.find('#')));
-    std::erase_if(compact, [](unsigned char c) { return std::isspace(c) != 0; });
-    return compact;
-}
-
-std::string DeadzonePrefix(const Stick& stick) {
-    return "analog_deadzone=" + std::string(stick.name) + ",";
-}
-
-// A stick without a deadzone line keeps the parser's 1 and 127.
-Deadzones ReadDeadzones(const std::filesystem::path& file) {
-    Deadzones deadzones;
-    deadzones.fill({DeadzoneLow, DeadzoneHigh});
-    std::ifstream in(file);
-    for (std::string line; std::getline(in, line);) {
-        const std::string compact = Compact(line);
-        for (size_t i = 0; i < Sticks.size(); ++i) {
-            const std::string prefix = DeadzonePrefix(Sticks[i]);
-            if (!compact.starts_with(prefix)) {
-                continue;
-            }
-            const char* const last = compact.data() + compact.size();
-            int low = 0;
-            int high = 0;
-            const auto [comma, low_error] =
-                std::from_chars(compact.data() + prefix.size(), last, low);
-            if (low_error != std::errc{} || comma == last || *comma != ',') {
-                continue;
-            }
-            const auto [end, high_error] = std::from_chars(comma + 1, last, high);
-            if (high_error == std::errc{} && end == last) {
-                deadzones[i] = {std::clamp(low, DeadzoneLow, DeadzoneHigh),
-                                std::clamp(high, DeadzoneLow, DeadzoneHigh)};
-            }
-        }
-    }
-    return deadzones;
-}
-
-// A line of the input config to write: the start of the line it replaces, as Compact gives it,
-// and the line.
-struct ConfigLine {
-    std::string prefix;
-    std::string line;
-};
-
-// Rewrites the input config's lines that start with each prefix and adds the missing ones at its
-// end.
-bool SaveConfigLines(const std::filesystem::path& file, const std::vector<ConfigLine>& changes) {
-    std::vector<std::string> lines;
-    {
-        std::ifstream in(file);
-        for (std::string line; std::getline(in, line);) {
-            lines.push_back(std::move(line));
-        }
-    }
-    std::vector<bool> written(changes.size());
-    for (std::string& line : lines) {
-        const std::string compact = Compact(line);
-        for (size_t i = 0; i < changes.size(); ++i) {
-            if (compact.starts_with(changes[i].prefix)) {
-                line = changes[i].line;
-                written[i] = true;
-            }
-        }
-    }
-    for (size_t i = 0; i < changes.size(); ++i) {
-        if (!written[i]) {
-            lines.push_back(changes[i].line);
-        }
-    }
-    std::ofstream out(file, std::ios::trunc);
-    for (const std::string& line : lines) {
-        out << line << '\n';
-    }
-    return !out.fail();
-}
-
-std::vector<ConfigLine> DeadzoneLines(const Deadzones& deadzones) {
-    std::vector<ConfigLine> lines;
-    for (size_t i = 0; i < Sticks.size(); ++i) {
-        lines.push_back(
-            {DeadzonePrefix(Sticks[i]), "analog_deadzone = " + std::string(Sticks[i].name) + ", " +
-                                            std::to_string(deadzones[i][0]) + ", " +
-                                            std::to_string(deadzones[i][1])});
-    }
-    return lines;
-}
-
-constexpr std::string_view TouchSwipePrefix = "touchpad_swipe_enabled=";
-
-// Whether the input config turns touch pad swipes on: its last touchpad_swipe_enabled line.
-bool ReadTouchSwipe(const std::filesystem::path& file) {
-    bool on = false;
-    std::ifstream in(file);
-    for (std::string line; std::getline(in, line);) {
-        const std::string compact = Compact(line);
-        if (compact.starts_with(TouchSwipePrefix)) {
-            const std::string_view value =
-                std::string_view{compact}.substr(TouchSwipePrefix.size());
-            on = value == "true" || value == "1";
-        }
-    }
-    return on;
-}
-
-// The global input config's trophy list hotkeys, by the order of TrophyListInputs.
-constexpr std::array<std::string_view, 2> TrophyListPrefixes{"hotkey_trophy_list=",
-                                                             "hotkey_trophy_list_pad="};
-
-// The inputs of the global input config's trophy list hotkeys: their last lines.
-TrophyListInputs ReadTrophyList(const std::filesystem::path& file) {
-    TrophyListInputs inputs;
-    std::ifstream in(file);
-    for (std::string line; std::getline(in, line);) {
-        const std::string compact = Compact(line);
-        for (size_t i = 0; i < inputs.size(); ++i) {
-            if (compact.starts_with(TrophyListPrefixes[i])) {
-                inputs[i] = compact.substr(TrophyListPrefixes[i].size());
-            }
-        }
-    }
-    for (std::string& input : inputs) {
-        if (input == "unmapped") {
-            input.clear();
-        }
-    }
-    return inputs;
-}
-
-std::vector<ConfigLine> TrophyListLines(const TrophyListInputs& inputs) {
-    std::vector<ConfigLine> lines;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        const std::string_view prefix = TrophyListPrefixes[i];
-        lines.push_back({std::string(prefix), std::string(prefix.substr(0, prefix.size() - 1)) +
-                                                  " = " +
-                                                  (inputs[i].empty() ? "unmapped" : inputs[i])});
-    }
-    return lines;
-}
-
 Deadzones DefaultDeadzones() {
     Deadzones deadzones{};
     for (size_t i = 0; i < Sticks.size(); ++i) {
@@ -1370,8 +1219,7 @@ void SaveController(HWND window, const Dialog& dialog) {
     }
     const bool touch_swipe = Checked(dialog, IdTouchSwipe);
     if (touch_swipe != dialog.touch_swipe) {
-        lines.push_back({std::string(TouchSwipePrefix), std::string("touchpad_swipe_enabled = ") +
-                                                            (touch_swipe ? "true" : "false")});
+        lines.push_back(TouchSwipeLine(touch_swipe));
     }
     if (!lines.empty() && !SaveConfigLines(dialog.input_config, lines)) {
         Tell(window, L"The input config could not be saved.", L"Controller",

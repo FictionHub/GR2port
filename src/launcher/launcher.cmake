@@ -11,6 +11,8 @@ if (WIN32)
         ${CMAKE_CURRENT_LIST_DIR}/driver_notice.h
         ${CMAKE_CURRENT_LIST_DIR}/folder_picker.cpp
         ${CMAKE_CURRENT_LIST_DIR}/folder_picker.h
+        ${CMAKE_CURRENT_LIST_DIR}/input_config.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/input_config.h
         ${CMAKE_CURRENT_LIST_DIR}/key_bindings.cpp
         ${CMAKE_CURRENT_LIST_DIR}/key_bindings.h
         ${CMAKE_CURRENT_LIST_DIR}/launcher.cpp
@@ -43,6 +45,8 @@ elseif (UNIX AND NOT APPLE)
     # The same launcher with Qt's widgets. Its classes need no moc.
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
     target_sources(gr2port PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/input_config.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/input_config.h
         ${CMAKE_CURRENT_LIST_DIR}/launcher.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/art.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/art.h
@@ -50,8 +54,6 @@ elseif (UNIX AND NOT APPLE)
         ${CMAKE_CURRENT_LIST_DIR}/qt/avatar.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/displays.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/displays.h
-        ${CMAKE_CURRENT_LIST_DIR}/qt/input_config.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/qt/input_config.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/key_bindings.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/key_bindings.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/launcher.cpp

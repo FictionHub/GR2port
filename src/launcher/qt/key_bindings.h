@@ -8,7 +8,7 @@
 #include <string_view>
 
 #include "common/types.h"
-#include "launcher/qt/input_config.h"
+#include "launcher/input_config.h"
 
 class QString;
 class QWidget;
