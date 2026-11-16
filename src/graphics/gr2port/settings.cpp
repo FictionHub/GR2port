@@ -126,6 +126,7 @@ void ReadGraphics(const json& section, Graphics& graphics) {
     graphics.fog_shadows = ReadBool(section, "fog_shadows", graphics.fog_shadows);
     graphics.half_resolution_particles =
         ReadBool(section, "half_resolution_particles", graphics.half_resolution_particles);
+    graphics.smoke_and_dust = ReadBool(section, "smoke_and_dust", graphics.smoke_and_dust);
     const u32 anisotropy =
         ReadU32(section, "anisotropic_filtering", graphics.anisotropic_filtering);
     if (anisotropy == 0 || anisotropy == 2 || anisotropy == 4 || anisotropy == 8 ||
@@ -266,6 +267,7 @@ json ToJson(const Values& values) {
         {"glass_refraction", values.graphics.glass_refraction},
         {"fog_shadows", values.graphics.fog_shadows},
         {"half_resolution_particles", values.graphics.half_resolution_particles},
+        {"smoke_and_dust", values.graphics.smoke_and_dust},
         {"anisotropic_filtering", values.graphics.anisotropic_filtering},
         {"far_environment_detail", values.graphics.far_environment_detail},
         {"near_environment_detail", values.graphics.near_environment_detail},
@@ -332,6 +334,7 @@ Graphics FromPreset(const Preset& preset) {
         .glass_refraction = preset.glass_refraction,
         .fog_shadows = preset.fog_shadows,
         .half_resolution_particles = preset.half_resolution_particles,
+        .smoke_and_dust = preset.smoke_and_dust,
         .anisotropic_filtering = preset.anisotropic_filtering,
     };
 }
@@ -348,6 +351,7 @@ std::string_view MatchPreset(const Game& game, const Graphics& graphics) {
             passes.glass_refraction == graphics.glass_refraction &&
             passes.fog_shadows == graphics.fog_shadows &&
             passes.half_resolution_particles == graphics.half_resolution_particles &&
+            passes.smoke_and_dust == graphics.smoke_and_dust &&
             passes.anisotropic_filtering == graphics.anisotropic_filtering &&
             passes.far_environment_detail == graphics.far_environment_detail &&
             passes.near_environment_detail == graphics.near_environment_detail &&

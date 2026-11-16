@@ -290,13 +290,13 @@ constexpr std::array<std::string_view, 4> UpscalerChoices{"Off", "FSR 3.1", "FSR
 constexpr std::array<std::string_view, 5> UpscaleQualityChoices{"Native AA", "Quality", "Balanced",
                                                                 "Performance", "Ultra Performance"};
 
-// The Graphics tab: the preset across the top, each pass's choice in two columns of rows 28
+// The Graphics tab: the preset across the top, each pass's choice in two columns of rows 26
 // pixels apart, then the note. Quality choices are in the order of Settings::Quality; switches
 // put On first.
 constexpr int PresetTop = 88;
 constexpr int PassTop = 118;
-constexpr int PassStep = 28;
-constexpr int GraphicsNoteTop = 348;
+constexpr int PassStep = 26;
+constexpr int GraphicsNoteTop = 352;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
 // driver's budget, as Auto does.
 constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
@@ -440,6 +440,7 @@ struct Dialog {
     QComboBox* decals = nullptr;
     QComboBox* glass_refraction = nullptr;
     QComboBox* particles = nullptr;
+    QComboBox* smoke = nullptr;
     QComboBox* anisotropy = nullptr;
     QComboBox* texture_streaming_list = nullptr;
     QComboBox* far_detail = nullptr;
@@ -925,6 +926,7 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.decals->setCurrentIndex(graphics.decals ? 0 : 1);
     dialog.glass_refraction->setCurrentIndex(graphics.glass_refraction ? 0 : 1);
     dialog.particles->setCurrentIndex(graphics.half_resolution_particles ? 1 : 0);
+    dialog.smoke->setCurrentIndex(graphics.smoke_and_dust ? 0 : 1);
     dialog.anisotropy->setCurrentIndex(
         IndexOf(AnisotropyLevels, graphics.anisotropic_filtering, 1));
     dialog.far_detail->setCurrentIndex(
@@ -965,6 +967,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.decals = dialog.decals->currentIndex() != 1;
     graphics.glass_refraction = dialog.glass_refraction->currentIndex() != 1;
     graphics.half_resolution_particles = dialog.particles->currentIndex() == 1;
+    graphics.smoke_and_dust = dialog.smoke->currentIndex() != 1;
     ReadChoice(dialog.anisotropy, AnisotropyLevels, graphics.anisotropic_filtering);
     ReadChoice(dialog.far_detail, Settings::FarDetailLevels, graphics.far_environment_detail);
     ReadChoice(dialog.near_detail, Settings::DetailLevels, graphics.near_environment_detail);
@@ -1338,12 +1341,13 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
     dialog.decals = row("Decals", RightColumn, 1, SwitchChoices);
     dialog.glass_refraction = row("Glass Refraction", RightColumn, 2, SwitchChoices);
     dialog.particles = row("Particles", RightColumn, 3, ParticleChoices);
-    dialog.anisotropy = row("Anisotropic Filtering", RightColumn, 4, AnisotropyChoices);
+    dialog.smoke = row("Smoke and Dust", RightColumn, 4, SwitchChoices);
+    dialog.anisotropy = row("Anisotropic Filtering", RightColumn, 5, AnisotropyChoices);
     // Its choices come from the GPU.
-    dialog.texture_streaming_list = row("Texture Streaming", RightColumn, 5, {});
+    dialog.texture_streaming_list = row("Texture Streaming", RightColumn, 6, {});
     FillTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
-    dialog.far_detail = row("Far Environment LOD Quality", RightColumn, 6, FarDetailChoices);
-    dialog.near_detail = row("Near Environment LOD Quality", RightColumn, 7, DetailChoices);
+    dialog.far_detail = row("Far Environment LOD Quality", RightColumn, 7, FarDetailChoices);
+    dialog.near_detail = row("Near Environment LOD Quality", RightColumn, 8, DetailChoices);
     MakeNote(dialog, page,
              "Steam Deck also sets Aspect Ratio to 16:10, Render Resolution to 720p (1280 x 800) "
              "and VSync to Off on the Display tab, and Swap Gyro Yaw/Roll and Invert Gyro Yaw on "
@@ -1926,7 +1930,7 @@ void Build(Dialog& dialog) {
     for (QComboBox* const combo :
          {dialog.shadows, dialog.fog, dialog.fog_shadows, dialog.occlusion, dialog.motion_blur,
           dialog.antialias, dialog.bloom, dialog.outlines, dialog.decals, dialog.glass_refraction,
-          dialog.particles, dialog.anisotropy, dialog.aspect, dialog.render_size,
+          dialog.particles, dialog.smoke, dialog.anisotropy, dialog.aspect, dialog.render_size,
           dialog.texture_streaming_list, dialog.far_detail, dialog.near_detail,
           dialog.character_detail}) {
         QObject::connect(combo, &QComboBox::activated, window, [&dialog] { ShowPreset(dialog); });

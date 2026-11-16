@@ -208,6 +208,8 @@ enum Control : int {
     IdGlass,
     IdParticlesLabel,
     IdParticles,
+    IdSmokeLabel,
+    IdSmoke,
     IdAnisotropyLabel,
     IdAnisotropy,
     IdTextureStreamingLabel,
@@ -465,13 +467,13 @@ constexpr std::array<const wchar_t*, 5> UpscalerChoices{L"Off", L"FSR 3.1", L"FS
 constexpr std::array<const wchar_t*, 5> UpscaleQualityChoices{L"Native AA", L"Quality", L"Balanced",
                                                               L"Performance", L"Ultra Performance"};
 
-// The Graphics tab: the preset across the top, each pass's choice in two columns of rows 28
+// The Graphics tab: the preset across the top, each pass's choice in two columns of rows 26
 // pixels apart, then the note. Quality choices are in the order of Settings::Quality; switches
 // put On first.
 constexpr int PresetTop = 88;
 constexpr int PassTop = 118;
-constexpr int PassStep = 28;
-constexpr int GraphicsNoteTop = 348;
+constexpr int PassStep = 26;
+constexpr int GraphicsNoteTop = 352;
 // The Texture Streaming list is wider than its combo box, to show the GPU's name.
 constexpr int TextureStreamingListWidth = 280;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
@@ -544,13 +546,14 @@ constexpr std::array GraphicsRows{
     GraphicsRow{IdDecalsLabel, IdDecals, L"Decals", RightColumn, 1, SwitchChoices},
     GraphicsRow{IdGlassLabel, IdGlass, L"Glass Refraction", RightColumn, 2, SwitchChoices},
     GraphicsRow{IdParticlesLabel, IdParticles, L"Particles", RightColumn, 3, ParticleChoices},
-    GraphicsRow{IdAnisotropyLabel, IdAnisotropy, L"Anisotropic Filtering", RightColumn, 4,
+    GraphicsRow{IdSmokeLabel, IdSmoke, L"Smoke and Dust", RightColumn, 4, SwitchChoices},
+    GraphicsRow{IdAnisotropyLabel, IdAnisotropy, L"Anisotropic Filtering", RightColumn, 5,
                 AnisotropyChoices},
     GraphicsRow{
-        IdTextureStreamingLabel, IdTextureStreaming, L"Texture Streaming", RightColumn, 5, {}},
-    GraphicsRow{IdFarDetailLabel, IdFarDetail, L"Far Environment LOD Quality", RightColumn, 6,
+        IdTextureStreamingLabel, IdTextureStreaming, L"Texture Streaming", RightColumn, 6, {}},
+    GraphicsRow{IdFarDetailLabel, IdFarDetail, L"Far Environment LOD Quality", RightColumn, 7,
                 FarDetailChoices},
-    GraphicsRow{IdNearDetailLabel, IdNearDetail, L"Near Environment LOD Quality", RightColumn, 7,
+    GraphicsRow{IdNearDetailLabel, IdNearDetail, L"Near Environment LOD Quality", RightColumn, 8,
                 DetailChoices},
 };
 
@@ -1382,6 +1385,7 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdDecals), graphics.decals ? 0 : 1);
     Select(Item(dialog, IdGlass), graphics.glass_refraction ? 0 : 1);
     Select(Item(dialog, IdParticles), graphics.half_resolution_particles ? 1 : 0);
+    Select(Item(dialog, IdSmoke), graphics.smoke_and_dust ? 0 : 1);
     Select(Item(dialog, IdAnisotropy),
            IndexOf(AnisotropyLevels, graphics.anisotropic_filtering, 1));
     Select(Item(dialog, IdFarDetail),
@@ -1420,6 +1424,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.decals = Selected(Item(dialog, IdDecals)) != 1;
     graphics.glass_refraction = Selected(Item(dialog, IdGlass)) != 1;
     graphics.half_resolution_particles = Selected(Item(dialog, IdParticles)) == 1;
+    graphics.smoke_and_dust = Selected(Item(dialog, IdSmoke)) != 1;
     ReadChoice(Item(dialog, IdAnisotropy), AnisotropyLevels, graphics.anisotropic_filtering);
     ReadChoice(Item(dialog, IdFarDetail), Settings::FarDetailLevels,
                graphics.far_environment_detail);
@@ -2250,6 +2255,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdDecals:
     case IdGlass:
     case IdParticles:
+    case IdSmoke:
     case IdAnisotropy:
     case IdFarDetail:
     case IdNearDetail:

@@ -35,6 +35,7 @@
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/script_timers.h"
 #include "graphics/gr2port/settings.h"
+#include "graphics/gr2port/smoke_and_dust.h"
 #include "graphics/gr2port/stick_tilt.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/timeline.h"
@@ -137,6 +138,7 @@ void Install(VAddr module_base) {
     ComicCamera::Install(module_base, c, StubAreaSize);
     ScriptTimers::Install(module_base, c, StubAreaSize);
     WaterSplashes::Install(module_base, c, StubAreaSize);
+    SmokeAndDust::Install(module_base, c, StubAreaSize);
     FloatSpin::Install(module_base, c, StubAreaSize);
     // At the game's own 30 fps the motions keep the stock steps.
     if (Settings::Get().game.frame_rate > 30) {

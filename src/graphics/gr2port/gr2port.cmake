@@ -79,6 +79,9 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.h
     ${CMAKE_CURRENT_LIST_DIR}/water_splashes.cpp
     ${CMAKE_CURRENT_LIST_DIR}/water_splashes.h
+    ${CMAKE_CURRENT_LIST_DIR}/smoke_and_dust.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/smoke_and_dust.h
+    ${CMAKE_CURRENT_LIST_DIR}/smoke_effects.h
     ${CMAKE_CURRENT_LIST_DIR}/field_of_view.cpp
     ${CMAKE_CURRENT_LIST_DIR}/field_of_view.h
     ${CMAKE_CURRENT_LIST_DIR}/float_spin.cpp

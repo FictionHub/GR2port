@@ -358,7 +358,7 @@ constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
 
-const std::array<Setting, 23> Table{{
+const std::array<Setting, 24> Table{{
     {"Preset",
      [](const Values&) {
          Names names;
@@ -429,6 +429,9 @@ const std::array<Setting, 23> Table{{
     {"Particles", [](const Values&) { return Choices({"Full Resolution", "Half Resolution"}); },
      [](const Values& values) { return values.graphics.half_resolution_particles ? 1 : 0; },
      [](Values& values, int choice) { values.graphics.half_resolution_particles = choice == 1; }},
+    {"Smoke and Dust", &SwitchNames,
+     [](const Values& values) { return values.graphics.smoke_and_dust ? 0 : 1; },
+     [](Values& values, int choice) { values.graphics.smoke_and_dust = choice == 0; }},
     {"Anisotropic Filtering",
      [](const Values&) { return Choices({"Off", "2x (PS4)", "4x", "8x", "16x"}); },
      [](const Values& values) {

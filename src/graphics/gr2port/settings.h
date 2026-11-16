@@ -138,6 +138,10 @@ struct Graphics {
     bool fog_shadows{true};
     /// Particles and effects draw at half the scene's size and blend into it.
     bool half_resolution_particles{false};
+    /// The smoke, steam and dust effects: chimneys, steam, fires' and machines' smoke, and the
+    /// player's landings, jumps, runs, dodges and slides. Poison clouds always show. It takes
+    /// effect at the next start.
+    bool smoke_and_dust{true};
     /// The material textures' anisotropic filtering: 0 off, else the most samples, 2 as the game.
     u32 anisotropic_filtering{2};
     /// How far from an island of the city the game shows its detailed models in place of its low
@@ -196,6 +200,7 @@ struct Preset {
     bool glass_refraction;
     bool fog_shadows;
     bool half_resolution_particles;
+    bool smoke_and_dust{true};
     u32 anisotropic_filtering;
     /// The aspect and render size the preset also sets, or empty to leave them.
     std::string_view aspect;
