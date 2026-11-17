@@ -131,10 +131,6 @@ void Initialize(const Frontend::WindowSDL& window) {
     ImFormatString(label, IM_ARRAYSIZE(label), "WindowOverViewport_%08X", GetMainViewport()->ID);
     dock_id = ImHashStr(label);
 
-    if (const auto dpi = SDL_GetWindowDisplayScale(window.GetSDLWindow()); dpi > 0.0f) {
-        GetIO().FontGlobalScale *= dpi;
-    }
-
     std::at_quick_exit([] { SaveIniSettingsToDisk(GetIO().IniFilename); });
 }
 
