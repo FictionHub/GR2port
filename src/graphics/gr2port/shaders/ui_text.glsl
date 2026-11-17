@@ -4,8 +4,9 @@
 // Gives text its 16:9 shape on a wider or taller screen, where the game stretches its whole screen
 // drawing. A text draw is one string; it narrows by the scale around the point the game lays it
 // out from, the origin of its matrix, so it keeps its alignment and its letters keep their
-// spacing. Text without that matrix narrows around each triangle's middle. Everything else stays
-// as the game draws it. TEXT_ATTRIBUTES is the vertex program's outputs, 1 or 2.
+// spacing. Text without that matrix narrows around each triangle's middle. The photo viewfinder's
+// window narrows by the scale to the square the photo takes. Everything else stays as the game
+// draws it. TEXT_ATTRIBUTES is the vertex program's outputs, 1 or 2.
 
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
@@ -27,6 +28,20 @@ const uint DrawConstants = 2u;
 const uint DrawFlags = 38u;
 const uint DrawText = 1u;
 const uint DrawAnchored = 2u;
+const uint DrawFinder = 4u;
+// The viewfinder's window: the middle 1024 x 1024 of the game's 1920 x 1080 canvas.
+const vec2 FinderEdge = vec2(512.0 / 960.0, 512.0 / 540.0);
+
+// A viewfinder position along one axis: inside the window it narrows by scale around the middle;
+// between the window and the picture's edge it stretches, so the dimmed surround still meets the
+// edge.
+float Finder(float position, float edge, float scale) {
+    const float outside = abs(position) - edge;
+    if (outside <= 0.0) {
+        return position * scale;
+    }
+    return sign(position) * (edge * scale + outside * (1.0 - edge * scale) / (1.0 - edge));
+}
 
 layout(location = 15) flat in uint draw_index_in[];
 layout(location = 0) in vec4 attr0_in[];
@@ -63,10 +78,16 @@ void main() {
                           uintBitsToFloat(constants.words[13])) / w;
         }
     }
+    const bool finder = (flags & DrawFinder) != 0u;
     for (int i = 0; i < 3; i++) {
         vec4 position = gl_in[i].gl_Position;
         if (narrow) {
             position.xy = (anchor + (position.xy / position.w - anchor) * text_scale) * position.w;
+        } else if (finder && position.w > 0.0) {
+            const vec2 at = position.xy / position.w;
+            position.xy = vec2(Finder(at.x, FinderEdge.x, text_scale.x),
+                               Finder(at.y, FinderEdge.y, text_scale.y)) *
+                          position.w;
         }
         gl_Position = position;
         draw_index = draw_index_in[i];

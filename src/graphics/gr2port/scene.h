@@ -1338,6 +1338,9 @@ inline constexpr u32 UiDrawText = 1;
 /// With UiDrawText: the vertex program places the text by the 4x4 matrix at the start of its
 /// constants, whose origin is the point the game lays the text out from.
 inline constexpr u32 UiDrawAnchored = 2;
+/// A piece of the photo viewfinder: its window and what lies in it, or the dimmed surround from the
+/// window to the picture's edge.
+inline constexpr u32 UiDrawFinder = 4;
 
 /// Consecutive screen draws of one target, pair of programs, blend, primitive type and viewport:
 /// x, y, width and height, with a negative height where the game's y scale is.

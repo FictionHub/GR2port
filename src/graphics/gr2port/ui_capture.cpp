@@ -56,6 +56,27 @@ constexpr u64 TargetSharp = 0x30;
 constexpr VAddr PhotoManager = 0x1eed278;
 constexpr u64 PhotoObject = 0x580;
 
+// The photo viewfinder's pieces, known by their textures' size and data format: the vignette over
+// the picture, the dimmed surround and the window's soft edge, the window's halves, the guide
+// frame's sides and corners, the cross hair and the shot counter's digits.
+struct FinderTexture {
+    u32 width;
+    u32 height;
+    u32 format;
+    friend bool operator==(const FinderTexture&, const FinderTexture&) = default;
+};
+constexpr FinderTexture FinderVignette{960, 540, 41};
+constexpr std::array FinderTextures{
+    FinderVignette,
+    FinderTexture{512, 512, 41},
+    FinderTexture{256, 512, 41},
+    FinderTexture{808, 20, 10},
+    FinderTexture{32, 856, 41},
+    FinderTexture{88, 88, 10},
+    FinderTexture{192, 192, 41},
+    FinderTexture{1280, 256, 41},
+};
+
 // Command packets.
 constexpr u32 PacketType2 = 2;
 constexpr u32 PacketType3 = 3;
@@ -237,6 +258,10 @@ u64 g_unported = 0;
 u64 g_dropped = 0;
 u64 g_write_ns = 0;
 u32 g_unread = 0;
+// Whether this frame, and the last, drew the viewfinder's vignette: the camera's view, whose draws
+// of the other FinderTextures are the viewfinder's.
+bool g_finder_frame = false;
+bool g_finder_last = false;
 
 std::mutex g_bar_mutex;
 ScrollBar g_bar;
@@ -663,6 +688,17 @@ void Writer::Draw(u32 opcode, const u32* body) {
                 draw.flags |= Scene::UiDrawAnchored;
             }
         }
+        if (vertex_index == static_cast<u32>(Scene::UiVertexProgram::Transform) &&
+            pixel_index == static_cast<u32>(Scene::UiPixelProgram::Sprite) &&
+            target == ui.picture) {
+            const FinderTexture shape{(ps_user[2] & 0x3fff) + 1, (ps_user[2] >> 14 & 0x3fff) + 1,
+                                      ps_user[1] >> 20 & 0x3f};
+            g_finder_frame = g_finder_frame || shape == FinderVignette;
+            if ((g_finder_frame || g_finder_last) &&
+                std::ranges::find(FinderTextures, shape) != FinderTextures.end()) {
+                draw.flags |= Scene::UiDrawFinder;
+            }
+        }
     }
     std::array<u32, 16> table_words{};
     if (pixel_program->textures == 2) {
@@ -968,6 +1004,8 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     ui.world = world_target == Scene::MaxUiTargets ? ui.picture : world_target;
     // The world's picture goes into its target before the screen drawing.
     g_frame_writes = ui.only == 0 ? 1u << ui.world : 0;
+    g_finder_last = g_finder_frame;
+    g_finder_frame = false;
     g_back_buffers |= picture != Scene::MaxUiTargets ? 1u << picture : 0;
     Writer writer{packet, address, ui};
     if (begin != 0 && from >= begin && from <= next && next <= end) {
