@@ -358,7 +358,7 @@ constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
 
-const std::array<Setting, 24> Table{{
+const std::array<Setting, 25> Table{{
     {"Preset",
      [](const Values&) {
          Names names;
@@ -502,6 +502,23 @@ const std::array<Setting, 24> Table{{
      [](const Values& values) { return static_cast<int>(values.graphics.upscale_quality); },
      [](Values& values, int choice) {
          values.graphics.upscale_quality = static_cast<Settings::UpscaleQuality>(choice);
+     }},
+    {"Aspect Ratio",
+     [](const Values&) {
+         Names names;
+         for (const GamePatches::Aspect& aspect : GamePatches::Aspects) {
+             names.emplace_back(aspect.name);
+         }
+         return names;
+     },
+     [](const Values& values) {
+         const auto& aspects = GamePatches::Aspects;
+         const auto found = std::ranges::find(aspects, std::string_view{values.game.aspect},
+                                              &GamePatches::Aspect::name);
+         return found != aspects.end() ? static_cast<int>(found - aspects.begin()) : 0;
+     },
+     [](Values& values, int choice) {
+         values.game.aspect = std::string(GamePatches::Aspects[choice].name);
      }},
     {"Render Resolution",
      [](const Values&) {

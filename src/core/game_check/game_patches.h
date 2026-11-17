@@ -43,6 +43,8 @@ struct Aspect {
 
 inline constexpr std::array Aspects{
     Aspect{"16:9", "Resolution/No upscaling/16:9", 16.0f / 9.0f},
+    Aspect{"4:3", "Resolution/No upscaling/4:3", 4.0f / 3.0f},
+    Aspect{"3:2", "Resolution/No upscaling/3:2", 3.0f / 2.0f},
     Aspect{"16:10", "Resolution/No upscaling/16:10", 16.0f / 10.0f},
     Aspect{"21:10", "Resolution/No upscaling/Ultrawide 21:10", 21.0f / 10.0f},
     Aspect{"21:9", "Resolution/No upscaling/Ultrawide 21:9", 7.0f / 3.0f},
@@ -53,14 +55,16 @@ inline constexpr std::array Aspects{
 
 struct RenderSize {
     std::string_view name;
-    /// The height of the size's patches; 16:10's keep the 16:9 width and are 10/9 as tall.
+    /// The height of the size's patches for 16:9 and the wider aspects.
     u32 lines;
+    /// The width of the size's 16:9 patch, which the narrower aspects' patches keep.
+    u32 columns;
 };
 
 inline constexpr std::array RenderSizes{
-    RenderSize{"544p", 544},   RenderSize{"720p", 720},   RenderSize{"900p", 900},
-    RenderSize{"1080p", 1080}, RenderSize{"1440p", 1440}, RenderSize{"4K", 2160},
-    RenderSize{"5K", 2880},    RenderSize{"8K", 4320},
+    RenderSize{"544p", 544, 968},    RenderSize{"720p", 720, 1280},   RenderSize{"900p", 900, 1600},
+    RenderSize{"1080p", 1080, 1920}, RenderSize{"1440p", 1440, 2560}, RenderSize{"4K", 2160, 3840},
+    RenderSize{"5K", 2880, 5120},    RenderSize{"8K", 4320, 7680},
 };
 
 /// GR2 online is always on, with these servers, whatever the config files say.

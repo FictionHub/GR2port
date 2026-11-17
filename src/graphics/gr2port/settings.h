@@ -44,7 +44,7 @@ struct Display {
 struct Game {
     /// Frames per second: 30 is the game's own rate, the others apply that frame rate's patch.
     u32 frame_rate{30};
-    /// "16:9", the game's own shape, or the aspect of the patch that widens the picture.
+    /// "16:9", the game's own shape, or the aspect of the patch that reshapes the picture.
     std::string aspect{"16:9"};
     /// The size the game renders at, a GamePatches::RenderSizes name; "1080p" is the game's own.
     std::string render_size{"1080p"};

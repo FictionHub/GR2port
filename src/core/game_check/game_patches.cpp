@@ -39,15 +39,19 @@ const Aspect& ChosenAspect(const std::string& name) {
     return aspect != Aspects.end() ? *aspect : Aspects.front();
 }
 
-// Whether a resolution patch's name holds the chosen size's "x<height>".
+// Whether a resolution patch's name holds the chosen size: "<width>x" for the aspects narrower
+// than 16:9, which keep the 16:9 width, else "x<height>".
 bool IsChosenSize(std::string_view name, const Aspect& aspect, const std::string& size) {
-    const auto chosen = std::ranges::find(RenderSizes, std::string_view{size}, &RenderSize::name);
-    const u32 lines = chosen != RenderSizes.end() ? chosen->lines : 1080;
-    const u32 height = aspect.ratio < 16.0f / 9.0f ? lines * 10 / 9 : lines;
-    const std::string tag = "x" + std::to_string(height);
+    auto chosen = std::ranges::find(RenderSizes, std::string_view{size}, &RenderSize::name);
+    if (chosen == RenderSizes.end()) {
+        chosen = std::ranges::find(RenderSizes, std::string_view{"1080p"}, &RenderSize::name);
+    }
+    const bool narrow = aspect.ratio < 16.0f / 9.0f;
+    const std::string tag =
+        narrow ? std::to_string(chosen->columns) + "x" : "x" + std::to_string(chosen->lines);
     for (size_t at = name.find(tag); at != std::string_view::npos; at = name.find(tag, at + 1)) {
-        const size_t end = at + tag.size();
-        if (end == name.size() || name[end] < '0' || name[end] > '9') {
+        const size_t next = narrow ? at - 1 : at + tag.size();
+        if ((narrow ? at == 0 : next == name.size()) || name[next] < '0' || name[next] > '9') {
             return true;
         }
     }
