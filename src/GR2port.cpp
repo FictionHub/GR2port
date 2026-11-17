@@ -47,7 +47,7 @@
 #include "core/linker.h"
 #include "core/memory.h"
 #include "core/user_settings.h"
-#include "graphics/gr2_fsr3/dlss_streamline.h"
+#include "graphics/gr2_fsr3/dlss_ngx.h"
 #include "graphics/renderdoc.h"
 
 #ifdef _WIN32

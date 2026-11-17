@@ -23,9 +23,9 @@ struct Offset {
     float y = 0.0f;
 };
 
-/// While the instance's extensions are chosen: with DLSS chosen, starts Streamline and appends the
-/// instance extensions DLSS needs; with XeSS chosen, loads XeSS and appends the instance
-/// extensions it needs on Vulkan api_version.
+/// While the instance's extensions are chosen: with DLSS chosen, appends the instance extensions
+/// NGX needs for DLSS; with XeSS chosen, loads XeSS and appends the instance extensions it needs on
+/// Vulkan api_version.
 void ExtendInstance(std::vector<const char*>& extensions, u32 api_version,
                     const vk::detail::DispatchLoaderDynamic& dispatch);
 
@@ -37,8 +37,7 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
                   vk::PhysicalDeviceVulkan12Features& vk12,
                   vk::PhysicalDeviceVulkan13Features& vk13);
 
-/// Right after the device and its dispatch are made: with DLSS chosen, hands the device to
-/// Streamline, which then presents.
+/// Right after the device and its dispatch are made: with DLSS chosen, starts NGX on the device.
 void OnDeviceCreated(Device& device);
 
 /// After the device is made, before the textures start: checks that the device runs the chosen

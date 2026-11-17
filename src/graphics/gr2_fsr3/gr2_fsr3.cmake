@@ -128,7 +128,8 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
     # vk_trampolines.cpp defines the Vulkan commands that the FidelityFX libraries and the FSR 4 v07
     # provider call.
     target_sources(gr2port PRIVATE
-        ${GR2_FSR3_DIR}/dlss_streamline.h
+        ${GR2_FSR3_DIR}/dlss_ngx.cpp
+        ${GR2_FSR3_DIR}/dlss_ngx.h
         ${GR2_FSR3_DIR}/fsr4_assets.cpp
         ${GR2_FSR3_DIR}/fsr4_assets.h
         ${GR2_FSR3_DIR}/fsr4_context.h
@@ -136,15 +137,20 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
         ${GR2_FSR3_DIR}/vk_trampolines.cpp
         ${GR2_FSR3_DIR}/vk_trampolines.h
         ${GR2_FSR3_DIR}/xess_vulkan.h)
-    # Streamline's and XeSS's MIT headers. The Streamline and DLSS libraries load at run time from
-    # the dlss folder of the user folder, and libxess.dll from the xess folder.
+    # The NGX headers and NGX's static library of the DLSS SDK 310.9.16, which loads the driver's NGX
+    # core; the DLSS library loads at run time from the dlss folder of the user folder.
+    set(GR2_DLSS_ROOT ${PROJECT_SOURCE_DIR}/third_party/dlss)
+    target_include_directories(gr2port PRIVATE ${GR2_DLSS_ROOT}/include)
     if (WIN32)
-        target_sources(gr2port PRIVATE
-            ${GR2_FSR3_DIR}/dlss_streamline.cpp
-            ${GR2_FSR3_DIR}/xess_vulkan.cpp)
-        target_include_directories(gr2port PRIVATE
-            ${PROJECT_SOURCE_DIR}/third_party/streamline/include
-            ${PROJECT_SOURCE_DIR}/third_party/xess/include)
+        target_link_libraries(gr2port PRIVATE ${GR2_DLSS_ROOT}/lib/Windows_x86_64/nvsdk_ngx_d.lib)
+    else()
+        target_link_libraries(gr2port PRIVATE
+            ${GR2_DLSS_ROOT}/lib/Linux_x86_64/libnvsdk_ngx.a ${CMAKE_DL_LIBS})
+    endif()
+    # XeSS's MIT headers; libxess.dll loads at run time from the xess folder of the user folder.
+    if (WIN32)
+        target_sources(gr2port PRIVATE ${GR2_FSR3_DIR}/xess_vulkan.cpp)
+        target_include_directories(gr2port PRIVATE ${PROJECT_SOURCE_DIR}/third_party/xess/include)
     endif()
     target_include_directories(gr2port PRIVATE ${GR2_FSR3_SHADER_INCLUDE})
     add_dependencies(gr2port gr2_fsr3_shaders)

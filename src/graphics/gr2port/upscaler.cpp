@@ -20,7 +20,7 @@
 
 #include "common/logging/log.h"
 #include "common/path_util.h"
-#include "graphics/gr2_fsr3/dlss_streamline.h"
+#include "graphics/gr2_fsr3/dlss_ngx.h"
 #include "graphics/gr2_fsr3/fsr4_assets.h"
 #include "graphics/gr2_fsr3/fsr4_v07_bridge.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_inputs_comp.h"
@@ -136,7 +136,8 @@ Gr2Fsr3::Fsr4DeviceFeatures g_fsr4_features{};
 Gr2Fsr4Context* g_fsr4 = nullptr;
 std::deque<Fsr4Frame> g_fsr4_frames;
 
-// DLSS: whether Streamline holds options for the sizes.
+// DLSS: whether the options are set for the sizes, which the first evaluation makes NGX's feature
+// with.
 bool g_dlss_ready = false;
 
 // XeSS: whether the context is initialized for the sizes.
@@ -403,17 +404,13 @@ bool CreateDlss(vk::Extent2D render, vk::Extent2D output) {
     }
     if (render.width < range->min.width || render.height < range->min.height ||
         render.width > range->max.width || render.height > range->max.height) {
-        TurnOff(fmt::format("DLSS mode {} takes {}x{} to {}x{} for {}x{}, not {}x{}",
-                            static_cast<u32>(mode), range->min.width, range->min.height,
+        TurnOff(fmt::format("DLSS {} takes {}x{} to {}x{} for {}x{}, not {}x{}",
+                            Gr2Fsr3::DlssModeName(mode), range->min.width, range->min.height,
                             range->max.width, range->max.height, output.width, output.height,
                             render.width, render.height));
         return false;
     }
-    if (const std::string rejected = Gr2Fsr3::DlssSetOptions(mode, DlssModel, output);
-        !rejected.empty()) {
-        TurnOff(rejected);
-        return false;
-    }
+    Gr2Fsr3::DlssSetOptions(mode, DlssModel);
     g_dlss_ready = true;
     LOG_INFO(Render_Vulkan, "GR2port upscaler: DLSS runs preset E, the convolutional model");
     return true;
@@ -614,25 +611,8 @@ Gr2Fsr3::Fsr4Images InputImages() {
     };
 }
 
-void RecordDlss(vk::CommandBuffer cmd) {
-    const Gr2Fsr3::DlssEvaluateInfo info{
-        .images = InputImages(),
-        .render_size = g_render,
-        .output_size = g_output_extent,
-        .jitter_x = g_jitter.x,
-        .jitter_y = g_jitter.y,
-        // Streamline takes the motion as a fraction of the screen: half per clip-space unit.
-        .motion_vector_scale_x = 0.5f,
-        .motion_vector_scale_y = -0.5f,
-        .reset = g_reset,
-    };
-    if (const std::string failed = Gr2Fsr3::DlssEvaluate(cmd, info); !failed.empty()) {
-        LogFailureOnce(failed);
-    }
-}
-
-// Moves the copies of the inputs to the layout XeSS reads, then records XeSS.
-void RecordXess(vk::CommandBuffer cmd) {
+// Moves the copies of the inputs to the layout DLSS and XeSS read them in.
+void MoveInputsToRead(vk::CommandBuffer cmd) {
     for (const Image* image : {&g_input_color, &g_input_motion, &g_input_depth}) {
         ImageBarrier(*g_device, cmd, image->image, vk::ImageLayout::eGeneral,
                      vk::ImageLayout::eShaderReadOnlyOptimal,
@@ -640,6 +620,28 @@ void RecordXess(vk::CommandBuffer cmd) {
                      vk::AccessFlagBits2::eShaderStorageWrite,
                      vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderRead);
     }
+}
+
+void RecordDlss(vk::CommandBuffer cmd) {
+    MoveInputsToRead(cmd);
+    const Gr2Fsr3::DlssEvaluateInfo info{
+        .images = InputImages(),
+        .render_size = g_render,
+        .output_size = g_output_extent,
+        .jitter_x = g_jitter.x,
+        .jitter_y = g_jitter.y,
+        // NGX takes the motion in render pixels: half the width or height per clip-space unit.
+        .motion_vector_scale_x = 0.5f * static_cast<float>(g_render.width),
+        .motion_vector_scale_y = -0.5f * static_cast<float>(g_render.height),
+        .reset = g_reset,
+    };
+    if (const std::string failed = Gr2Fsr3::DlssEvaluate(cmd, info); !failed.empty()) {
+        LogFailureOnce(failed);
+    }
+}
+
+void RecordXess(vk::CommandBuffer cmd) {
+    MoveInputsToRead(cmd);
     const Gr2Fsr3::XessExecuteInfo info{
         .images = InputImages(),
         .render_size = g_render,
@@ -681,9 +683,7 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
     features.features.shaderStorageImageWriteWithoutFormat =
         core.shaderStorageImageWriteWithoutFormat;
     if (chosen == Settings::Upscaler::Dlss) {
-        // Streamline makes a private data slot on the device.
-        vk13.privateData = supported.get<vk::PhysicalDeviceVulkan13Features>().privateData;
-        Gr2Fsr3::ExtendDeviceForDlss(gpu, info, vk12, dispatch);
+        Gr2Fsr3::ExtendDeviceForDlss(instance, gpu, info, dispatch);
         return;
     }
     if (chosen == Settings::Upscaler::Xess) {
@@ -764,8 +764,7 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
 
 void OnDeviceCreated(Device& device) {
     if (Settings::Get().graphics.upscaler == Settings::Upscaler::Dlss) {
-        Gr2Fsr3::OnDeviceCreated(device.instance, device.gpu, device.device, device.queue_family,
-                                 device.dispatch);
+        Gr2Fsr3::OnDeviceCreated(device.instance, device.gpu, device.device, device.dispatch);
     }
 }
 

@@ -21,6 +21,9 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
+#include <charconv>
+#include <fstream>
+#include <string>
 #include <fcntl.h>
 #include <sys/mman.h>
 #endif
@@ -630,6 +633,28 @@ struct AddressSpace::Impl {
 };
 #else
 
+#ifdef __linux__
+// The host's mappings that overlap [begin, end), from /proc/self/maps.
+boost::icl::interval_set<VAddr> HostMappings(VAddr begin, VAddr end) {
+    boost::icl::interval_set<VAddr> mappings;
+    std::ifstream maps{"/proc/self/maps"};
+    for (std::string line; std::getline(maps, line);) {
+        const char* const text_end = line.data() + line.size();
+        VAddr lower{};
+        VAddr upper{};
+        const auto [dash, lower_error] = std::from_chars(line.data(), text_end, lower, 16);
+        if (lower_error != std::errc{} || dash == text_end || *dash != '-' ||
+            std::from_chars(dash + 1, text_end, upper, 16).ec != std::errc{}) {
+            continue;
+        }
+        if (lower < end && upper > begin) {
+            mappings.insert({std::max(lower, begin), std::min(upper, end)});
+        }
+    }
+    return mappings;
+}
+#endif
+
 enum PosixPageProtection {
     PAGE_NOACCESS = 0,
     PAGE_READONLY = PROT_READ,
@@ -701,9 +726,21 @@ struct AddressSpace::Impl {
 #else
         const auto virtual_size = system_managed_size + system_reserved_size + user_size;
 #if defined(ARCH_X86_64) && !defined(__FreeBSD__)
-        const auto virtual_base =
-            reinterpret_cast<u8*>(mmap(reinterpret_cast<void*>(SYSTEM_MANAGED_MIN), virtual_size,
-                                       protection_flags, map_flags, -1, 0));
+#ifdef __linux__
+        // The space goes around what the host maps in it already: the address space that CUDA
+        // reserves when DLSS starts it before the space is made.
+        host_ranges = HostMappings(SYSTEM_MANAGED_MIN, SYSTEM_MANAGED_MIN + virtual_size);
+#endif
+        boost::icl::interval_set<VAddr> pieces;
+        pieces.insert({SYSTEM_MANAGED_MIN, SYSTEM_MANAGED_MIN + virtual_size});
+        pieces -= host_ranges;
+        auto virtual_base = reinterpret_cast<u8*>(SYSTEM_MANAGED_MIN);
+        for (const auto& piece : pieces) {
+            if (mmap(reinterpret_cast<void*>(piece.lower()), piece.upper() - piece.lower(),
+                     protection_flags, map_flags, -1, 0) == MAP_FAILED) {
+                virtual_base = static_cast<u8*>(MAP_FAILED);
+            }
+        }
         system_managed_base = virtual_base;
         system_reserved_base = reinterpret_cast<u8*>(SYSTEM_RESERVED_MIN);
         user_base = reinterpret_cast<u8*>(USER_MIN);
@@ -829,6 +866,8 @@ struct AddressSpace::Impl {
     u64 system_reserved_size{};
     u8* user_base{};
     u64 user_size{};
+    // The host's mappings inside the space, which the guest does not get.
+    boost::icl::interval_set<VAddr> host_ranges;
 };
 #endif
 
@@ -921,7 +960,8 @@ boost::icl::interval_set<VAddr> AddressSpace::GetUsableRegions() {
     // On Windows, we need to obtain the accessible intervals from the implementation's regions.
     return impl->GetUsableRegions();
 #else
-    // On Linux and Mac, the memory space is fully represented by the three major regions
+    // On Linux and Mac, the memory space is represented by the three major regions, without the
+    // host's mappings inside them
     boost::icl::interval_set<VAddr> reserved_regions;
     VAddr system_managed_addr = reinterpret_cast<VAddr>(system_managed_base);
     VAddr system_reserved_addr = reinterpret_cast<VAddr>(system_reserved_base);
@@ -930,6 +970,7 @@ boost::icl::interval_set<VAddr> AddressSpace::GetUsableRegions() {
     reserved_regions.insert({system_managed_addr, system_managed_addr + system_managed_size});
     reserved_regions.insert({system_reserved_addr, system_reserved_addr + system_reserved_size});
     reserved_regions.insert({user_addr, user_addr + user_size});
+    reserved_regions -= impl->host_ranges;
     return reserved_regions;
 #endif
 }

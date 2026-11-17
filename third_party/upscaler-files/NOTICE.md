@@ -3,11 +3,11 @@
 The release workflow unpacks these archives into the `userdata` folder of each zip. GR2port loads
 the files from there at run time; the build does not use them.
 
-- `dlss.tar.xz` unpacks to `userdata/dlss` in the Windows zip: `sl.interposer.dll`,
-  `sl.common.dll` and `sl.dlss.dll` from `bin/x64` of NVIDIA Streamline 2.14.16, and
-  `nvngx_dlss.dll` 310.9.16 (DLSS Super Resolution). Streamline is MIT-licensed
-  (`third_party/streamline/license.txt`); `nvngx_dlss.dll` is NVIDIA's, under the license of the
-  NVIDIA DLSS SDK.
+- `dlss-windows.tar.xz` and `dlss-linux.tar.xz` unpack to `userdata/dlss` in the Windows and the
+  Linux zip: `nvngx_dlss.dll` and `libnvidia-ngx-dlss.so.310.9.16` from `lib/<platform>/rel` of
+  the NVIDIA DLSS SDK 310.9.16 (DLSS Super Resolution). They are NVIDIA's, under the NVIDIA RTX
+  SDKs license in `third_party/dlss/LICENSE.txt`, which each zip carries as `LICENSE-DLSS.txt`.
+  `third_party/dlss` has the SDK's NGX headers and NGX libraries that GR2port links.
 - `xess.tar.xz` unpacks to `userdata/xess` in the Windows zip: `libxess.dll` from `bin` of the
   Intel XeSS SDK 3.0.2 (XeSS Super Resolution), with the SDK's `LICENSE.txt` as
   `LICENSE-XeSS.txt` and its `third-party-programs.txt`. `libxess.dll` is Intel's, under the Intel
