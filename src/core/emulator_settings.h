@@ -173,6 +173,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GameInstallDir, path, enabled)
 // -------------------------------
 // General settings
 // -------------------------------
+
+// The highest volume the settings offer, in percent, where the volume hotkeys stop too.
+inline constexpr int MaxVolume = 500;
+
 struct GeneralSettings {
     Setting<std::vector<GameInstallDir>> install_dirs;
     Setting<std::filesystem::path> addon_install_dir;

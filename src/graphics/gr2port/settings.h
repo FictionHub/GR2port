@@ -117,6 +117,9 @@ inline constexpr std::array<u32, 4> FarDetailLevels{400, 200, 150, 100};
 /// The choices of Graphics::field_of_view, from the narrowest.
 inline constexpr std::array<u32, 15> FieldOfViewLevels{80,  85,  90,  95,  100, 105, 110, 115,
                                                        120, 125, 130, 135, 140, 145, 150};
+/// The choices of Display::hdr_peak_nits and hdr_paper_white_nits.
+inline constexpr std::array<u32, 7> HdrPeakLevels{400, 600, 800, 1000, 1500, 2000, 4000};
+inline constexpr std::array<u32, 8> HdrPaperWhiteLevels{80, 100, 120, 150, 200, 250, 300, 400};
 
 /// What the renderer draws and how finely. A preset sets them all; "custom" is any other mix.
 struct Graphics {

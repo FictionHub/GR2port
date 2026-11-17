@@ -103,6 +103,15 @@ enum Control : int {
     IdUpscaleQuality,
     IdLanguageLabel,
     IdLanguage,
+    IdVolumeLabel,
+    IdVolume,
+    IdVolumeValue,
+    IdHdrLabel,
+    IdHdr,
+    IdHdrPeakLabel,
+    IdHdrPeak,
+    IdHdrWhiteLabel,
+    IdHdrWhite,
     IdDlc,
     IdHalloween,
     IdSignUp,
@@ -445,7 +454,9 @@ struct Row {
     int top;
 };
 
-// Rows 28 pixels apart, which fits ten below the check boxes.
+// Rows RowStep pixels apart below the check boxes, then the volume and the HDR rows. The page
+// scrolls to the ones below the tenth row, down to DisplayPageBottom.
+constexpr int RowStep = 28;
 constexpr std::array Rows{
     Row{IdMonitorLabel, IdMonitor, L"Monitor", 140},
     Row{IdResolutionLabel, IdResolution, L"Monitor Resolution", 168},
@@ -458,6 +469,13 @@ constexpr std::array Rows{
     Row{IdUpscaleQualityLabel, IdUpscaleQuality, L"Upscaler Quality", 364},
     Row{IdLanguageLabel, IdLanguage, L"Language", 392},
 };
+constexpr int VolumeTop = 420;
+constexpr std::array HdrRows{
+    Row{IdHdrLabel, IdHdr, L"HDR", 468},
+    Row{IdHdrPeakLabel, IdHdrPeak, L"HDR Peak Brightness", 496},
+    Row{IdHdrWhiteLabel, IdHdrWhite, L"HDR Paper White", 524},
+};
+constexpr int DisplayPageBottom = 562;
 
 // In the order of Settings::VSync.
 constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
@@ -1018,11 +1036,19 @@ void ShowGyroDeadzone(const Dialog& dialog, int value) {
     SetWindowTextW(Item(dialog, IdGyroDeadzoneValue), DegreesPerSecond(value).c_str());
 }
 
+void ShowVolume(const Dialog& dialog, int value) {
+    SendMessageW(Item(dialog, IdVolume), TBM_SETPOS, TRUE, value);
+    SetWindowTextW(Item(dialog, IdVolumeValue), Percent(value).c_str());
+}
+
 // The number beside a slider follows it.
 void ShowSliderValue(const Dialog& dialog, HWND bar) {
     const LRESULT value = SendMessageW(bar, TBM_GETPOS, 0, 0);
     if (GetDlgCtrlID(bar) == IdGyroDeadzone) {
         SetWindowTextW(Item(dialog, IdGyroDeadzoneValue), DegreesPerSecond(value).c_str());
+    }
+    if (GetDlgCtrlID(bar) == IdVolume) {
+        SetWindowTextW(Item(dialog, IdVolumeValue), Percent(value).c_str());
     }
     for (const Stick& stick : Sticks) {
         for (const Slider& slider : stick.sliders) {
@@ -1296,6 +1322,11 @@ void UpdateEnabled(const Dialog& dialog) {
     EnableWindow(Item(dialog, IdResolution), !fullscreen || exclusive);
     EnableWindow(Item(dialog, IdRefreshLabel), exclusive);
     EnableWindow(Item(dialog, IdRefresh), exclusive);
+    const bool hdr = Selected(Item(dialog, IdHdr)) == 0;
+    EnableWindow(Item(dialog, IdHdrPeakLabel), hdr);
+    EnableWindow(Item(dialog, IdHdrPeak), hdr);
+    EnableWindow(Item(dialog, IdHdrWhiteLabel), hdr);
+    EnableWindow(Item(dialog, IdHdrWhite), hdr);
 }
 
 void ShowGame(const Dialog& dialog, const Settings::Game& game) {
@@ -1610,6 +1641,10 @@ void Show(Dialog& dialog, const Settings::Display& display) {
     FillResolutions(dialog, display.width, display.height);
     FillRates(dialog, display.refresh_rate);
     Select(Item(dialog, IdVSync), static_cast<int>(display.vsync));
+    Select(Item(dialog, IdHdr), display.hdr ? 0 : 1);
+    Select(Item(dialog, IdHdrPeak), IndexOf(Settings::HdrPeakLevels, display.hdr_peak_nits, 3));
+    Select(Item(dialog, IdHdrWhite),
+           IndexOf(Settings::HdrPaperWhiteLevels, display.hdr_paper_white_nits, 4));
     UpdateEnabled(dialog);
 }
 
@@ -1637,6 +1672,10 @@ Settings::Display Read(const Dialog& dialog) {
     if (vsync >= 0 && vsync < static_cast<int>(VSyncNames.size())) {
         display.vsync = static_cast<Settings::VSync>(vsync);
     }
+    display.hdr = Selected(Item(dialog, IdHdr)) == 0;
+    ReadChoice(Item(dialog, IdHdrPeak), Settings::HdrPeakLevels, display.hdr_peak_nits);
+    ReadChoice(Item(dialog, IdHdrWhite), Settings::HdrPaperWhiteLevels,
+               display.hdr_paper_white_nits);
     return display;
 }
 
@@ -1770,10 +1809,11 @@ void Build(HWND window, Dialog& dialog) {
     RECT page_area{0, 0, tab_width, tab_height};
     TabCtrl_AdjustRect(tab, FALSE, &page_area);
     for (size_t i = 0; i < PageCount; ++i) {
-        dialog.pages[i] = CreateWindowExW(
-            WS_EX_CONTROLPARENT, PageClass, L"", WS_CHILD | (i == DisplayPage ? WS_VISIBLE : 0),
-            page_area.left, page_area.top, page_area.right - page_area.left,
-            page_area.bottom - page_area.top, tab, nullptr, instance, nullptr);
+        dialog.pages[i] =
+            CreateWindowExW(WS_EX_CONTROLPARENT, PageClass, L"",
+                            WS_CHILD | (i == DisplayPage ? WS_VISIBLE | WS_VSCROLL : 0),
+                            page_area.left, page_area.top, page_area.right - page_area.left,
+                            page_area.bottom - page_area.top, tab, nullptr, instance, nullptr);
     }
     const POINT page_origin{Scaled(dialog, TabArea.left) + page_area.left,
                             Scaled(dialog, TabArea.top) + page_area.top};
@@ -1787,15 +1827,40 @@ void Build(HWND window, Dialog& dialog) {
                                      L"Exclusive Fullscreen", BS_AUTOCHECKBOX | WS_TABSTOP,
                                      IdExclusive, CheckLeft, ExclusiveTop, CheckWidth,
                                      CheckHeight));
-    for (const Row& row : Rows) {
+    const auto add_row = [&](const Row& row) {
         page_order.push_back(MakeControl(dialog, display_page, page_origin, WC_STATICW, row.text,
                                          SS_LEFT | SS_CENTERIMAGE, row.label, LabelLeft, row.top,
                                          LabelWidth, ComboHeight));
         page_order.push_back(MakeControl(dialog, display_page, page_origin, WC_COMBOBOXW, L"",
                                          CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, row.combo,
                                          ComboLeft, row.top, ComboWidth, ComboListHeight));
+    };
+    for (const Row& row : Rows) {
+        add_row(row);
+    }
+    const int volume_right = ComboLeft + ComboWidth;
+    page_order.push_back(MakeControl(dialog, display_page, page_origin, WC_STATICW, L"Volume",
+                                     SS_LEFT, IdVolumeLabel, LabelLeft, VolumeTop,
+                                     volume_right - SliderValueWidth - LabelLeft, InfoHeight));
+    page_order.push_back(MakeControl(dialog, display_page, page_origin, WC_STATICW, L"", SS_RIGHT,
+                                     IdVolumeValue, volume_right - SliderValueWidth, VolumeTop,
+                                     SliderValueWidth, InfoHeight));
+    const HWND volume_bar = MakeControl(
+        dialog, display_page, page_origin, TRACKBAR_CLASSW, L"",
+        TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, IdVolume, LabelLeft - SliderOverhang,
+        VolumeTop + SliderTop, volume_right - LabelLeft + 2 * SliderOverhang, SliderHeight);
+    SendMessageW(volume_bar, TBM_SETRANGE, FALSE, MAKELPARAM(0, MaxVolume));
+    page_order.push_back(volume_bar);
+    for (const Row& row : HdrRows) {
+        add_row(row);
     }
     KeepTabOrder(page_order);
+    RECT display_area{};
+    GetClientRect(display_page, &display_area);
+    SCROLLINFO display_scroll{sizeof(display_scroll), SIF_RANGE | SIF_PAGE};
+    display_scroll.nMax = Scaled(dialog, DisplayPageBottom) - page_origin.y - 1;
+    display_scroll.nPage = static_cast<UINT>(display_area.bottom);
+    SetScrollInfo(display_page, SB_VERT, &display_scroll, FALSE);
 
     const HWND graphics_page = dialog.pages[GraphicsPage];
     std::vector<HWND> graphics_order;
@@ -2171,6 +2236,15 @@ void Build(HWND window, Dialog& dialog) {
     for (const wchar_t* name : VSyncNames) {
         AddText(Item(dialog, IdVSync), name);
     }
+    for (const wchar_t* name : SwitchChoices) {
+        AddText(Item(dialog, IdHdr), name);
+    }
+    for (const u32 nits : Settings::HdrPeakLevels) {
+        AddText(Item(dialog, IdHdrPeak), std::to_wstring(nits) + L" nits");
+    }
+    for (const u32 nits : Settings::HdrPaperWhiteLevels) {
+        AddText(Item(dialog, IdHdrWhite), std::to_wstring(nits) + L" nits");
+    }
     for (const GamePatches::FrameRate& rate : GamePatches::FrameRates) {
         AddText(Item(dialog, IdFrameRate), std::to_wstring(rate.fps) + L" FPS");
     }
@@ -2192,6 +2266,7 @@ void Build(HWND window, Dialog& dialog) {
     }
     ShowLanguage(dialog, Language::Current());
     Show(dialog, dialog.values.display);
+    ShowVolume(dialog, EmulatorSettings.GetVolumeSlider());
     ShowGame(dialog, dialog.values.game);
     ShowGraphics(dialog, dialog.values.graphics);
     ShowUpscaler(dialog, dialog.values.graphics);
@@ -2210,6 +2285,11 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdFullscreen:
     case IdExclusive:
         if (code == BN_CLICKED) {
+            UpdateEnabled(dialog);
+        }
+        break;
+    case IdHdr:
+        if (code == CBN_SELCHANGE) {
             UpdateEnabled(dialog);
         }
         break;
@@ -2270,6 +2350,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdDefaults:
         if (code == BN_CLICKED) {
             Show(dialog, Settings::Display{});
+            ShowVolume(dialog, GeneralSettings{}.volume_slider.value);
             ShowGame(dialog, Settings::Game{});
             ShowGraphics(dialog, Settings::Graphics{});
             ShowUpscaler(dialog, Settings::Graphics{});
@@ -2400,9 +2481,11 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         dialog.values.graphics = ReadGraphics(dialog);
         dialog.values.mouse = ReadMouse(dialog);
         Settings::Set(dialog.values);
-        // The game starts in the language the launcher shows; SaveController saves it and the
-        // trophy pop-ups' switch.
+        // The game starts in the language the launcher shows; SaveController saves it, the
+        // volume and the trophy pop-ups' switch.
         EmulatorSettings.SetConsoleLanguage(Language::Current());
+        EmulatorSettings.SetVolumeSlider(
+            static_cast<int>(SendMessageW(Item(dialog, IdVolume), TBM_GETPOS, 0, 0)));
         EmulatorSettings.SetTrophyPopupDisabled(!Checked(dialog, IdTrophyPopups));
         dialog.restart = SavePaths(dialog);
         SaveOnline(window, dialog);
@@ -2494,10 +2577,57 @@ INT_PTR CALLBACK DialogProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
     }
 }
 
+// Moves the page's controls up by distance pixels, within its scroll bar's range. Pages without a
+// scroll bar stay.
+void ScrollPage(HWND page, int distance) {
+    SCROLLINFO scroll{sizeof(scroll), SIF_ALL};
+    if (!GetScrollInfo(page, SB_VERT, &scroll)) {
+        return;
+    }
+    const int position = std::clamp(scroll.nPos + distance, scroll.nMin,
+                                    scroll.nMax + 1 - static_cast<int>(scroll.nPage));
+    ScrollWindowEx(page, 0, scroll.nPos - position, nullptr, nullptr, nullptr, nullptr,
+                   SW_SCROLLCHILDREN | SW_INVALIDATE | SW_ERASE);
+    SetScrollPos(page, SB_VERT, position, TRUE);
+}
+
 // The page sits inside the tab control and hands its controls' messages to the dialog. The
-// shadNet links open in the browser.
+// shadNet links open in the browser. A wheel notch or a scroll bar arrow scrolls a page by a row.
 LRESULT CALLBACK PageProc(HWND page, UINT message, WPARAM wparam, LPARAM lparam) {
+    const int row = MulDiv(RowStep, GetDpiForWindow(page), USER_DEFAULT_SCREEN_DPI);
     switch (message) {
+    case WM_MOUSEWHEEL:
+        ScrollPage(page, -MulDiv(GET_WHEEL_DELTA_WPARAM(wparam), row, WHEEL_DELTA));
+        return 0;
+    case WM_VSCROLL: {
+        SCROLLINFO scroll{sizeof(scroll), SIF_ALL};
+        GetScrollInfo(page, SB_VERT, &scroll);
+        const int page_height = static_cast<int>(scroll.nPage);
+        switch (LOWORD(wparam)) {
+        case SB_LINEUP:
+            ScrollPage(page, -row);
+            break;
+        case SB_LINEDOWN:
+            ScrollPage(page, row);
+            break;
+        case SB_PAGEUP:
+            ScrollPage(page, -page_height);
+            break;
+        case SB_PAGEDOWN:
+            ScrollPage(page, page_height);
+            break;
+        case SB_THUMBTRACK:
+            ScrollPage(page, scroll.nTrackPos - scroll.nPos);
+            break;
+        case SB_TOP:
+            ScrollPage(page, -scroll.nPos);
+            break;
+        case SB_BOTTOM:
+            ScrollPage(page, scroll.nMax);
+            break;
+        }
+        return 0;
+    }
     case WM_COMMAND:
     case WM_HSCROLL:
     case WM_CTLCOLORSTATIC:

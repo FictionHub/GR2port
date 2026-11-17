@@ -28,6 +28,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QScrollArea>
 #include <QSlider>
 #include <QTabBar>
 #include <QTimer>
@@ -271,7 +272,8 @@ struct Pad {
     std::string guid;
 };
 
-// The Display tab's rows, 28 pixels apart, which fits ten below the check boxes.
+// The Display tab's rows, 28 pixels apart below the check boxes, then the volume and the HDR
+// rows. The page scrolls to the ones below the tenth row, down to DisplayPageBottom.
 constexpr int MonitorTop = 140;
 constexpr int ResolutionTop = 168;
 constexpr int RefreshTop = 196;
@@ -282,6 +284,11 @@ constexpr int RenderSizeTop = 308;
 constexpr int UpscalerTop = 336;
 constexpr int UpscaleQualityTop = 364;
 constexpr int LanguageTop = 392;
+constexpr int VolumeTop = 420;
+constexpr int HdrTop = 468;
+constexpr int HdrPeakTop = 496;
+constexpr int HdrWhiteTop = 524;
+constexpr int DisplayPageBottom = 562;
 
 // In the order of Settings::VSync.
 constexpr std::array<std::string_view, 3> VSyncNames{"Off", "Double Buffered", "Triple Buffered"};
@@ -427,6 +434,12 @@ struct Dialog {
     QComboBox* upscaler = nullptr;
     QComboBox* upscale_quality = nullptr;
     QComboBox* language = nullptr;
+    QSlider* volume = nullptr;
+    QComboBox* hdr = nullptr;
+    QLabel* hdr_peak_label = nullptr;
+    QComboBox* hdr_peak = nullptr;
+    QLabel* hdr_white_label = nullptr;
+    QComboBox* hdr_white = nullptr;
     QComboBox* preset = nullptr;
     QComboBox* field_of_view = nullptr;
     QComboBox* shadows = nullptr;
@@ -834,6 +847,11 @@ void UpdateEnabled(const Dialog& dialog) {
     dialog.resolution->setEnabled(!fullscreen || exclusive);
     dialog.refresh_label->setEnabled(exclusive);
     dialog.refresh->setEnabled(exclusive);
+    const bool hdr = dialog.hdr->currentIndex() == 0;
+    dialog.hdr_peak_label->setEnabled(hdr);
+    dialog.hdr_peak->setEnabled(hdr);
+    dialog.hdr_white_label->setEnabled(hdr);
+    dialog.hdr_white->setEnabled(hdr);
 }
 
 void CheckRow(const Dialog& dialog, int row, bool on) {
@@ -1089,6 +1107,10 @@ void Show(Dialog& dialog, const Settings::Display& display) {
     FillResolutions(dialog, display.width, display.height);
     FillRates(dialog, display.refresh_rate);
     dialog.vsync->setCurrentIndex(static_cast<int>(display.vsync));
+    dialog.hdr->setCurrentIndex(display.hdr ? 0 : 1);
+    dialog.hdr_peak->setCurrentIndex(IndexOf(Settings::HdrPeakLevels, display.hdr_peak_nits, 3));
+    dialog.hdr_white->setCurrentIndex(
+        IndexOf(Settings::HdrPaperWhiteLevels, display.hdr_paper_white_nits, 4));
     UpdateEnabled(dialog);
 }
 
@@ -1116,6 +1138,9 @@ Settings::Display Read(const Dialog& dialog) {
     if (vsync >= 0 && vsync < static_cast<int>(VSyncNames.size())) {
         display.vsync = static_cast<Settings::VSync>(vsync);
     }
+    display.hdr = dialog.hdr->currentIndex() == 0;
+    ReadChoice(dialog.hdr_peak, Settings::HdrPeakLevels, display.hdr_peak_nits);
+    ReadChoice(dialog.hdr_white, Settings::HdrPaperWhiteLevels, display.hdr_paper_white_nits);
     return display;
 }
 
@@ -1301,6 +1326,13 @@ void BuildDisplay(Dialog& dialog, QWidget* page) {
     dialog.upscaler = MakeRow(dialog, page, "Upscaler", UpscalerTop);
     dialog.upscale_quality = MakeRow(dialog, page, "Upscaler Quality", UpscaleQualityTop);
     dialog.language = MakeRow(dialog, page, "Language", LanguageTop);
+    dialog.volume = MakeSlider(dialog, page, "Volume", LabelLeft, ComboLeft + ComboWidth, VolumeTop,
+                               0, MaxVolume, "%");
+    dialog.hdr = MakeRow(dialog, page, "HDR", HdrTop);
+    dialog.hdr_peak =
+        MakeRow(dialog, page, "HDR Peak Brightness", HdrPeakTop, &dialog.hdr_peak_label);
+    dialog.hdr_white =
+        MakeRow(dialog, page, "HDR Paper White", HdrWhiteTop, &dialog.hdr_white_label);
 }
 
 // Tab order follows creation: the preset and the field of view, the left column's rows, then the
@@ -1765,9 +1797,10 @@ void Save(Dialog& dialog) {
     dialog.values.graphics = ReadGraphics(dialog);
     dialog.values.mouse = ReadMouse(dialog);
     Settings::Set(dialog.values);
-    // The game starts in the language the launcher shows; SaveController saves it and the trophy
-    // pop-ups' switch.
+    // The game starts in the language the launcher shows; SaveController saves it, the volume and
+    // the trophy pop-ups' switch.
     EmulatorSettings.SetConsoleLanguage(Language::Current());
+    EmulatorSettings.SetVolumeSlider(dialog.volume->value());
     EmulatorSettings.SetTrophyPopupDisabled(!dialog.trophy_popups->isChecked());
     dialog.restart = SavePaths(dialog);
     SaveOnline(dialog);
@@ -1786,6 +1819,7 @@ void Save(Dialog& dialog) {
 
 void SetDefaults(Dialog& dialog) {
     Show(dialog, Settings::Display{});
+    dialog.volume->setValue(GeneralSettings{}.volume_slider.value);
     ShowGame(dialog, Settings::Game{});
     ShowGraphics(dialog, Settings::Graphics{});
     ShowUpscaler(dialog, Settings::Graphics{});
@@ -1842,6 +1876,14 @@ void Build(Dialog& dialog) {
     }
 
     BuildDisplay(dialog, dialog.pages[DisplayPage]);
+    auto* const display_scroll = new QScrollArea{window};
+    display_scroll->setGeometry(dialog.pages[DisplayPage]->geometry());
+    display_scroll->setFrameShape(QFrame::NoFrame);
+    display_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    display_scroll->setWidgetResizable(true);
+    dialog.pages[DisplayPage]->setMinimumHeight(DisplayPageBottom - dialog.pages[DisplayPage]->y());
+    display_scroll->setWidget(dialog.pages[DisplayPage]);
+    dialog.pages[DisplayPage] = display_scroll;
     BuildGraphics(dialog, dialog.pages[GraphicsPage]);
     BuildController(dialog, dialog.pages[ControllerPage]);
     BuildMouse(dialog, dialog.pages[MousePage]);
@@ -1861,6 +1903,15 @@ void Build(Dialog& dialog) {
     }
     for (const std::string_view name : VSyncNames) {
         AddText(dialog, dialog.vsync, name);
+    }
+    for (const std::string_view name : SwitchChoices) {
+        AddText(dialog, dialog.hdr, name);
+    }
+    for (const u32 nits : Settings::HdrPeakLevels) {
+        AddText(dialog, dialog.hdr_peak, std::to_string(nits) + " nits");
+    }
+    for (const u32 nits : Settings::HdrPaperWhiteLevels) {
+        AddText(dialog, dialog.hdr_white, std::to_string(nits) + " nits");
     }
     for (const GamePatches::FrameRate& rate : GamePatches::FrameRates) {
         AddText(dialog, dialog.frame_rate, std::to_string(rate.fps) + " FPS");
@@ -1883,6 +1934,7 @@ void Build(Dialog& dialog) {
     }
     ShowLanguage(dialog, Language::Current());
     Show(dialog, dialog.values.display);
+    dialog.volume->setValue(EmulatorSettings.GetVolumeSlider());
     ShowGame(dialog, dialog.values.game);
     ShowGraphics(dialog, dialog.values.graphics);
     ShowUpscaler(dialog, dialog.values.graphics);
@@ -1907,6 +1959,8 @@ void Build(Dialog& dialog) {
     for (QCheckBox* const check : {dialog.fullscreen, dialog.exclusive}) {
         QObject::connect(check, &QCheckBox::clicked, window, [&dialog] { UpdateEnabled(dialog); });
     }
+    QObject::connect(dialog.hdr, &QComboBox::activated, window,
+                     [&dialog] { UpdateEnabled(dialog); });
     QObject::connect(dialog.monitor, &QComboBox::activated, window, [&dialog](int monitor) {
         const Settings::Display shown = Read(dialog);
         if (monitor >= 0 && monitor < static_cast<int>(dialog.monitors.size())) {
