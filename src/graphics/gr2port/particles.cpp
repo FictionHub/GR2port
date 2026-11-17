@@ -361,20 +361,20 @@ u32 g_alive_pool = 0;
 void Build() {
     const auto start = std::chrono::steady_clock::now();
     const Device& d = *g_device;
+    PipelineBatch batch{d};
     const std::array compute_sets{g_compute_layout};
     const std::array draw_sets{Textures::SetLayout(), g_draw_layout};
-    g_update = CreateComputePipeline(d, GPU_OBJECT_UPDATE_COMP, sizeof(UpdatePush), compute_sets);
-    g_active_pipeline = CreateComputePipeline(d, PARTICLE_ACTIVE_COMP, sizeof(ActivePush));
-    g_clear = CreateComputePipeline(d, GPU_PARTICLE_CLEAR_COMP, sizeof(u64));
-    g_move = CreateComputePipeline(d, GPU_PARTICLE_MOVE_COMP, sizeof(MovePush), compute_sets);
-    g_spawn = CreateComputePipeline(d, GPU_EMITTER_SPAWN_COMP, sizeof(SpawnPush), compute_sets);
-    g_sample = CreateComputePipeline(d, GPU_SAMPLE_MESH_COMP, sizeof(SamplePush));
-    g_sample_skinned = CreateComputePipeline(d, GPU_SAMPLE_SKINNED_MESH_COMP, sizeof(SamplePush));
-    g_emitter_color =
-        CreateComputePipeline(d, EMITTER_COLOR_COMP, sizeof(EmitterColorPush), compute_sets);
+    batch.Add(g_update, GPU_OBJECT_UPDATE_COMP, sizeof(UpdatePush), compute_sets);
+    batch.Add(g_active_pipeline, PARTICLE_ACTIVE_COMP, sizeof(ActivePush));
+    batch.Add(g_clear, GPU_PARTICLE_CLEAR_COMP, sizeof(u64));
+    batch.Add(g_move, GPU_PARTICLE_MOVE_COMP, sizeof(MovePush), compute_sets);
+    batch.Add(g_spawn, GPU_EMITTER_SPAWN_COMP, sizeof(SpawnPush), compute_sets);
+    batch.Add(g_sample, GPU_SAMPLE_MESH_COMP, sizeof(SamplePush));
+    batch.Add(g_sample_skinned, GPU_SAMPLE_SKINNED_MESH_COMP, sizeof(SamplePush));
+    batch.Add(g_emitter_color, EMITTER_COLOR_COMP, sizeof(EmitterColorPush), compute_sets);
     const std::array backup_sets{g_backup_layout};
-    g_color_backup = CreateComputePipeline(d, COLOR_BACKUP_COMP, sizeof(u64), backup_sets);
-    g_collision_backup = CreateComputePipeline(d, COLLISION_BACKUP_COMP, sizeof(u64), backup_sets);
+    batch.Add(g_color_backup, COLOR_BACKUP_COMP, sizeof(u64), backup_sets);
+    batch.Add(g_collision_backup, COLLISION_BACKUP_COMP, sizeof(u64), backup_sets);
     using Programs = std::array<std::span<const u32>, ProgramCount>;
     const Programs sprite_pixels{
         SPRITE_PLAIN_FRAG,           SPRITE_PLAIN_SOFT_FRAG,   SPRITE_LIT_FRAG,
@@ -398,10 +398,6 @@ void Build() {
         {SPRITE_RIBBON_VERT, vk::PrimitiveTopology::eTriangleStrip, sprite_pixels},
         {MODEL_VERT, vk::PrimitiveTopology::eTriangleList, model_pixels},
     }};
-    bool built = g_update.pipeline && g_active_pipeline.pipeline && g_clear.pipeline &&
-                 g_move.pipeline && g_spawn.pipeline && g_sample.pipeline &&
-                 g_sample_skinned.pipeline && g_emitter_color.pipeline && g_color_backup.pipeline &&
-                 g_collision_backup.pipeline;
     constexpr vk::ColorComponentFlags AllComponents =
         vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
         vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
@@ -419,7 +415,6 @@ void Build() {
     };
     for (u32 shape = 0; shape < ShapeCount; shape++) {
         for (u32 program = 0; program < ProgramCount; program++) {
-            Pipeline& pipeline = g_draws[shape * ProgramCount + program];
             GraphicsPipelineInfo info{
                 .vertex = shapes[shape].vertex,
                 .fragment = shapes[shape].pixels[program],
@@ -435,13 +430,10 @@ void Build() {
                 .push_constant_bytes = sizeof(DrawPush),
                 .set_layouts = draw_sets,
             };
-            pipeline = CreateGraphicsPipeline(d, info);
-            built = built && pipeline.pipeline;
+            batch.Add(g_draws[shape * ProgramCount + program], info);
             if (g_half) {
-                Pipeline& half = g_half_draws[shape * ProgramCount + program];
                 info.blend = &Over;
-                half = CreateGraphicsPipeline(d, info);
-                built = built && half.pipeline;
+                batch.Add(g_half_draws[shape * ProgramCount + program], info);
             }
         }
     }
@@ -458,23 +450,21 @@ void Build() {
     };
     for (u32 shape = 0; shape < ShapeCount; shape++) {
         for (u32 program = 0; program < OpaquePrograms; program++) {
-            Pipeline& pipeline = g_opaque[shape * OpaquePrograms + program];
-            pipeline =
-                CreateGraphicsPipeline(d, {
-                                              .vertex = shapes[shape].vertex,
-                                              .fragment = shapes[shape].pixels[program],
-                                              .color = g_scene_format,
-                                              .depth = g_depth_format,
-                                              .topology = shapes[shape].topology,
-                                              .depth_test = true,
-                                              .depth_write = false,
-                                              .depth_compare = vk::CompareOp::eGreaterOrEqual,
-                                              .blend = &Replace,
-                                              .dynamic_depth_and_cull = true,
-                                              .push_constant_bytes = sizeof(DrawPush),
-                                              .set_layouts = draw_sets,
-                                          });
-            built = built && pipeline.pipeline;
+            batch.Add(g_opaque[shape * OpaquePrograms + program],
+                      {
+                          .vertex = shapes[shape].vertex,
+                          .fragment = shapes[shape].pixels[program],
+                          .color = g_scene_format,
+                          .depth = g_depth_format,
+                          .topology = shapes[shape].topology,
+                          .depth_test = true,
+                          .depth_write = false,
+                          .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                          .blend = &Replace,
+                          .dynamic_depth_and_cull = true,
+                          .push_constant_bytes = sizeof(DrawPush),
+                          .set_layouts = draw_sets,
+                      });
         }
     }
     const GraphicsPipelineInfo effect{
@@ -496,15 +486,14 @@ void Build() {
     effect_opaque.premultiplied_blend = false;
     effect_opaque.clear_target_alpha = false;
     effect_opaque.blend = &Replace;
-    g_effect = CreateGraphicsPipeline(d, effect);
-    g_effect_opaque = CreateGraphicsPipeline(d, effect_opaque);
-    built = built && g_effect.pipeline && g_effect_opaque.pipeline;
+    batch.Add(g_effect, effect);
+    batch.Add(g_effect_opaque, effect_opaque);
     if (g_half) {
         // Pass 1's pipelines draw into the half target as they are, since it has the scene's
         // format: they replace its colour and zero its alpha, so none of the scene shows through.
         GraphicsPipelineInfo half_effect = effect;
         half_effect.blend = &Over;
-        g_half_effect = CreateGraphicsPipeline(d, half_effect);
+        batch.Add(g_half_effect, half_effect);
         // The scene takes the target's colour plus its own times the target's alpha, and its
         // alpha turns 0 as under any particle.
         constexpr vk::PipelineColorBlendAttachmentState Composite{
@@ -518,45 +507,41 @@ void Build() {
             .colorWriteMask = AllComponents,
         };
         const std::array half_sets{g_half_layout};
-        g_half_downsample = CreateGraphicsPipeline(d, {
-                                                          .vertex = FULLSCREEN_VERT,
-                                                          .fragment = PARTICLE_HALF_FRAG,
-                                                          .depth = g_depth_format,
-                                                          .depth_test = true,
-                                                          .depth_compare = vk::CompareOp::eAlways,
-                                                          .push_constant_bytes = sizeof(u32),
-                                                          .set_layouts = half_sets,
-                                                      });
-        g_half_composite = CreateGraphicsPipeline(d, {
-                                                         .vertex = FULLSCREEN_VERT,
-                                                         .fragment = PARTICLE_HALF_FRAG,
-                                                         .color = g_scene_format,
-                                                         .blend = &Composite,
-                                                         .push_constant_bytes = sizeof(u32),
-                                                         .set_layouts = half_sets,
-                                                     });
-        built = built && g_half_effect.pipeline && g_half_downsample.pipeline &&
-                g_half_composite.pipeline;
+        batch.Add(g_half_downsample, {
+                                         .vertex = FULLSCREEN_VERT,
+                                         .fragment = PARTICLE_HALF_FRAG,
+                                         .depth = g_depth_format,
+                                         .depth_test = true,
+                                         .depth_compare = vk::CompareOp::eAlways,
+                                         .push_constant_bytes = sizeof(u32),
+                                         .set_layouts = half_sets,
+                                     });
+        batch.Add(g_half_composite, {
+                                        .vertex = FULLSCREEN_VERT,
+                                        .fragment = PARTICLE_HALF_FRAG,
+                                        .color = g_scene_format,
+                                        .blend = &Composite,
+                                        .push_constant_bytes = sizeof(u32),
+                                        .set_layouts = half_sets,
+                                    });
     }
     for (u32 program = 0; program < SelfTranslucentPrograms; program++) {
         for (u32 tested = 0; tested < 2; tested++) {
-            Pipeline& inside = g_self_translucent[program * 2 + tested];
-            inside =
-                CreateGraphicsPipeline(d, {
-                                              .vertex = SPRITE_VERT,
-                                              .fragment = sprite_pixels[program],
-                                              .color = SelfTranslucent::ColorFormat,
-                                              .depth = SelfTranslucent::DepthFormat,
-                                              .topology = vk::PrimitiveTopology::eTriangleStrip,
-                                              .depth_test = tested != 0,
-                                              .depth_write = false,
-                                              .depth_compare = vk::CompareOp::eGreaterOrEqual,
-                                              .stencil_equal = true,
-                                              .premultiplied_blend = true,
-                                              .push_constant_bytes = sizeof(DrawPush),
-                                              .set_layouts = draw_sets,
-                                          });
-            built = built && inside.pipeline;
+            batch.Add(g_self_translucent[program * 2 + tested],
+                      {
+                          .vertex = SPRITE_VERT,
+                          .fragment = sprite_pixels[program],
+                          .color = SelfTranslucent::ColorFormat,
+                          .depth = SelfTranslucent::DepthFormat,
+                          .topology = vk::PrimitiveTopology::eTriangleStrip,
+                          .depth_test = tested != 0,
+                          .depth_write = false,
+                          .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                          .stencil_equal = true,
+                          .premultiplied_blend = true,
+                          .push_constant_bytes = sizeof(DrawPush),
+                          .set_layouts = draw_sets,
+                      });
         }
     }
     struct ProgramPair {
@@ -577,20 +562,18 @@ void Build() {
          vk::PrimitiveTopology::eTriangleList},
     }};
     for (u32 i = 0; i < ShadowPrograms; i++) {
-        g_shadow_pipelines[i] =
-            CreateGraphicsPipeline(d, {
-                                          .vertex = shadow_programs[i].vertex,
-                                          .fragment = shadow_programs[i].fragment,
-                                          .depth = Shadows::DepthFormat,
-                                          .topology = shadow_programs[i].topology,
-                                          .depth_test = true,
-                                          .depth_compare = vk::CompareOp::eLessOrEqual,
-                                          .depth_bias = true,
-                                          .dynamic_depth_and_cull = true,
-                                          .push_constant_bytes = sizeof(DrawPush),
-                                          .set_layouts = draw_sets,
-                                      });
-        built = built && g_shadow_pipelines[i].pipeline;
+        batch.Add(g_shadow_pipelines[i], {
+                                             .vertex = shadow_programs[i].vertex,
+                                             .fragment = shadow_programs[i].fragment,
+                                             .depth = Shadows::DepthFormat,
+                                             .topology = shadow_programs[i].topology,
+                                             .depth_test = true,
+                                             .depth_compare = vk::CompareOp::eLessOrEqual,
+                                             .depth_bias = true,
+                                             .dynamic_depth_and_cull = true,
+                                             .push_constant_bytes = sizeof(DrawPush),
+                                             .set_layouts = draw_sets,
+                                         });
     }
     const std::array<ProgramPair, Scene::ParticleSurfaceVariants> surface_programs{{
         {PARTICLE_SURFACE_VERT, PARTICLE_SURFACE_FRAG, vk::PrimitiveTopology::eTriangleList},
@@ -602,20 +585,18 @@ void Build() {
          vk::PrimitiveTopology::eTriangleList},
     }};
     for (u32 i = 0; i < Scene::ParticleSurfaceVariants; i++) {
-        g_surface_pipelines[i] =
-            CreateGraphicsPipeline(d, {
-                                          .vertex = surface_programs[i].vertex,
-                                          .fragment = surface_programs[i].fragment,
-                                          .colors = World::SurfaceFormats,
-                                          .depth = g_depth_format,
-                                          .topology = surface_programs[i].topology,
-                                          .depth_test = true,
-                                          .depth_compare = vk::CompareOp::eGreaterOrEqual,
-                                          .dynamic_depth_and_cull = true,
-                                          .push_constant_bytes = sizeof(DrawPush),
-                                          .set_layouts = draw_sets,
-                                      });
-        built = built && g_surface_pipelines[i].pipeline;
+        batch.Add(g_surface_pipelines[i], {
+                                              .vertex = surface_programs[i].vertex,
+                                              .fragment = surface_programs[i].fragment,
+                                              .colors = World::SurfaceFormats,
+                                              .depth = g_depth_format,
+                                              .topology = surface_programs[i].topology,
+                                              .depth_test = true,
+                                              .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                              .dynamic_depth_and_cull = true,
+                                              .push_constant_bytes = sizeof(DrawPush),
+                                              .set_layouts = draw_sets,
+                                          });
     }
     const std::array<std::span<const u32>, 2> sprite_gbuffer{SPRITE_GBUFFER_FRAG,
                                                              SPRITE_GBUFFER_SOFT_FRAG};
@@ -624,38 +605,35 @@ void Build() {
     for (u32 shape = 0; shape < ShapeCount; shape++) {
         const bool model = shape == static_cast<u32>(Scene::ParticleShape::Model);
         for (u32 soft = 0; soft < 2; soft++) {
-            Pipeline& pipeline =
-                g_surface_pipelines[Scene::ParticleSurfaceVariants + shape * 2 + soft];
-            pipeline = CreateGraphicsPipeline(
-                d, {
-                       .vertex = shapes[shape].vertex,
-                       .fragment = model ? model_gbuffer[soft] : sprite_gbuffer[soft],
-                       .colors = World::SurfaceFormats,
-                       .depth = g_depth_format,
-                       .topology = shapes[shape].topology,
-                       .depth_test = true,
-                       .depth_compare = vk::CompareOp::eGreaterOrEqual,
-                       .dynamic_depth_and_cull = true,
-                       .push_constant_bytes = sizeof(DrawPush),
-                       .set_layouts = draw_sets,
-                   });
-            built = built && pipeline.pipeline;
+            batch.Add(g_surface_pipelines[Scene::ParticleSurfaceVariants + shape * 2 + soft],
+                      {
+                          .vertex = shapes[shape].vertex,
+                          .fragment = model ? model_gbuffer[soft] : sprite_gbuffer[soft],
+                          .colors = World::SurfaceFormats,
+                          .depth = g_depth_format,
+                          .topology = shapes[shape].topology,
+                          .depth_test = true,
+                          .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                          .dynamic_depth_and_cull = true,
+                          .push_constant_bytes = sizeof(DrawPush),
+                          .set_layouts = draw_sets,
+                      });
         }
     }
-    Pipeline& gem = g_surface_pipelines[Scene::ParticleSurfaceGem];
-    gem = CreateGraphicsPipeline(d, {
-                                        .vertex = PARTICLE_GEM_VERT,
-                                        .fragment = PARTICLE_GEM_FRAG,
-                                        .colors = World::SurfaceFormats,
-                                        .depth = g_depth_format,
-                                        .topology = vk::PrimitiveTopology::eTriangleList,
-                                        .depth_test = true,
-                                        .depth_compare = vk::CompareOp::eGreaterOrEqual,
-                                        .dynamic_depth_and_cull = true,
-                                        .push_constant_bytes = sizeof(DrawPush),
-                                        .set_layouts = draw_sets,
-                                    });
-    built = built && gem.pipeline;
+    batch.Add(g_surface_pipelines[Scene::ParticleSurfaceGem],
+              {
+                  .vertex = PARTICLE_GEM_VERT,
+                  .fragment = PARTICLE_GEM_FRAG,
+                  .colors = World::SurfaceFormats,
+                  .depth = g_depth_format,
+                  .topology = vk::PrimitiveTopology::eTriangleList,
+                  .depth_test = true,
+                  .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                  .dynamic_depth_and_cull = true,
+                  .push_constant_bytes = sizeof(DrawPush),
+                  .set_layouts = draw_sets,
+              });
+    const bool built = batch.Build();
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - start)
                         .count();

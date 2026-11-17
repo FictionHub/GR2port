@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include <functional>
 #include <span>
 #include <string>
+#include <vector>
 
 #include "graphics/gr2port/device.h"
 
@@ -86,6 +88,23 @@ Pipeline CreateComputePipeline(const Device& device, std::span<const u32> code,
 
 void DestroyPipeline(const Device& device, Pipeline& pipeline);
 
+/// Pipelines made together on all the CPU's threads: Add notes a pipeline with a copy of its
+/// states, and Build makes every pipeline noted. The shader code stays in use until Build returns.
+class PipelineBatch {
+public:
+    explicit PipelineBatch(const Device& device);
+    void Add(Pipeline& pipeline, const GraphicsPipelineInfo& info);
+    void Add(Pipeline& pipeline, std::span<const u32> code, u32 push_constant_bytes,
+             std::span<const vk::DescriptorSetLayout> set_layouts = {});
+    /// Makes the pipelines noted since the last Build; true when every one of them was made.
+    bool Build();
+
+private:
+    const Device& device;
+    std::vector<std::function<void()>> builds;
+    std::vector<Pipeline*> pipelines;
+};
+
 /// The stages of the pipeline the calling thread is building, each with the FNV-1a sum of its
 /// code and its length, for the report of a fault inside the driver; empty outside a build.
 std::string PipelineBeingBuilt();
@@ -131,7 +150,7 @@ u64 DeviceSetup(const vk::DeviceCreateInfo& info);
 void LoadPipelineCache(Device& device, u64 setup);
 
 /// Any thread: writes the pipeline cache to its file, with every pipeline made so far, when the
-/// cache holds pipelines the file does not.
+/// cache holds pipelines the file does not. While the start's builds run, the last of them saves.
 void SavePipelineCache(const Device& device);
 
 } // namespace Gr2Port

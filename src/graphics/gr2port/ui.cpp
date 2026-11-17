@@ -378,28 +378,29 @@ bool Start(const Device& device, Memory& memory) {
         return true;
     }
     const std::array pipeline_sets{Textures::SetLayout(), g_sampler_layout};
+    PipelineBatch batch{device};
     u32 made = 0;
     for (u32 vertex = 0; vertex < VertexPrograms; vertex++) {
         for (u32 pixel = 0; pixel < PixelPrograms; pixel++) {
             if (!Pairs(vertex, pixel) || (vertex == StrokeVertex && !device.geometry_shaders)) {
                 continue;
             }
-            Pipeline& pipeline = g_pairs[vertex * PixelPrograms + pixel];
-            pipeline = CreateGraphicsPipeline(device, {
-                                                          .vertex = VertexCode(vertex),
-                                                          .geometry = GeometryCode(vertex),
-                                                          .fragment = PixelCode(pixel),
-                                                          .color = TargetFormat,
-                                                          .dynamic_topology = true,
-                                                          .dynamic_blend = true,
-                                                          .push_constant_bytes = sizeof(Push),
-                                                          .set_layouts = pipeline_sets,
-                                                      });
-            if (!pipeline.pipeline) {
-                return false;
-            }
+            batch.Add(g_pairs[vertex * PixelPrograms + pixel],
+                      {
+                          .vertex = VertexCode(vertex),
+                          .geometry = GeometryCode(vertex),
+                          .fragment = PixelCode(pixel),
+                          .color = TargetFormat,
+                          .dynamic_topology = true,
+                          .dynamic_blend = true,
+                          .push_constant_bytes = sizeof(Push),
+                          .set_layouts = pipeline_sets,
+                      });
             made++;
         }
+    }
+    if (!batch.Build()) {
+        return false;
     }
     LOG_INFO(Render_Vulkan, "GR2port UI: {} pipelines made at start", made);
     return true;

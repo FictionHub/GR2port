@@ -3,16 +3,19 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <filesystem>
 #include <initializer_list>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -49,6 +52,9 @@ std::shared_mutex g_cache_use;
 u32 g_builds = 0;
 std::mutex g_builds_mutex;
 std::condition_variable g_builds_done;
+// The device whose pipeline cache the last of those builds saves. A save asked for while they
+// run is left to that one, since a save holds every build back until the builds in flight return.
+const Device* g_cache_device = nullptr;
 // While the game waits for the builds, the log tells how far they are this often, and names the
 // pipelines that have been in the making for longer than LongBuild.
 constexpr std::chrono::seconds ReportPeriod{30};
@@ -418,6 +424,63 @@ void DestroyPipeline(const Device& d, Pipeline& pipeline) {
     pipeline = {};
 }
 
+PipelineBatch::PipelineBatch(const Device& device) : device{device} {}
+
+void PipelineBatch::Add(Pipeline& pipeline, const GraphicsPipelineInfo& info) {
+    std::optional<vk::PipelineColorBlendAttachmentState> blend;
+    if (info.blend != nullptr) {
+        blend = *info.blend;
+    }
+    builds.emplace_back([this, &pipeline, info, blend,
+                         colors = std::vector(info.colors.begin(), info.colors.end()),
+                         sets = std::vector(info.set_layouts.begin(), info.set_layouts.end())] {
+        GraphicsPipelineInfo kept = info;
+        kept.blend = blend ? &*blend : nullptr;
+        kept.colors = colors;
+        kept.set_layouts = sets;
+        pipeline = CreateGraphicsPipeline(device, kept);
+    });
+    pipelines.push_back(&pipeline);
+}
+
+void PipelineBatch::Add(Pipeline& pipeline, std::span<const u32> code, u32 push_constant_bytes,
+                        std::span<const vk::DescriptorSetLayout> set_layouts) {
+    builds.emplace_back([this, &pipeline, code, push_constant_bytes,
+                         sets = std::vector(set_layouts.begin(), set_layouts.end())] {
+        pipeline = CreateComputePipeline(device, code, push_constant_bytes, sets);
+    });
+    pipelines.push_back(&pipeline);
+}
+
+bool PipelineBatch::Build() {
+    // Each thread takes the next pipeline nobody has taken; the caller's thread is one of them.
+    std::atomic<size_t> next{0};
+    const auto take = [this, &next] {
+        for (size_t i = next++; i < builds.size(); i = next++) {
+            builds[i]();
+        }
+    };
+    {
+        const size_t threads =
+            std::min<size_t>(std::max(1u, std::thread::hardware_concurrency()), builds.size());
+        std::vector<std::jthread> helpers;
+        for (size_t i = 1; i < threads; i++) {
+            try {
+                helpers.emplace_back(take);
+            } catch (const std::system_error&) {
+                // The threads that did start, the caller's among them, build the rest.
+                break;
+            }
+        }
+        take();
+    }
+    const bool made = std::ranges::all_of(
+        pipelines, [](const Pipeline* pipeline) { return !!pipeline->pipeline; });
+    builds.clear();
+    pipelines.clear();
+    return made;
+}
+
 u64 DeviceSetup(const vk::DeviceCreateInfo& info) {
     u64 hash = FnvBasis;
     const auto mix = [&hash](const void* bytes, size_t size) {
@@ -482,6 +545,7 @@ void LoadPipelineCache(Device& d, u64 setup) {
         nullptr, d.dispatch);
     if (result == vk::Result::eSuccess) {
         d.pipeline_cache = cache;
+        g_cache_device = &d;
         std::scoped_lock lock{g_cache_file};
         g_cache_path = path;
         g_file_size = data.size();
@@ -504,11 +568,16 @@ void PipelineBuildStarted() {
 }
 
 void PipelineBuildDone() {
+    bool last = false;
     {
         std::scoped_lock lock{g_builds_mutex};
         g_builds--;
+        last = g_builds == 0;
     }
     g_builds_done.notify_all();
+    if (last && g_cache_device != nullptr) {
+        SavePipelineCache(*g_cache_device);
+    }
 }
 
 bool WaitForPipelineBuilds() {
@@ -535,6 +604,12 @@ BuildProgress PipelineBuildProgress() {
 void SavePipelineCache(const Device& d) {
     if (!d.pipeline_cache) {
         return;
+    }
+    {
+        std::scoped_lock lock{g_builds_mutex};
+        if (g_builds != 0) {
+            return;
+        }
     }
     std::scoped_lock lock{g_cache_file};
     // The other threads' pipelines wait for the driver's two answers, and go on during the write.
