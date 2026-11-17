@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "gnm_error.h"
@@ -22,7 +23,6 @@
 #include "core/platform.h"
 #include "graphics/amdgpu/pm4_cmds.h"
 #include "graphics/gr2port/presenter.h"
-#include "graphics/gr2port/submits.h"
 
 extern Frontend::WindowSDL* g_window;
 std::unique_ptr<Gr2Port::Presenter> presenter;
@@ -65,9 +65,13 @@ static constexpr bool UseNeoCompatSequences = false;
 std::mutex m_submit_lock{};
 static s32 sdk_version{0};
 
-// GR2port: the compute rings the game mapped. Gr2Port::Submits walks what the game adds to them.
-static Common::SlotVector<Gr2Port::Submits::Ring> compute_rings{64};
-static u32 asc_next_offs_dw[Gr2Port::Submits::NumComputeRings];
+// GR2port: the compute rings the game mapped. No GPU runs them, so the read pointer, which the game
+// reads for a ring's free space, follows each new end the doorbell gives.
+struct ComputeRing {
+    u32* read_pointer;
+    u32 size_dwords;
+};
+static Common::SlotVector<ComputeRing> compute_rings{64};
 
 // This address is initialized in sceGnmGetTheTessellationFactorRingBufferBaseAddress
 static VAddr tessellation_factors_ring_addr = -1;
@@ -290,32 +294,8 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
         return;
     }
 
-    std::scoped_lock lk{m_submit_lock};
-
-    auto vqid = gnm_vqid - 1;
-    auto& ring = compute_rings[{vqid}];
-
-    auto& offs_dw = asc_next_offs_dw[vqid];
-
-    if (next_offs_dw == offs_dw) {
-        return;
-    }
-
-    if (next_offs_dw < offs_dw && next_offs_dw != 0) {
-        // For cases if a submission is split at the end of the ring buffer, we need to submit it in
-        // two parts to handle the wrap
-        Gr2Port::Submits::Compute(
-            ring, {reinterpret_cast<const u32*>(ring.base) + offs_dw, ring.size_dwords - offs_dw});
-        offs_dw = 0;
-    }
-
-    const auto* acb_ptr = reinterpret_cast<const u32*>(ring.base) + offs_dw;
-    const auto acb_size_dw = (next_offs_dw ? next_offs_dw : ring.size_dwords) - offs_dw;
-    const std::span acb_span{acb_ptr, acb_size_dw};
-
-    asc_next_offs_dw[vqid] = next_offs_dw;
-
-    Gr2Port::Submits::Compute(ring, acb_span);
+    const auto& ring = compute_rings[{gnm_vqid - 1}];
+    *ring.read_pointer = next_offs_dw % ring.size_dwords;
 }
 
 void PS4_SYSV_ABI sceGnmDingDongForWorkload(u32 gnm_vqid, u32 next_offs_dw, u64 workload_id) {
@@ -1182,11 +1162,11 @@ int PS4_SYSV_ABI sceGnmMapComputeQueue(u32 pipe_id, u32 queue_id, VAddr ring_bas
                                        u32 ring_size_dw, u32* read_ptr_addr) {
     LOG_TRACE(Lib_GnmDriver, "called");
 
-    if (pipe_id >= Gr2Port::Submits::NumComputePipes) {
+    if (pipe_id >= NumComputePipes) {
         return ORBIS_GNM_ERROR_COMPUTEQUEUE_INVALID_PIPE_ID;
     }
 
-    if (queue_id >= Gr2Port::Submits::NumQueuesPerPipe) {
+    if (queue_id >= NumQueuesPerPipe) {
         return ORBIS_GNM_ERROR_COMPUTEQUEUE_INVALID_QUEUE_ID;
     }
 
@@ -1202,15 +1182,13 @@ int PS4_SYSV_ABI sceGnmMapComputeQueue(u32 pipe_id, u32 queue_id, VAddr ring_bas
         return ORBIS_GNM_ERROR_COMPUTEQUEUE_INVALID_READ_PTR_ADDR;
     }
 
-    const auto vqid =
-        compute_rings.Insert(VAddr(ring_base_addr), read_ptr_addr, ring_size_dw, pipe_id);
+    const auto vqid = compute_rings.Insert(read_ptr_addr, ring_size_dw);
     // We need to offset index as `dingDong` assumes it to be from the range [1..64]
     const auto gnm_vqid = vqid.index + 1;
     LOG_INFO(Lib_GnmDriver, "ASC pipe {} queue {} mapped to vqueue {}", pipe_id, queue_id,
              gnm_vqid);
 
     *compute_rings[vqid].read_pointer = 0u;
-    asc_next_offs_dw[vqid.index] = 0;
 
     return gnm_vqid;
 }
@@ -1279,17 +1257,9 @@ s32 PS4_SYSV_ABI sceGnmRegisterResource(void* res_handle, void* owner_handle, co
     return ORBIS_GNM_ERROR_FAILURE;
 }
 
-static inline s32 PatchFlipRequest(u32* cmdbuf, u32 size, u32 vo_handle, u32 buf_idx, u32 flip_mode,
-                                   s64 flip_arg, void* unk) {
-    // check for `prepareFlip` packet
-    cmdbuf += size - 64;
-    ASSERT_MSG(cmdbuf[0] == 0xc03e1000, "Can't find `prepareFlip` packet");
-
-    std::array<u32, 7> backup{};
-    std::memcpy(backup.data(), cmdbuf, backup.size() * sizeof(decltype(backup)::value_type));
-
-    ASSERT_MSG(((backup[2] & 3) == 0u) || (backup[1] != PM4CmdNop::PayloadType::PrepareFlipLabel),
-               "Invalid flip packet");
+// GR2port: no GPU runs the command buffers, so a flip goes to the video out when it is submitted.
+// Gr2Port::GpuWrites makes the writes of its frame as the game adds them.
+static s32 RequestFlip(u32 vo_handle, u32 buf_idx, u32 flip_mode, s64 flip_arg) {
     ASSERT_MSG(buf_idx != 0xffff'ffffu, "Invalid VO buffer index");
 
     const s32 flip_result = VideoOut::sceVideoOutSubmitEopFlip(vo_handle, buf_idx, flip_mode,
@@ -1303,63 +1273,6 @@ static inline s32 PatchFlipRequest(u32* cmdbuf, u32 size, u32 vo_handle, u32 buf
             return flip_result;
         }
     }
-
-    uintptr_t label_addr{};
-    ASSERT_MSG(VideoOut::sceVideoOutGetBufferLabelAddress(vo_handle, &label_addr) == 16,
-               "sceVideoOutGetBufferLabelAddress call failed");
-
-    // Write event to lock the VO surface
-    auto* write_lock = reinterpret_cast<PM4CmdWriteData*>(cmdbuf);
-    write_lock->header = PM4Type3Header{PM4ItOpcode::WriteData, 3};
-    write_lock->raw = 0x500u;
-    const auto addr = (label_addr + buf_idx * sizeof(label_addr)) & ~0x3ull;
-    write_lock->Address<uintptr_t>(addr);
-    write_lock->data[0] = 1;
-
-    auto* nop = reinterpret_cast<PM4CmdNop*>(cmdbuf + 5);
-
-    if (backup[1] == PM4CmdNop::PayloadType::PrepareFlip) {
-        nop->header = PM4Type3Header{PM4ItOpcode::Nop, 0x39};
-        nop->data_block[0] = PM4CmdNop::PayloadType::PatchedFlip;
-    } else {
-        if (backup[1] == PM4CmdNop::PayloadType::PrepareFlipLabel) {
-            nop->header = PM4Type3Header{PM4ItOpcode::Nop, 0x34};
-            nop->data_block[0] = PM4CmdNop::PayloadType::PatchedFlip;
-
-            // Write event to update label
-            auto* write_label = reinterpret_cast<PM4CmdWriteData*>(cmdbuf + 0x3b);
-            write_label->header = PM4Type3Header{PM4ItOpcode::WriteData, 3};
-            write_label->raw = 0x500u;
-            write_label->dst_addr_lo = backup[2] & 0xffff'fffcu;
-            write_label->dst_addr_hi = backup[3];
-            write_label->data[0] = backup[4];
-        }
-        if (backup[1] == PM4CmdNop::PayloadType::PrepareFlipInterruptLabel) {
-            nop->header = PM4Type3Header{PM4ItOpcode::Nop, 0x33};
-            nop->data_block[0] = PM4CmdNop::PayloadType::PatchedFlip;
-
-            auto* write_eop = reinterpret_cast<PM4CmdEventWriteEop*>(cmdbuf + 0x3a);
-            write_eop->header = PM4Type3Header{PM4ItOpcode::EventWriteEop, 4};
-            write_eop->event_control = (backup[5] & 0x3f) + 0x500u + (backup[6] & 0x3f) * 0x1000;
-            write_eop->address_lo = backup[2] & 0xffff'fffcu;
-            write_eop->data_control = (backup[3] & 0xffffu) | 0x2200'0000u;
-            write_eop->data_lo = backup[4];
-            write_eop->data_hi = 0u;
-        }
-        if (backup[1] == PM4CmdNop::PayloadType::PrepareFlipInterrupt) {
-            nop->header = PM4Type3Header{PM4ItOpcode::Nop, 0x33};
-            nop->data_block[0] = PM4CmdNop::PayloadType::PatchedFlip;
-
-            auto* write_eop = reinterpret_cast<PM4CmdEventWriteEop*>(cmdbuf + 0x3a);
-            write_eop->header = PM4Type3Header{PM4ItOpcode::EventWriteEop, 4};
-            write_eop->event_control = (backup[5] & 0x3f) + 0x500u + (backup[6] & 0x3f) * 0x1000;
-            write_eop->address_lo = 0u;
-            write_eop->data_control = 0x100'0000u;
-            write_eop->data_lo = 0u;
-            write_eop->data_hi = 0u;
-        }
-    }
-
     return ORBIS_OK;
 }
 
@@ -1381,22 +1294,7 @@ s32 PS4_SYSV_ABI sceGnmRequestFlipAndSubmitDoneForWorkload(u64 workload, u32* gp
     }
 
     std::scoped_lock lk{m_submit_lock};
-
-    // Write a PrepareFlip, then patch the flip request
-    auto* nop = reinterpret_cast<PM4CmdNop*>(gpu_addr);
-    nop->header = PM4Type3Header{PM4ItOpcode::Nop, 0x3e};
-    nop->data_block[0] = PM4CmdNop::PayloadType::PrepareFlip;
-    const s32 patch_result =
-        PatchFlipRequest(gpu_addr, 0x40, vo_handle, buf_idx, flip_mode, flip_arg, nullptr /*unk*/);
-    if (patch_result != ORBIS_OK) {
-        return patch_result;
-    }
-
-    // Submit
-    const auto& dcb_span = std::span{gpu_addr, 0x40};
-    Gr2Port::Submits::Graphics(dcb_span);
-
-    return ORBIS_OK;
+    return RequestFlip(vo_handle, buf_idx, flip_mode, flip_arg);
 }
 
 int PS4_SYSV_ABI sceGnmRequestMipStatsReportAndReset() {
@@ -2203,18 +2101,6 @@ int PS4_SYSV_ABI sceGnmSqttWaitForEvent() {
     return ORBIS_GNM_ERROR_FAILURE;
 }
 
-static inline s32 PerformSubmit(u32 count, const u32* dcb_gpu_addrs[], u32* dcb_sizes_in_bytes,
-                                const u32* ccb_gpu_addrs[], u32* ccb_sizes_in_bytes) {
-
-    // GR2port: the constant command buffers write only what a GPU reads, so they are not walked.
-    for (auto cbpair = 0u; cbpair < count; ++cbpair) {
-        const auto dcb_size_dw = dcb_sizes_in_bytes[cbpair] >> 2;
-        const auto& dcb_span = std::span{dcb_gpu_addrs[cbpair], dcb_size_dw};
-        Gr2Port::Submits::Graphics(dcb_span);
-    }
-    return ORBIS_OK;
-}
-
 s32 PS4_SYSV_ABI sceGnmSubmitAndFlipCommandBuffers(u32 count, u32* dcb_gpu_addrs[],
                                                    u32* dcb_sizes_in_bytes, u32* ccb_gpu_addrs[],
                                                    u32* ccb_sizes_in_bytes, u32 vo_handle,
@@ -2261,19 +2147,8 @@ s32 PS4_SYSV_ABI sceGnmSubmitAndFlipCommandBuffersForWorkload(
         }
     }
 
-    auto* cmdbuf = dcb_gpu_addrs[count - 1];
-    const auto size_dw = dcb_sizes_in_bytes[count - 1] / 4;
-
     std::scoped_lock lk{m_submit_lock};
-
-    const s32 patch_result =
-        PatchFlipRequest(cmdbuf, size_dw, vo_handle, buf_idx, flip_mode, flip_arg, nullptr /*unk*/);
-    if (patch_result != ORBIS_OK) {
-        return patch_result;
-    }
-
-    return PerformSubmit(count, const_cast<const u32**>(dcb_gpu_addrs), dcb_sizes_in_bytes,
-                         const_cast<const u32**>(ccb_gpu_addrs), ccb_sizes_in_bytes);
+    return RequestFlip(vo_handle, buf_idx, flip_mode, flip_arg);
 }
 
 s32 PS4_SYSV_ABI sceGnmSubmitCommandBuffersForWorkload(u32 workload, u32 count,
@@ -2306,10 +2181,8 @@ s32 PS4_SYSV_ABI sceGnmSubmitCommandBuffersForWorkload(u32 workload, u32 count,
         }
     }
 
-    std::scoped_lock lk{m_submit_lock};
-
-    return PerformSubmit(count, const_cast<const u32**>(dcb_gpu_addrs), dcb_sizes_in_bytes,
-                         const_cast<const u32**>(ccb_gpu_addrs), ccb_sizes_in_bytes);
+    // GR2port: a submit is complete when its call returns (see RequestFlip).
+    return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSubmitCommandBuffers(u32 count, const u32* dcb_gpu_addrs[],
@@ -2879,7 +2752,7 @@ int PS4_SYSV_ABI Func_F916890425496553() {
 
 void RegisterLib(Core::Loader::SymbolsResolver* sym) {
     LOG_INFO(Lib_GnmDriver, "Initializing presenter");
-    // GR2port: there is no command processor. Each submit is walked on the thread that makes it.
+    // GR2port: there is no command processor; Gr2Port::GpuWrites makes the GPU writes.
     presenter = std::make_unique<Gr2Port::Presenter>(*g_window);
 
     const s32 result = sceKernelGetCompiledSdkVersion(&sdk_version);

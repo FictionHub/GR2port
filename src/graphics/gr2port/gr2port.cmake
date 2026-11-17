@@ -33,6 +33,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/frame_stats.h
     ${CMAKE_CURRENT_LIST_DIR}/glass.cpp
     ${CMAKE_CURRENT_LIST_DIR}/glass.h
+    ${CMAKE_CURRENT_LIST_DIR}/gpu_writes.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu_writes.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.h
     ${CMAKE_CURRENT_LIST_DIR}/graphics_menu.cpp
@@ -115,8 +117,6 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/splash.h
     ${CMAKE_CURRENT_LIST_DIR}/stick_tilt.cpp
     ${CMAKE_CURRENT_LIST_DIR}/stick_tilt.h
-    ${CMAKE_CURRENT_LIST_DIR}/submits.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/submits.h
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.h
     ${CMAKE_CURRENT_LIST_DIR}/textures.cpp

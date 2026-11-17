@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -13,6 +14,11 @@ class SymbolsResolver;
 namespace Libraries::GnmDriver {
 
 using namespace Kernel;
+
+/// The compute pipes a game maps queues on, and the queues of each. The system keeps an eighth
+/// pipe.
+constexpr u32 NumComputePipes = 7;
+constexpr u32 NumQueuesPerPipe = 8;
 
 s32 PS4_SYSV_ABI sceGnmAddEqEvent(OrbisKernelEqueue eq, u64 id, void* udata);
 int PS4_SYSV_ABI sceGnmAreSubmitsAllowed();

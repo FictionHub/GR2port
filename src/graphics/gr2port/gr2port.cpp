@@ -18,6 +18,7 @@
 #include "graphics/gr2port/field_of_view.h"
 #include "graphics/gr2port/float_spin.h"
 #include "graphics/gr2port/frame_graph_draws.h"
+#include "graphics/gr2port/gpu_writes.h"
 #include "graphics/gr2port/gr2port.h"
 #include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/gravity_kick.h"
@@ -116,6 +117,10 @@ void Install(VAddr module_base) {
         return;
     }
     Xbyak::CodeGenerator c(StubAreaSize, area);
+    // Without these the draw thread waits forever on the frame counters of its contexts.
+    if (!GpuWrites::Install(module_base, c, StubAreaSize)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the game's GPU writers are not the expected code");
+    }
     const Hooks::Result frame =
         Hooks::ObserveEntry(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraph, 0);
     if (!Hooks::Hooked(frame)) {

@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/logging/log.h"
 #include "core/libraries/error_codes.h"
+#include "core/libraries/gnmdriver/gnmdriver.h"
 #include "core/libraries/kernel/time.h"
 #include "core/libraries/libs.h"
 #include "core/libraries/vr_tracker/vr_tracker.h"
 #include "core/libraries/vr_tracker/vr_tracker_error.h"
 #include "core/memory.h"
-#include "graphics/gr2port/submits.h"
 
 namespace Libraries::VrTracker {
 
@@ -90,8 +91,8 @@ s32 PS4_SYSV_ABI sceVrTrackerInit(const OrbisVrTrackerInitParam* param) {
         param->work_memory_alignment != ORBIS_VR_TRACKER_MEMORY_ALIGNMENT ||
         param->work_memory_size != ORBIS_VR_TRACKER_WORK_SIZE ||
         // Check compute queue parameters
-        param->gpu_pipe_id >= Gr2Port::Submits::NumComputePipes ||
-        param->gpu_queue_id >= Gr2Port::Submits::NumQueuesPerPipe ||
+        param->gpu_pipe_id >= Libraries::GnmDriver::NumComputePipes ||
+        param->gpu_queue_id >= Libraries::GnmDriver::NumQueuesPerPipe ||
         // Check calibration settings
         param->calibration_settings.pad_position >
             OrbisVrTrackerCalibrationMode::ORBIS_VR_TRACKER_CALIBRATION_AUTO ||

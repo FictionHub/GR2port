@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/assert.h"
@@ -10,7 +11,6 @@
 #include "core/libraries/videoout/driver.h"
 #include "core/libraries/videoout/video_out.h"
 #include "core/libraries/videoout/videoout_error.h"
-#include "core/platform.h"
 #include "graphics/gr2port/presenter.h"
 
 extern std::unique_ptr<Gr2Port::Presenter> presenter;
@@ -348,14 +348,10 @@ s32 sceVideoOutSubmitEopFlip(s32 handle, u32 buf_id, u32 mode, s64 flip_arg, voi
         return ORBIS_VIDEO_OUT_ERROR_INVALID_HANDLE;
     }
 
-    Platform::IrqC::Instance()->RegisterOnce(
-        Platform::InterruptId::GfxFlip, [=](Platform::InterruptId irq) {
-            ASSERT_MSG(irq == Platform::InterruptId::GfxFlip, "An unexpected IRQ occured");
-            ASSERT_MSG(port->buffer_labels[buf_id] == 1, "Out of order flip IRQ");
-            const auto result = driver->SubmitFlip(port, buf_id, flip_arg, true);
-            ASSERT_MSG(result, "EOP flip submission failed");
-        });
-
+    // GR2port: no GPU runs the command buffers, so the flip's end of pipe is its submit.
+    if (!driver->SubmitFlip(port, buf_id, flip_arg, true)) {
+        return ORBIS_VIDEO_OUT_ERROR_FLIP_QUEUE_FULL;
+    }
     return ORBIS_OK;
 }
 
