@@ -60,7 +60,8 @@ Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU
 - A fully native renderer built from the ground up pass by pass, delivering impeccable performance, graphical accuracy, and stability
 - 30-360fps supported, with gameplay timing the same at every frame rate
 - 544p-8k resolution supported
-- Ultrawide and 16:10 supported
+- Ultrawide, 4:3, 3:2, and 16:10 supported
+- HDR support
 - Feature-complete online mode
 - Feature-complete photo mode, photo export, and in-game photo gallery
 - All GR2fork patches
