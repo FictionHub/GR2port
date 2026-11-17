@@ -30,10 +30,10 @@ constexpr VAddr ShiftCameraEnd = 0x1562700 + 15806;
 constexpr Hooks::Entry Follow{0x1567bd0, 6, Hooks::FramePrologue};
 constexpr u64 FollowOrientation = 0xc0;
 
-// The game's camera options: pitch and yaw inverted (bytes), and the camera sensitivity, slider
+// The game's camera options: yaw and pitch inverted (bytes), and the camera sensitivity, slider
 // value / 50, 1 by default.
-constexpr VAddr PitchInverted = 0x1f2cac4;
-constexpr VAddr YawInverted = 0x1f2cac5;
+constexpr VAddr YawInverted = 0x1f2cac4;
+constexpr VAddr PitchInverted = 0x1f2cac5;
 constexpr VAddr Sensitivity = 0x1f2cac8;
 
 // The cameras read the right stick only while the stick lock is 0 and the active pad's input byte
@@ -165,8 +165,10 @@ bool PS4_SYSV_ABI OnTurn(float weight, u64 state, u64 orientation, u64 frame, u6
     const bool shifting = caller >= g_base + ShiftCameraStart - Hooks::CodeBase &&
                           caller < g_base + ShiftCameraEnd - Hooks::CodeBase;
     const bool turned = g_turn(weight, state, orientation, frame, up, out);
+    // The stick turns the gravity shift camera about its own axes at any pitch, so the mouse turns
+    // it in its own frame.
     Quaternion base;
-    std::memcpy(&base, reinterpret_cast<const void*>(frame), sizeof(base));
+    std::memcpy(&base, reinterpret_cast<const void*>(shifting ? orientation : frame), sizeof(base));
     return TurnByMouse(orientation, base, shifting ? g_shift : g_foot, StickTurnsCamera()) ||
            turned;
 }

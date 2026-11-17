@@ -16,6 +16,7 @@ class CodeGenerator;
 // gravity shift camera's among them. Its replacement runs it, then turns the orientation by the
 // mouse's movement since the last call: yaw about the camera frame's up axis, pitch about the
 // camera's own right axis, scaled by the game's camera sensitivity and inverted with its options.
+// The gravity shift camera's frame is itself, as the stick turns it about its own axes.
 // The camera on foot, FUN_01567bd0, turns by the stick itself; the mouse turns its orientation the
 // same way as it starts.
 namespace Gr2Port::MouseCamera {
