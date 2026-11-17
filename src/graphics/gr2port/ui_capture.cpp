@@ -695,7 +695,8 @@ void Writer::Draw(u32 opcode, const u32* body) {
                                       ps_user[1] >> 20 & 0x3f};
             g_finder_frame = g_finder_frame || shape == FinderVignette;
             if ((g_finder_frame || g_finder_last) &&
-                std::ranges::find(FinderTextures, shape) != FinderTextures.end()) {
+                std::ranges::any_of(FinderTextures,
+                                    [&](const FinderTexture& known) { return known == shape; })) {
                 draw.flags |= Scene::UiDrawFinder;
             }
         }
