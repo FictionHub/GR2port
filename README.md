@@ -24,7 +24,10 @@ Screenshot © Sony Interactive Entertainment LLC. Not covered by this project's 
 
 -------
 <img width="256" height="256" alt="20261025_030106_001" src="https://github.com/user-attachments/assets/5f28141c-570b-4010-9cd6-4ddb573217d6" /><img width="256" height="256" alt="20261025_031040_001" src="https://github.com/user-attachments/assets/fb09aaee-6adb-415c-9206-d292dd9e8cb5" /><img width="256" height="256" alt="20260705_103536_001" src="https://github.com/user-attachments/assets/b2f5e6f9-75f1-4548-9c19-e61deb38d46f" /><br>
-Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's GPL 2.0 license.
+
+<img width="1197" height="666" alt="race" src="https://github.com/user-attachments/assets/8e46b729-03e9-4ca0-aa66-34a25c9b7489" />
+
+**Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's GPL 2.0 license.**
 
 **System Requirements:**
 Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU architecture equivalent to or newer than Maxwell is required. For AMD GPUs, a GPU architecture equivalent to or newer than Polaris is required.
