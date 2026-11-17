@@ -39,6 +39,11 @@ struct Display {
     /// In Hz, 0 for the monitor's current rate.
     u32 refresh_rate{0};
     VSync vsync{VSync::TripleBuffered};
+    /// HDR10 output where the window takes it: the game's white at hdr_paper_white_nits and its
+    /// highlights brighter, up to hdr_peak_nits.
+    bool hdr{false};
+    u32 hdr_peak_nits{1000};
+    u32 hdr_paper_white_nits{200};
 };
 
 struct Game {

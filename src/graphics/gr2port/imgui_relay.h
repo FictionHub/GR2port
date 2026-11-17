@@ -42,8 +42,9 @@ bool WarpBack();
 /// Render thread, after Textures::Start.
 bool Start(const Device& device, Memory& memory);
 
-/// Render thread: the pipeline for the window's format.
-bool Resize(vk::Format window_format);
+/// Render thread: the pipeline for the window's format. hdr_white is 0 for an SDR window, else the
+/// HDR window's paper white in units of 10000 nits.
+bool Resize(vk::Format window_format, float hdr_white);
 
 /// Render thread, before the frame's last rendering: uploads the textures the latest ImGui frame
 /// samples, and its vertices. Frames up to completed are done on the GPU.

@@ -25,6 +25,14 @@ public:
     /// Presents image index after its rendered semaphore; false when the swapchain needs
     /// creating.
     bool Present(u32 index);
+    /// If hdr is true, Create makes an HDR10 swapchain where the surface offers one.
+    void SetHdr(bool hdr) {
+        hdr_wanted = hdr;
+    }
+    /// The images take HDR10: ST 2084 of BT.2020 light.
+    bool Hdr() const {
+        return hdr;
+    }
 
     vk::Format Format() const {
         return format;
@@ -48,6 +56,8 @@ private:
     const Device& d;
     vk::SwapchainKHR swapchain;
     vk::Format format = vk::Format::eUndefined;
+    bool hdr_wanted = false;
+    bool hdr = false;
     vk::Extent2D extent;
     std::vector<vk::Image> images;
     std::vector<vk::ImageView> views;

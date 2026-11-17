@@ -308,6 +308,8 @@ private:
     vk::Format snapshot_format = vk::Format::eUndefined;
     bool snapshot_wanted = false;
     bool needs_swapchain = false;
+    // With an HDR window, the display's peak in paper whites, at least 1; else 0.
+    float hdr_peak = 0.0f;
     Stats stats;
     Published published;
     // The settings the game started with, and what the passes run with: the stored settings
@@ -506,8 +508,17 @@ bool Thread::Recreate() {
     if (d.device.waitIdle(d.dispatch) != vk::Result::eSuccess) {
         return false;
     }
-    needs_swapchain = !swapchain->Create(size.width, size.height) ||
-                      !Ui::Resize(swapchain->Format()) || !ImGuiRelay::Resize(swapchain->Format());
+    // The splash's swapchain stays SDR; the game's takes HDR10 where the settings ask for it.
+    const Settings::Display display = Settings::Get().display;
+    swapchain->SetHdr(display.hdr);
+    needs_swapchain = !swapchain->Create(size.width, size.height);
+    const float paper_white = static_cast<float>(std::max(display.hdr_paper_white_nits, 1u));
+    const float white = swapchain->Hdr() ? paper_white / 10000.0f : 0.0f;
+    hdr_peak = swapchain->Hdr()
+                   ? std::max(static_cast<float>(display.hdr_peak_nits) / paper_white, 1.0f)
+                   : 0.0f;
+    needs_swapchain = needs_swapchain || !Ui::Resize(swapchain->Format(), white) ||
+                      !ImGuiRelay::Resize(swapchain->Format(), white);
     if (!needs_swapchain) {
         // The screen's pipelines take the window's format.
         SavePipelineCache(d);
@@ -713,11 +724,22 @@ void Thread::RecordSnapshot(vk::CommandBuffer cmd, vk::Image image) {
 void Thread::SaveSnapshot() {
     const vk::Extent2D extent = snapshot_extent;
     const bool bgra = snapshot_format == vk::Format::eB8G8R8A8Unorm ||
-                      snapshot_format == vk::Format::eB8G8R8A8Srgb;
+                      snapshot_format == vk::Format::eB8G8R8A8Srgb ||
+                      snapshot_format == vk::Format::eA2R10G10B10UnormPack32;
+    // The HDR window's PQ codes, 10 bits a channel, keep their top 8.
+    const bool packed = snapshot_format == vk::Format::eA2B10G10R10UnormPack32 ||
+                        snapshot_format == vk::Format::eA2R10G10B10UnormPack32;
     std::vector<u8> pixels(snapshot.mapped,
                            snapshot.mapped + u64{extent.width} * extent.height * 4);
-    std::thread([pixels = std::move(pixels), extent, bgra]() mutable {
+    std::thread([pixels = std::move(pixels), extent, bgra, packed]() mutable {
         for (size_t i = 0; i < pixels.size(); i += 4) {
+            if (packed) {
+                u32 word;
+                std::memcpy(&word, pixels.data() + i, sizeof(word));
+                for (u32 c = 0; c < 3; c++) {
+                    pixels[i + c] = static_cast<u8>(word >> (10 * c + 2));
+                }
+            }
             if (bgra) {
                 std::swap(pixels[i], pixels[i + 2]);
             }
@@ -1301,9 +1323,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
         RecordWorld(cmd, slot_index, header, packet, offset);
         // The game's Composite draws into its back buffer, or into the view's own target.
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Composite);
-        const vk::Extent2D world = Ui::BeginWorld(cmd, header);
+        const vk::Extent2D world = Ui::BeginWorld(cmd, header, hdr_peak > 0.0f);
         if (world.width != 0) {
-            Look::RecordComposite(cmd, packet.address, world);
+            Look::RecordComposite(cmd, packet.address, world, Ui::WorldGain() ? hdr_peak : 0.0f);
             Ui::EndWorld(cmd);
         }
         PassTimes::Mark(cmd, PassTimes::Pass::Composite);

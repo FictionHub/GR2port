@@ -34,6 +34,8 @@ struct Device {
     /// A colour attachment's blend enable and equation can be dynamic state
     /// (VK_EXT_extended_dynamic_state3).
     bool dynamic_blend = false;
+    /// Swapchains take the HDR metadata of their content (VK_EXT_hdr_metadata).
+    bool hdr_metadata = false;
     /// Every pipeline is made through this cache, which a file keeps between runs.
     vk::PipelineCache pipeline_cache;
 };

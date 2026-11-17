@@ -16,23 +16,32 @@ namespace Gr2Port::Ui {
 
 /// The format of the game's targets. The game's Composite program encodes sRGB itself.
 inline constexpr vk::Format TargetFormat = vk::Format::eR8G8B8A8Unorm;
+/// The format of the gain image beside the back buffer: the world's colour as Composite drew it,
+/// and in alpha the factor that takes its light to the HDR picture's.
+inline constexpr vk::Format GainFormat = vk::Format::eR16G16B16A16Sfloat;
 
 /// After Textures::Start: creates the samplers.
 bool Start(const Device& device, Memory& memory);
 
-/// With the GPU idle: creates the pipeline that draws the back buffer on the window.
-bool Resize(vk::Format window_format);
+/// With the GPU idle: creates the pipeline that draws the back buffer on the window. hdr_white is
+/// 0 for an SDR window, else the HDR window's paper white in units of 10000 nits.
+bool Resize(vk::Format window_format, float hdr_white);
 
 /// Outside rendering, before the frame's other calls here: creates the images of new targets and
 /// copies the textures that change each frame again.
 void Prepare(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 frame);
 
 /// Outside rendering: begins a rendering into the target the world's picture goes to, and returns
-/// its size; nothing and a size of 0 when it has no image.
-vk::Extent2D BeginWorld(vk::CommandBuffer cmd, const Scene::Header& header);
+/// its size; nothing and a size of 0 when it has no image. If hdr is true and that target is the
+/// back buffer, the target's gain image is the rendering's second attachment.
+vk::Extent2D BeginWorld(vk::CommandBuffer cmd, const Scene::Header& header, bool hdr);
 
 /// Ends the rendering BeginWorld began and leaves the target for shaders to read.
 void EndWorld(vk::CommandBuffer cmd);
+
+/// Whether this frame's world went into the back buffer with its gain image, which the HDR window's
+/// present reads.
+bool WorldGain();
 
 /// A target's size, 0 by 0 when the renderer has no image for it.
 vk::Extent2D TargetExtent(u32 target);

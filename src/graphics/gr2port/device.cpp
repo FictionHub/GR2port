@@ -148,6 +148,15 @@ bool CreateInstance(Device& d) {
         return false;
     }
     std::vector<const char*> extensions{surface_extensions, surface_extensions + count};
+    // Surfaces offer HDR colour spaces with it.
+    const auto [listed, instance_extensions] =
+        vk::enumerateInstanceExtensionProperties(nullptr, d.dispatch);
+    if (std::ranges::any_of(instance_extensions, [](const vk::ExtensionProperties& extension) {
+            return std::string_view{extension.extensionName.data()} ==
+                   VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME;
+        })) {
+        extensions.push_back(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+    }
     Upscaler::ExtendInstance(extensions, ApiVersion, d.dispatch);
     const vk::ApplicationInfo application{
         .pApplicationName = "GR2port",
@@ -294,6 +303,9 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         if (name == VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) {
             d.memory_budget = true;
             extensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+        } else if (name == VK_EXT_HDR_METADATA_EXTENSION_NAME) {
+            d.hdr_metadata = true;
+            extensions.push_back(VK_EXT_HDR_METADATA_EXTENSION_NAME);
         } else if (name == VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME) {
             d.checkpoints = true;
             extensions.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);

@@ -19,6 +19,7 @@
 #include "graphics/gr2port/shaders/bloom_extract_frag.h"
 #include "graphics/gr2port/shaders/character_vert.h"
 #include "graphics/gr2port/shaders/composite_frag.h"
+#include "graphics/gr2port/shaders/composite_hdr_frag.h"
 #include "graphics/gr2port/shaders/exposure_comp.h"
 #include "graphics/gr2port/shaders/fullscreen_vert.h"
 #include "graphics/gr2port/shaders/luminance_comp.h"
@@ -26,6 +27,7 @@
 #include "graphics/gr2port/shaders/tonemap_frag.h"
 #include "graphics/gr2port/shaders/vision_frag.h"
 #include "graphics/gr2port/textures.h"
+#include "graphics/gr2port/ui.h"
 #include "graphics/gr2port/upscaler.h"
 #include "graphics/gr2port/velocity.h"
 
@@ -57,6 +59,12 @@ struct ExposurePush {
 struct CompositePush {
     u64 grade;
     u64 meter;
+};
+
+struct HdrCompositePush {
+    CompositePush composite;
+    float peak;
+    u32 pad;
 };
 
 struct ExtractPush {
@@ -163,6 +171,8 @@ Pipeline g_sky;
 Pipeline g_luminance;
 Pipeline g_exposure;
 Pipeline g_composite;
+// Composite for an HDR window, which also draws into the gain image.
+Pipeline g_composite_hdr;
 Pipeline g_tonemap;
 Pipeline g_antialias;
 Pipeline g_antialias_off;
@@ -592,8 +602,8 @@ bool Resize(vk::Extent2D extent, vk::Extent2D output, vk::Format picture_format,
             }};
             g_device->device.updateDescriptorSets(upscaled_writes, {}, dl);
         }
-        WritePair(g_picture_sets[i], g_antialiased_read[i], g_scene_sampler, Read,
-                  g_antialiased_read[i], g_scene_sampler, Read);
+        WritePair(g_picture_sets[i], g_antialiased_read[i], g_scene_sampler, Read, g_toned.view,
+                  g_scene_sampler, Read);
     }
     const float width = static_cast<float>(extent.width);
     const float height = static_cast<float>(extent.height);
@@ -627,9 +637,19 @@ bool Resize(vk::Extent2D extent, vk::Extent2D output, vk::Format picture_format,
                                                   .push_constant_bytes = sizeof(CompositePush),
                                                   .set_layouts = scene_set,
                                               });
+        DestroyPipeline(*g_device, g_composite_hdr);
+        const std::array hdr_colors{picture_format, Ui::GainFormat};
+        g_composite_hdr =
+            CreateGraphicsPipeline(*g_device, {
+                                                  .vertex = FULLSCREEN_VERT,
+                                                  .fragment = COMPOSITE_HDR_FRAG,
+                                                  .colors = hdr_colors,
+                                                  .push_constant_bytes = sizeof(HdrCompositePush),
+                                                  .set_layouts = scene_set,
+                                              });
         g_picture_format = picture_format;
     }
-    return static_cast<bool>(g_composite.pipeline);
+    return g_composite.pipeline && g_composite_hdr.pipeline;
 }
 
 vk::Image SceneImage() {
@@ -908,7 +928,7 @@ void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
                  vk::AccessFlagBits2::eShaderStorageWrite, Compute | Fragment, Read);
 }
 
-void RecordComposite(vk::CommandBuffer cmd, u64 packet_address, vk::Extent2D extent) {
+void RecordComposite(vk::CommandBuffer cmd, u64 packet_address, vk::Extent2D extent, float peak) {
     const auto& dl = g_device->dispatch;
     const vk::Viewport viewport{
         .x = 0.0f,
@@ -918,17 +938,23 @@ void RecordComposite(vk::CommandBuffer cmd, u64 packet_address, vk::Extent2D ext
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
-    const CompositePush push{
-        .grade = packet_address + Scene::GradeOffset,
-        .meter = g_meter.address,
+    const HdrCompositePush push{
+        .composite =
+            {
+                .grade = packet_address + Scene::GradeOffset,
+                .meter = g_meter.address,
+            },
+        .peak = peak,
     };
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_composite.pipeline, dl);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_composite.layout, 0,
+    const bool hdr = peak > 0.0f;
+    const Pipeline& pipeline = hdr ? g_composite_hdr : g_composite;
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0,
                            g_picture_sets[g_antialiased_image], {}, dl);
     cmd.setViewport(0, viewport, dl);
     cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
-    cmd.pushConstants(g_composite.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
-                      &push, dl);
+    cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
+                      hdr ? u32{sizeof(push)} : u32{sizeof(push.composite)}, &push, dl);
     cmd.draw(3, 1, 0, 0, dl);
 }
 

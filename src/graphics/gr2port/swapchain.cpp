@@ -15,7 +15,17 @@ namespace Gr2Port {
 
 namespace {
 
-vk::SurfaceFormatKHR PickFormat(const std::vector<vk::SurfaceFormatKHR>& formats) {
+vk::SurfaceFormatKHR PickFormat(const std::vector<vk::SurfaceFormatKHR>& formats, bool hdr) {
+    if (hdr) {
+        for (const vk::SurfaceFormatKHR& f : formats) {
+            if ((f.format == vk::Format::eA2B10G10R10UnormPack32 ||
+                 f.format == vk::Format::eA2R10G10B10UnormPack32) &&
+                f.colorSpace == vk::ColorSpaceKHR::eHdr10St2084EXT) {
+                return f;
+            }
+        }
+        LOG_WARNING(Render_Vulkan, "GR2port: the window takes no HDR10, so it shows SDR");
+    }
     for (const vk::SurfaceFormatKHR& f : formats) {
         if ((f.format == vk::Format::eB8G8R8A8Unorm || f.format == vk::Format::eR8G8B8A8Unorm) &&
             f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
@@ -70,7 +80,7 @@ bool Swapchain::Create(u32 width, u32 height) {
     if (extent.width == 0 || extent.height == 0) {
         return false;
     }
-    const vk::SurfaceFormatKHR surface_format = PickFormat(formats);
+    const vk::SurfaceFormatKHR surface_format = PickFormat(formats, hdr_wanted);
     u32 image_count = caps.minImageCount + 1;
     if (caps.maxImageCount != 0) {
         image_count = std::min(image_count, caps.maxImageCount);
@@ -103,6 +113,20 @@ bool Swapchain::Create(u32 width, u32 height) {
     }
     swapchain = created;
     format = surface_format.format;
+    hdr = surface_format.colorSpace == vk::ColorSpaceKHR::eHdr10St2084EXT;
+    if (hdr && d.hdr_metadata) {
+        const Settings::Display display = Settings::Get().display;
+        const vk::HdrMetadataEXT metadata{
+            .displayPrimaryRed = {0.708f, 0.292f},
+            .displayPrimaryGreen = {0.170f, 0.797f},
+            .displayPrimaryBlue = {0.131f, 0.046f},
+            .whitePoint = {0.3127f, 0.3290f},
+            .maxLuminance = static_cast<float>(display.hdr_peak_nits),
+            .maxContentLightLevel = static_cast<float>(display.hdr_peak_nits),
+            .maxFrameAverageLightLevel = static_cast<float>(display.hdr_paper_white_nits),
+        };
+        d.device.setHdrMetadataEXT(swapchain, metadata, dl);
+    }
     images = d.device.getSwapchainImagesKHR(swapchain, dl).value;
     for (const vk::Image image : images) {
         const vk::ImageViewCreateInfo view_info{
@@ -114,8 +138,8 @@ bool Swapchain::Create(u32 width, u32 height) {
         views.push_back(d.device.createImageView(view_info, nullptr, dl).value);
         rendered.push_back(d.device.createSemaphore({}, nullptr, dl).value);
     }
-    LOG_INFO(Render_Vulkan, "GR2port: swapchain {}x{}, {} images, {}", extent.width, extent.height,
-             images.size(), vk::to_string(info.presentMode));
+    LOG_INFO(Render_Vulkan, "GR2port: swapchain {}x{}, {} images, {}, {}", extent.width,
+             extent.height, images.size(), vk::to_string(info.presentMode), hdr ? "HDR10" : "SDR");
     Vblank::SetSynced(info.presentMode != vk::PresentModeKHR::eImmediate);
     return true;
 }

@@ -30,6 +30,7 @@
 #include "graphics/gr2port/shaders/ui_photo_frag.h"
 #include "graphics/gr2port/shaders/ui_photo_vert.h"
 #include "graphics/gr2port/shaders/ui_present_frag.h"
+#include "graphics/gr2port/shaders/ui_present_hdr_frag.h"
 #include "graphics/gr2port/shaders/ui_skinned_b_vert.h"
 #include "graphics/gr2port/shaders/ui_skinned_vert.h"
 #include "graphics/gr2port/shaders/ui_sprite_frag.h"
@@ -72,7 +73,21 @@ constexpr u32 StrokeVertex = static_cast<u32>(Scene::UiVertexProgram::Stroke);
 constexpr u32 StrokePixel = static_cast<u32>(Scene::UiPixelProgram::Stroke);
 std::array<Pipeline, VertexPrograms * PixelPrograms> g_pairs;
 Pipeline g_present;
+// With an HDR window, its paper white in units of 10000 nits, else 0.
+float g_hdr_white = 0.0f;
+// The push descriptor set of the gain image the HDR present reads.
+vk::DescriptorSetLayout g_gain_layout;
+// The gain images of the targets the world went into as the back buffer.
+std::array<Image, Scene::MaxUiTargets> g_gains;
+// This frame's world went into the back buffer with its gain image.
+bool g_world_gain = false;
 u32 g_open_target = Scene::MaxUiTargets;
+
+struct HdrPresentPush {
+    u32 picture;
+    u32 has_world;
+    float white;
+};
 // The shape of the screen the game lays its screen drawing out for.
 constexpr float LayoutAspect = 16.0f / 9.0f;
 // The pipelines run ui_text.glsl: the chosen aspect is not 16:9, so the game stretches its screen
@@ -133,7 +148,8 @@ void TargetBarrier(vk::CommandBuffer cmd, u32 target, vk::ImageLayout from, vk::
 }
 
 // Targets rest in ShaderReadOnlyOptimal, where any draw may sample them.
-void BeginTarget(vk::CommandBuffer cmd, u32 target) {
+// If gain is not null, it is the rendering's second attachment.
+void BeginTarget(vk::CommandBuffer cmd, u32 target, vk::ImageView gain = {}) {
     TargetBarrier(
         cmd, target, vk::ImageLayout::eShaderReadOnlyOptimal,
         vk::ImageLayout::eColorAttachmentOptimal, vk::PipelineStageFlagBits2::eFragmentShader,
@@ -145,10 +161,17 @@ void BeginTarget(vk::CommandBuffer cmd, u32 target) {
         .loadOp = vk::AttachmentLoadOp::eLoad,
         .storeOp = vk::AttachmentStoreOp::eStore,
     };
+    const vk::RenderingAttachmentInfo gain_color{
+        .imageView = gain,
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eDontCare,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+    };
+    const std::array colors{color, gain_color};
     cmd.beginRendering({.renderArea = {{0, 0}, g_images[target].extent},
                         .layerCount = 1,
-                        .colorAttachmentCount = 1,
-                        .pColorAttachments = &color},
+                        .colorAttachmentCount = gain ? 2u : 1u,
+                        .pColorAttachments = colors.data()},
                        g_device->dispatch);
     g_open_target = target;
 }
@@ -161,6 +184,20 @@ void EndTarget(vk::CommandBuffer cmd) {
         vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eFragmentShader,
         vk::AccessFlagBits2::eShaderSampledRead);
     g_open_target = Scene::MaxUiTargets;
+}
+
+// Whether the target has its gain image, which this makes on first use.
+bool GainImage(u32 target) {
+    if (!g_gains[target].image) {
+        g_gains[target] = g_memory->CreateImage(GainFormat, g_images[target].extent,
+                                                vk::ImageUsageFlagBits::eColorAttachment |
+                                                    vk::ImageUsageFlagBits::eSampled,
+                                                vk::ImageAspectFlagBits::eColor);
+        if (!g_gains[target].image) {
+            LOG_ERROR(Render_Vulkan, "GR2port UI: no gain image for target {}", target);
+        }
+    }
+    return static_cast<bool>(g_gains[target].image);
 }
 
 bool HasImage(const Scene::Header& header, u32 target) {
@@ -361,6 +398,18 @@ bool Start(const Device& device, Memory& memory) {
         return false;
     }
     g_sampler_set = sets.front();
+    const vk::DescriptorSetLayoutBinding gain_binding{0, vk::DescriptorType::eSampledImage, 1,
+                                                      vk::ShaderStageFlagBits::eFragment};
+    g_gain_layout = device.device
+                        .createDescriptorSetLayout(
+                            {.flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+                             .bindingCount = 1,
+                             .pBindings = &gain_binding},
+                            nullptr, dl)
+                        .value;
+    if (!g_gain_layout) {
+        return false;
+    }
     const float aspect = GamePatches::AspectRatio();
     if (std::abs(aspect - LayoutAspect) > 0.01f) {
         g_narrow_text = device.geometry_shaders;
@@ -406,21 +455,26 @@ bool Start(const Device& device, Memory& memory) {
     return true;
 }
 
-bool Resize(vk::Format window_format) {
+bool Resize(vk::Format window_format, float hdr_white) {
     DestroyPipeline(*g_device, g_present);
-    const std::array sets{Textures::SetLayout(), g_sampler_layout};
-    g_present = CreateGraphicsPipeline(*g_device, {
-                                                      .vertex = FULLSCREEN_VERT,
-                                                      .fragment = UI_PRESENT_FRAG,
-                                                      .color = window_format,
-                                                      .push_constant_bytes = sizeof(u32),
-                                                      .set_layouts = sets,
-                                                  });
+    g_hdr_white = hdr_white;
+    const bool hdr = hdr_white > 0.0f;
+    const std::array sets{Textures::SetLayout(), g_sampler_layout, g_gain_layout};
+    g_present = CreateGraphicsPipeline(
+        *g_device, {
+                       .vertex = FULLSCREEN_VERT,
+                       .fragment = hdr ? std::span<const u32>{UI_PRESENT_HDR_FRAG}
+                                       : std::span<const u32>{UI_PRESENT_FRAG},
+                       .color = window_format,
+                       .push_constant_bytes = hdr ? u32{sizeof(HdrPresentPush)} : u32{sizeof(u32)},
+                       .set_layouts = std::span{sets}.first(hdr ? 3 : 2),
+                   });
     return static_cast<bool>(g_present.pipeline);
 }
 
 void Prepare(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 frame) {
     const auto& dl = g_device->dispatch;
+    g_world_gain = false;
     std::array<u32, Scene::MaxUiDynamicTextures> dynamic;
     const u32 dynamic_count = std::min(header.ui.dynamic, Scene::MaxUiDynamicTextures);
     std::memcpy(dynamic.data(), packet + Scene::UiDynamicOffset, dynamic_count * sizeof(u32));
@@ -457,16 +511,39 @@ void Prepare(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packe
     }
 }
 
-vk::Extent2D BeginWorld(vk::CommandBuffer cmd, const Scene::Header& header) {
-    if (!HasImage(header, header.ui.world)) {
+vk::Extent2D BeginWorld(vk::CommandBuffer cmd, const Scene::Header& header, bool hdr) {
+    const u32 world = header.ui.world;
+    if (!HasImage(header, world)) {
         return {};
     }
-    BeginTarget(cmd, header.ui.world);
-    return g_images[header.ui.world].extent;
+    g_world_gain = hdr && world == header.ui.picture && GainImage(world);
+    if (g_world_gain) {
+        // The last frame's present read it.
+        ImageBarrier(*g_device, cmd, g_gains[world].image, vk::ImageLayout::eUndefined,
+                     vk::ImageLayout::eColorAttachmentOptimal,
+                     vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eNone,
+                     vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                     vk::AccessFlagBits2::eColorAttachmentWrite);
+    }
+    BeginTarget(cmd, world, g_world_gain ? g_gains[world].view : vk::ImageView{});
+    return g_images[world].extent;
 }
 
 void EndWorld(vk::CommandBuffer cmd) {
+    const u32 world = g_open_target;
     EndTarget(cmd);
+    if (g_world_gain) {
+        ImageBarrier(*g_device, cmd, g_gains[world].image, vk::ImageLayout::eColorAttachmentOptimal,
+                     vk::ImageLayout::eShaderReadOnlyOptimal,
+                     vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                     vk::AccessFlagBits2::eColorAttachmentWrite,
+                     vk::PipelineStageFlagBits2::eFragmentShader,
+                     vk::AccessFlagBits2::eShaderSampledRead);
+    }
+}
+
+bool WorldGain() {
+    return g_world_gain;
 }
 
 vk::Extent2D TargetExtent(u32 target) {
@@ -602,8 +679,31 @@ void RecordPresent(vk::CommandBuffer cmd, const Scene::Header& header, vk::Exten
     const std::array sets{Textures::Set(), g_sampler_set};
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_present.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_present.layout, 0, sets, {}, dl);
-    cmd.pushConstants(g_present.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(picture),
-                      &picture, dl);
+    if (g_hdr_white > 0.0f) {
+        // Without the world in the back buffer the set takes the back buffer, which goes unread.
+        const vk::DescriptorImageInfo world{
+            .imageView =
+                g_world_gain ? g_gains[header.ui.picture].view : g_images[header.ui.picture].view,
+            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+        };
+        const vk::WriteDescriptorSet write{
+            .dstBinding = 0,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eSampledImage,
+            .pImageInfo = &world,
+        };
+        cmd.pushDescriptorSetKHR(vk::PipelineBindPoint::eGraphics, g_present.layout, 2, write, dl);
+        const HdrPresentPush push{
+            .picture = picture,
+            .has_world = g_world_gain ? 1u : 0u,
+            .white = g_hdr_white,
+        };
+        cmd.pushConstants(g_present.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
+                          &push, dl);
+    } else {
+        cmd.pushConstants(g_present.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
+                          sizeof(picture), &picture, dl);
+    }
     cmd.setViewport(0, viewport, dl);
     cmd.setScissor(0, area, dl);
     cmd.draw(3, 1, 0, 0, dl);

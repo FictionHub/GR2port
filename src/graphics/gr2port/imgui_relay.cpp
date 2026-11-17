@@ -25,6 +25,7 @@
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/scene.h"
 #include "graphics/gr2port/shaders/imgui_relay_frag.h"
+#include "graphics/gr2port/shaders/imgui_relay_hdr_frag.h"
 #include "graphics/gr2port/shaders/imgui_relay_vert.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/window.h"
@@ -126,7 +127,8 @@ struct Push {
     std::array<float, 2> scale;
     std::array<float, 2> translate;
     u32 texture;
-    u32 pad;
+    // The HDR window's paper white in units of 10000 nits.
+    float white;
 };
 static_assert(sizeof(Push) == 32);
 
@@ -146,6 +148,8 @@ constexpr vk::PipelineColorBlendAttachmentState Blend{
 const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
 Pipeline g_pipeline;
+// With an HDR window, its paper white in units of 10000 nits, else 0.
+float g_hdr_white = 0.0f;
 std::unordered_map<u32, Resident> g_resident;
 std::vector<u32> g_free_handles;
 std::vector<Retired> g_retired;
@@ -469,17 +473,20 @@ bool Start(const Device& device, Memory& memory) {
     return true;
 }
 
-bool Resize(vk::Format window_format) {
+bool Resize(vk::Format window_format, float hdr_white) {
     DestroyPipeline(*g_device, g_pipeline);
+    g_hdr_white = hdr_white;
     const std::array sets{Textures::SetLayout()};
-    g_pipeline = CreateGraphicsPipeline(*g_device, {
-                                                       .vertex = IMGUI_RELAY_VERT,
-                                                       .fragment = IMGUI_RELAY_FRAG,
-                                                       .color = window_format,
-                                                       .blend = &Blend,
-                                                       .push_constant_bytes = sizeof(Push),
-                                                       .set_layouts = sets,
-                                                   });
+    g_pipeline = CreateGraphicsPipeline(
+        *g_device, {
+                       .vertex = IMGUI_RELAY_VERT,
+                       .fragment = hdr_white > 0.0f ? std::span<const u32>{IMGUI_RELAY_HDR_FRAG}
+                                                    : std::span<const u32>{IMGUI_RELAY_FRAG},
+                       .color = window_format,
+                       .blend = &Blend,
+                       .push_constant_bytes = sizeof(Push),
+                       .set_layouts = sets,
+                   });
     return static_cast<bool>(g_pipeline.pipeline);
 }
 
@@ -568,6 +575,7 @@ void Record(vk::CommandBuffer cmd, vk::Extent2D extent) {
         .vertices = g_slot->buffer.address,
         .scale = {2.0f * scale / width, 2.0f * scale / height},
         .translate = {2.0f * left / width - 1.0f, 2.0f * top / height - 1.0f},
+        .white = g_hdr_white,
     };
     const vk::DescriptorSet set = Textures::Set();
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_pipeline.pipeline, dl);

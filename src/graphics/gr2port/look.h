@@ -73,7 +73,9 @@ void RecordBloom(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_
 void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address);
 
 /// Inside the picture's rendering, after RecordAntialias: draws the picture, which fills extent.
-void RecordComposite(vk::CommandBuffer cmd, u64 packet_address, vk::Extent2D extent);
+/// peak is 0 for the SDR Composite. Above 0, the rendering has the gain image as its second
+/// attachment, and the HDR picture's highlights reach peak, in paper whites.
+void RecordComposite(vk::CommandBuffer cmd, u64 packet_address, vk::Extent2D extent, float peak);
 
 /// Outside rendering, once per report: logs the frame's look and the meter's last read state, and
 /// reads the state again.

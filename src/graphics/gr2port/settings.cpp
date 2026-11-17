@@ -219,6 +219,10 @@ Values FromJson(const json& root) {
             }
         }
     }
+    display.hdr = ReadBool(section, "hdr", display.hdr);
+    display.hdr_peak_nits = ReadU32(section, "hdr_peak_nits", display.hdr_peak_nits);
+    display.hdr_paper_white_nits =
+        ReadU32(section, "hdr_paper_white_nits", display.hdr_paper_white_nits);
     return values;
 }
 
@@ -244,6 +248,9 @@ json ToJson(const Values& values) {
         {"height", display.height},
         {"refresh_rate", display.refresh_rate},
         {"vsync", std::string(vsync)},
+        {"hdr", display.hdr},
+        {"hdr_peak_nits", display.hdr_peak_nits},
+        {"hdr_paper_white_nits", display.hdr_paper_white_nits},
         {"frame_rate", game.frame_rate},
         {"aspect", game.aspect},
         {"render_size", game.render_size},
