@@ -38,10 +38,16 @@ constexpr auto SmokeHashes = [] {
 constexpr Hooks::Entry Spawn{0x14a6990, 6, Hooks::FramePrologue};
 using SpawnFunction = u64* PS4_SYSV_ABI (*)(u64* out, VAddr library, u32 hash);
 
+// The spawn's return address in FUN_00d68070, which loads an effect into the effect registry.
+constexpr VAddr RegistryLoad = 0xd68136;
+
 SpawnFunction g_spawn = nullptr;
+VAddr g_registry_load = 0;
 
 u64* PS4_SYSV_ABI SpawnEffect(u64* out, VAddr library, u32 hash) {
-    return g_spawn(out, library, std::ranges::binary_search(SmokeHashes, hash) ? NoEffect : hash);
+    const VAddr caller = reinterpret_cast<VAddr>(__builtin_return_address(0));
+    const bool refused = caller != g_registry_load && std::ranges::binary_search(SmokeHashes, hash);
+    return g_spawn(out, library, refused ? NoEffect : hash);
 }
 
 } // namespace
@@ -58,6 +64,7 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         return false;
     }
     g_spawn = reinterpret_cast<SpawnFunction>(const_cast<void*>(original));
+    g_registry_load = module_base + RegistryLoad - Hooks::CodeBase;
     LOG_INFO(Render_Vulkan, "GR2port: smoke and dust are off: {} effect files make no effect",
              SmokeHashes.size());
     return true;
