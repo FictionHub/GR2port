@@ -322,6 +322,44 @@ void QueueMenuBones() {
 constexpr u64 SlideKickPower = 0x008be47e;
 constexpr std::string_view CallSkipped = "0f1f440000";
 
+// A photo is the middle 1024 x 1024 of a 1920 x 1080 frame: its mesh samples the frame between
+// these columns and rows, and the game's test of a point in the photo takes the same ones. The
+// viewfinder's window is that square stretched with the picture.
+constexpr std::array<u64, 2> PhotoLeft{0x018adc4c, 0x018adca4};
+constexpr std::array<u64, 2> PhotoRight{0x018adc78, 0x018adcd0};
+constexpr std::array<u64, 2> PhotoTop{0x018adca8, 0x018adcd4};
+constexpr std::array<u64, 2> PhotoBottom{0x018adc50, 0x018adc7c};
+constexpr u64 PhotoTestColumns = 0x018c2bf8;
+constexpr u64 PhotoTestRows = 0x018c2c00;
+constexpr float TestWidth = 1920.0f;
+constexpr float TestHeight = 1080.0f;
+constexpr float PhotoHalfWidth = 512.0f / TestWidth;
+constexpr float PhotoHalfHeight = 512.0f / TestHeight;
+
+// Queues the patches that fit the photo to the largest square of the scene the stretched window
+// holds: the window's height at wider aspects, its width at narrower ones. 16:9 keeps the game's.
+void QueuePhotoSquare(float aspect) {
+    constexpr float Layout = 16.0f / 9.0f;
+    if (aspect == Layout) {
+        return;
+    }
+    const auto queue = [](std::span<const u64> low, std::span<const u64> high, u64 test, float half,
+                          float size) {
+        for (const u64 at : low) {
+            QueueBytes(at, FloatBytes(0.5f - half));
+        }
+        for (const u64 at : high) {
+            QueueBytes(at, FloatBytes(0.5f + half));
+        }
+        QueueBytes(test, FloatBytes((0.5f - half) * size) + FloatBytes((0.5f + half) * size));
+    };
+    if (aspect > Layout) {
+        queue(PhotoLeft, PhotoRight, PhotoTestColumns, PhotoHalfWidth * Layout / aspect, TestWidth);
+    } else {
+        queue(PhotoTop, PhotoBottom, PhotoTestRows, PhotoHalfHeight * aspect / Layout, TestHeight);
+    }
+}
+
 } // namespace
 
 std::vector<Extra> Extras() {
@@ -392,6 +430,7 @@ void ApplySettings() {
     }
     QueueMenuBones();
     QueueBytes(SlideKickPower, std::string(CallSkipped));
+    QueuePhotoSquare(AspectRatio());
 }
 
 float AspectRatio() {
