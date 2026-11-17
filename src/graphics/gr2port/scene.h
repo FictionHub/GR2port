@@ -22,8 +22,9 @@ struct Room {
 };
 /// The room at the game's own level of detail, and the room with a level of detail setting at its
 /// finest, where the game's frame holds several times the items. Far Environment LOD at 400% sends
-/// frames of more than 76 million indices from the edge of Jirga Para Lhao.
-inline constexpr Room BaseRoom{32768, 4096, 8192, 1024, false, u64{48} << 20};
+/// frames of more than 76 million indices from the edge of Jirga Para Lhao. At the game's own level
+/// of detail, parts of Jirga Para Lhao cast shadows from about 4700 items in a frame.
+inline constexpr Room BaseRoom{32768, 8192, 8192, 1024, false, u64{48} << 20};
 inline constexpr Room MostRoom{49152, 16384, 49152, 4096, true, u64{192} << 20};
 /// The room of this run's packets. The renderer sets it before it hands out the scene ring.
 inline Room g_room = BaseRoom;
