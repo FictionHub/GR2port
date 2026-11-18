@@ -783,6 +783,14 @@ void CopyLibrary(vk::CommandBuffer cmd, const Scene::ParticleHeader& frame) {
                    dl);
     cmd.copyBuffer(g_staging.buffer, g_material.buffer,
                    vk::BufferCopy{.srcOffset = DescriptionBytes, .size = MaterialBytes}, dl);
+    // CopyLiveDescriptions overwrites some of these descriptions next.
+    const vk::MemoryBarrier2 before_live{
+        .srcStageMask = vk::PipelineStageFlagBits2::eCopy,
+        .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eCopy,
+        .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &before_live}, dl);
     if (frame.curve_source != 0) {
         const u64 at = DescriptionBytes + MaterialBytes;
         std::memcpy(g_staging.mapped + at, reinterpret_cast<const void*>(frame.curve_source),
@@ -990,7 +998,7 @@ void DrawOwnRuns(vk::CommandBuffer cmd, const Scene::ParticleHeader& frame, cons
 void PrepareDepthCopy(vk::CommandBuffer cmd) {
     const auto& dl = g_device->dispatch;
     const vk::ImageMemoryBarrier2 to_clear{
-        .dstStageMask = vk::PipelineStageFlagBits2::eCopy,
+        .dstStageMask = vk::PipelineStageFlagBits2::eClear,
         .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .oldLayout = vk::ImageLayout::eUndefined,
         .newLayout = vk::ImageLayout::eTransferDstOptimal,
@@ -1001,7 +1009,7 @@ void PrepareDepthCopy(vk::CommandBuffer cmd) {
     cmd.clearDepthStencilImage(g_depth_copy.image, vk::ImageLayout::eTransferDstOptimal,
                                vk::ClearDepthStencilValue{0.0f, 0}, DepthRange, dl);
     const vk::ImageMemoryBarrier2 to_read{
-        .srcStageMask = vk::PipelineStageFlagBits2::eCopy,
+        .srcStageMask = vk::PipelineStageFlagBits2::eClear,
         .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .dstStageMask =
             vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader,

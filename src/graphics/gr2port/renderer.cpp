@@ -1205,11 +1205,12 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + ForwardTimestamp, dl);
     }
-    // The fog and the bloom read the depth.
+    // The effects in front test against the depth, and the fog and the bloom read it.
     depth_barrier(vk::ImageLayout::eDepthStencilAttachmentOptimal,
                   vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
-                  vk::PipelineStageFlagBits2::eFragmentShader,
-                  vk::AccessFlagBits2::eShaderSampledRead);
+                  depth_tests | vk::PipelineStageFlagBits2::eFragmentShader,
+                  vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                      vk::AccessFlagBits2::eShaderSampledRead);
     if (drawn) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::EffectsInFront);
         Effects::RecordTransparentFg(cmd, header, packet.data, packet.address, scene_ring.buffer,

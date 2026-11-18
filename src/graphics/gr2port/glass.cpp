@@ -214,7 +214,7 @@ void Prepare(vk::CommandBuffer cmd) {
     g_behind_ready = true;
     const auto& dl = g_device->dispatch;
     const vk::ImageMemoryBarrier2 to_clear{
-        .dstStageMask = Copy,
+        .dstStageMask = vk::PipelineStageFlagBits2::eClear,
         .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .oldLayout = vk::ImageLayout::eUndefined,
         .newLayout = vk::ImageLayout::eTransferDstOptimal,
@@ -225,7 +225,7 @@ void Prepare(vk::CommandBuffer cmd) {
     cmd.clearColorImage(g_behind.image, vk::ImageLayout::eTransferDstOptimal,
                         vk::ClearColorValue{.float32 = std::array<float, 4>{}}, ColorRange, dl);
     const vk::ImageMemoryBarrier2 to_read{
-        .srcStageMask = Copy,
+        .srcStageMask = vk::PipelineStageFlagBits2::eClear,
         .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .dstStageMask =
             vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader,
