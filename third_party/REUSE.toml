@@ -17,9 +17,9 @@ SPDX-FileCopyrightText = [
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "upscaler-files/fsr4_v07.tar.xz"
+path = "upscaler-files/fsr4_lite.tar.xz"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2025 Advanced Micro Devices, Inc."
+SPDX-FileCopyrightText = "Advanced Micro Devices, Inc."
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]

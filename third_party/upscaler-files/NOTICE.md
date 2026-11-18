@@ -13,6 +13,7 @@ the files from there at run time; the build does not use them.
   `LICENSE-XeSS.txt` and its `third-party-programs.txt`. `libxess.dll` is Intel's, under the Intel
   Simplified Software License in `LICENSE-XeSS.txt`. The XeSS headers in `third_party/xess` are
   MIT-licensed (`third_party/xess/MIT.txt`).
-- `fsr4_v07.tar.xz` unpacks to `userdata/fsr4_v07` in both zips: the shaders and model data of
-  FSR 4 v07 INT8 that `third_party/fsr-vulkan` runs. `LICENSE-FSR4-v07.txt` in the archive gives
-  their origin and MIT license.
+- `fsr4_lite.tar.xz` unpacks to `userdata/fsr4_lite` in both zips: the SPIR-V modules and
+  initializers of AMD FSR 4.1.2 Lite that `third_party/fsr-vulkan` runs, taken from the Vulkan
+  upscaler DLL of the AMD FSR SDK 2.4.0. `LICENSE-FSR4-Lite.txt` in the archive gives their origin,
+  the two changes made to them and their MIT license; `SHA256SUMS` lists every file.

@@ -192,8 +192,8 @@ jobs:
             *-win64-*) system=Windows ;;
             *) system=Linux ;;
           esac
-          mkdir -p "$dir/userdata/fsr4_v07"
-          tar -xJf third_party/upscaler-files/fsr4_v07.tar.xz -C "$dir/userdata/fsr4_v07"
+          mkdir -p "$dir/userdata/fsr4_lite"
+          tar -xJf third_party/upscaler-files/fsr4_lite.tar.xz -C "$dir/userdata/fsr4_lite"
           mkdir -p "$dir/userdata/dlss"
           tar -xJf "third_party/upscaler-files/dlss-${system,,}.tar.xz" -C "$dir/userdata/dlss"
           cp third_party/dlss/LICENSE.txt "$dir/userdata/dlss/LICENSE-DLSS.txt"
