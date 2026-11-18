@@ -551,6 +551,7 @@ void Thread::TakeSettings() {
         World::ClearHistories();
     }
     Glass::Choose(now.glass_refraction);
+    Particles::Choose(now.distortion);
     Fog::Choose(now.fog_shadows);
     MotionBlur::Choose(now.motion_blur == Settings::Quality::Low);
     memory->CapBudget(now.texture_streaming_mb);
@@ -1851,6 +1852,7 @@ Settings::Values Live(const Settings::Values& started, const Settings::Values& w
     to.outlines = from.outlines;
     to.decals = from.decals;
     to.glass_refraction = from.glass_refraction;
+    to.distortion = from.distortion;
     to.anisotropic_filtering = from.anisotropic_filtering;
     to.texture_streaming_mb = from.texture_streaming_mb;
     to.field_of_view = from.field_of_view;

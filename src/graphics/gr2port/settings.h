@@ -150,6 +150,9 @@ struct Graphics {
     /// player's landings, jumps, runs, dodges and slides. Poison clouds always show. It takes
     /// effect at the next start.
     bool smoke_and_dust{true};
+    /// The particles' distortion passes, which bend the scene behind them. Without, their draws are
+    /// left out.
+    bool distortion{true};
     /// The material textures' anisotropic filtering: 0 off, else the most samples, 2 as the game.
     u32 anisotropic_filtering{2};
     /// How far from an island of the city the game shows its detailed models in place of its low
@@ -209,6 +212,7 @@ struct Preset {
     bool fog_shadows;
     bool half_resolution_particles;
     bool smoke_and_dust{true};
+    bool distortion{true};
     u32 anisotropic_filtering;
     /// The aspect and render size the preset also sets, or empty to leave them.
     std::string_view aspect;

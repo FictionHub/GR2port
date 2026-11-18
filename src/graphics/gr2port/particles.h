@@ -27,6 +27,9 @@ void QueueCurve(u32 destination, u32 columns, VAddr texels, u32 pitch);
 /// makes its copies of them.
 bool Resize(vk::ImageView depth, vk::ImageView albedo, vk::Extent2D extent);
 
+/// Render thread, between frames: whether the distortion passes, which bend the scene's copy, draw.
+void Choose(bool distortion);
+
 /// Whether the scene's depth holds a frame and is readable before this frame's world.
 bool DepthReady();
 

@@ -229,6 +229,8 @@ enum Control : int {
     IdNearDetail,
     IdCharacterDetailLabel,
     IdCharacterDetail,
+    IdDistortionLabel,
+    IdDistortion,
     IdGraphicsNote,
     IdGameFolderGroup,
     IdGameFolder,
@@ -560,6 +562,7 @@ constexpr std::array GraphicsRows{
     GraphicsRow{IdBloomLabel, IdBloom, L"Bloom", LeftColumn, 6, SwitchChoices},
     GraphicsRow{IdCharacterDetailLabel, IdCharacterDetail, L"Character Detail", LeftColumn, 7,
                 DetailChoices},
+    GraphicsRow{IdDistortionLabel, IdDistortion, L"Distortion", LeftColumn, 8, SwitchChoices},
     GraphicsRow{IdOutlinesLabel, IdOutlines, L"Outlines", RightColumn, 0, SwitchChoices},
     GraphicsRow{IdDecalsLabel, IdDecals, L"Decals", RightColumn, 1, SwitchChoices},
     GraphicsRow{IdGlassLabel, IdGlass, L"Glass Refraction", RightColumn, 2, SwitchChoices},
@@ -1425,6 +1428,7 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
            IndexOf(Settings::DetailLevels, graphics.near_environment_detail, OwnDetail));
     Select(Item(dialog, IdCharacterDetail),
            IndexOf(Settings::DetailLevels, graphics.character_detail, OwnDetail));
+    Select(Item(dialog, IdDistortion), graphics.distortion ? 0 : 1);
 }
 
 // The field of view, the upscaler and its quality, which presets leave.
@@ -1462,6 +1466,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     ReadChoice(Item(dialog, IdNearDetail), Settings::DetailLevels,
                graphics.near_environment_detail);
     ReadChoice(Item(dialog, IdCharacterDetail), Settings::DetailLevels, graphics.character_detail);
+    graphics.distortion = Selected(Item(dialog, IdDistortion)) != 1;
     ReadChoice(Item(dialog, IdFieldOfView), Settings::FieldOfViewLevels, graphics.field_of_view);
     const int upscaler = Selected(Item(dialog, IdUpscaler));
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
@@ -2340,6 +2345,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdFarDetail:
     case IdNearDetail:
     case IdCharacterDetail:
+    case IdDistortion:
     case IdAspect:
     case IdRenderSize:
     case IdTextureStreaming:

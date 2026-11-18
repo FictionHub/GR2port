@@ -459,6 +459,7 @@ struct Dialog {
     QComboBox* far_detail = nullptr;
     QComboBox* near_detail = nullptr;
     QComboBox* character_detail = nullptr;
+    QComboBox* distortion = nullptr;
     std::array<QCheckBox*, Toggles.size()> toggles{};
     QSlider* gyro_deadzone = nullptr;
     QComboBox* active_pad = nullptr;
@@ -953,6 +954,7 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
         IndexOf(Settings::DetailLevels, graphics.near_environment_detail, OwnDetail));
     dialog.character_detail->setCurrentIndex(
         IndexOf(Settings::DetailLevels, graphics.character_detail, OwnDetail));
+    dialog.distortion->setCurrentIndex(graphics.distortion ? 0 : 1);
 }
 
 // The field of view, the upscaler and its quality, which presets leave.
@@ -990,6 +992,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     ReadChoice(dialog.far_detail, Settings::FarDetailLevels, graphics.far_environment_detail);
     ReadChoice(dialog.near_detail, Settings::DetailLevels, graphics.near_environment_detail);
     ReadChoice(dialog.character_detail, Settings::DetailLevels, graphics.character_detail);
+    graphics.distortion = dialog.distortion->currentIndex() != 1;
     ReadChoice(dialog.field_of_view, Settings::FieldOfViewLevels, graphics.field_of_view);
     const int upscaler = dialog.upscaler->currentIndex();
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
@@ -1369,6 +1372,7 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
     dialog.antialias = row("Anti-Aliasing", LeftColumn, 5, SwitchChoices);
     dialog.bloom = row("Bloom", LeftColumn, 6, SwitchChoices);
     dialog.character_detail = row("Character Detail", LeftColumn, 7, DetailChoices);
+    dialog.distortion = row("Distortion", LeftColumn, 8, SwitchChoices);
     dialog.outlines = row("Outlines", RightColumn, 0, SwitchChoices);
     dialog.decals = row("Decals", RightColumn, 1, SwitchChoices);
     dialog.glass_refraction = row("Glass Refraction", RightColumn, 2, SwitchChoices);
@@ -1981,12 +1985,26 @@ void Build(Dialog& dialog) {
         ApplyPreset(dialog, index);
         ShowPreset(dialog);
     });
-    for (QComboBox* const combo :
-         {dialog.shadows, dialog.fog, dialog.fog_shadows, dialog.occlusion, dialog.motion_blur,
-          dialog.antialias, dialog.bloom, dialog.outlines, dialog.decals, dialog.glass_refraction,
-          dialog.particles, dialog.smoke, dialog.anisotropy, dialog.aspect, dialog.render_size,
-          dialog.texture_streaming_list, dialog.far_detail, dialog.near_detail,
-          dialog.character_detail}) {
+    for (QComboBox* const combo : {dialog.shadows,
+                                   dialog.fog,
+                                   dialog.fog_shadows,
+                                   dialog.occlusion,
+                                   dialog.motion_blur,
+                                   dialog.antialias,
+                                   dialog.bloom,
+                                   dialog.outlines,
+                                   dialog.decals,
+                                   dialog.glass_refraction,
+                                   dialog.particles,
+                                   dialog.smoke,
+                                   dialog.anisotropy,
+                                   dialog.aspect,
+                                   dialog.render_size,
+                                   dialog.texture_streaming_list,
+                                   dialog.far_detail,
+                                   dialog.near_detail,
+                                   dialog.character_detail,
+                                   dialog.distortion}) {
         QObject::connect(combo, &QComboBox::activated, window, [&dialog] { ShowPreset(dialog); });
     }
     QObject::connect(defaults, &QPushButton::clicked, window, [&dialog] { SetDefaults(dialog); });

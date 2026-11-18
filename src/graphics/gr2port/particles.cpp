@@ -300,6 +300,8 @@ vk::DescriptorSet g_copy_set;
 // draws blend premultiplied colour into g_half_color, whose alpha keeps the share of the scene that
 // shows through, tested against g_half_depth; then one draw blends the target over the scene.
 bool g_half = false;
+// Without the distortion setting, the distortion passes (12 and 16) are left out.
+bool g_distortion = true;
 std::array<Pipeline, ShapeCount * ProgramCount> g_half_draws;
 Pipeline g_half_effect;
 // The particle_half program's two passes, chosen by its push constant.
@@ -1444,6 +1446,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
     WriteSampledImage(g_draw_set, 0, g_curves.view, vk::ImageLayout::eGeneral);
     WriteSampledImage(g_copy_set, 0, g_curves.view, vk::ImageLayout::eGeneral);
     g_half = Settings::Get().graphics.half_resolution_particles;
+    g_distortion = Settings::Get().graphics.distortion;
     if (g_half) {
         const vk::DescriptorSetLayoutBinding half_binding{
             0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment,
@@ -1588,6 +1591,10 @@ bool Resize(vk::ImageView depth, vk::ImageView albedo, vk::Extent2D extent) {
     WriteSampledImage(g_collision_set, 0, depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
     WriteStorageImage(g_collision_set, 2, g_collision.view);
     return true;
+}
+
+void Choose(bool distortion) {
+    g_distortion = distortion;
 }
 
 bool DepthReady() {
@@ -2037,8 +2044,12 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
         SetRunState(cmd, run, writes_depth && !to_half);
         DrawRun(cmd, run, buffer, offset);
     };
+    const auto drawn = [](u32 mode) { return g_distortion || (mode != 12 && mode != 16); };
     const auto draw_modes = [&](std::span<const u32> modes) {
         for (const u32 mode : modes) {
+            if (!drawn(mode)) {
+                continue;
+            }
             for (u32 i = 0; i < frame.runs; i++) {
                 if (runs[i].mode == mode) {
                     draw_run(runs[i]);
@@ -2048,9 +2059,9 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
     };
     draw_modes(modes.before_copy);
     const bool reads_copy =
-        std::any_of(runs.begin(), runs.begin() + frame.runs, [&modes](const auto& run) {
-            return std::find(modes.of_copy.begin(), modes.of_copy.end(), run.mode) !=
-                   modes.of_copy.end();
+        std::any_of(runs.begin(), runs.begin() + frame.runs, [&](const auto& run) {
+            return drawn(run.mode) && std::find(modes.of_copy.begin(), modes.of_copy.end(),
+                                                run.mode) != modes.of_copy.end();
         });
     if (reads_copy) {
         if (begun) {
