@@ -5,7 +5,7 @@
 
 #include "common/assert.h"
 #include "common/uint128.h"
-#include "core/libraries/gnmdriver/gnmdriver.h"
+#include "core/libraries/kernel/process.h"
 #include "core/libraries/kernel/time.h"
 #include "core/memory.h"
 #include "graphics/gr2port/gpu_writes.h"
@@ -36,6 +36,11 @@ enum class Source : u32 {
 // The GPU reads 40 bits of address.
 constexpr u64 AddressMask = 0xff'ffff'ffffULL;
 
+// The GPU core clock of the console the game runs on.
+u64 GpuCoreClock() {
+    return Libraries::Kernel::sceKernelIsNeoMode() ? 911'000'000 : 800'000'000;
+}
+
 void Write(u64 address, const void* data, u64 size) {
     ASSERT(Core::Memory::Instance()->TryWriteBacking(reinterpret_cast<void*>(address), data, size));
 }
@@ -56,8 +61,7 @@ void WriteSelected(u64 address, u32 source, u64 value) {
                    .count();
         break;
     case Source::CoreClock:
-        data = Common::MultiplyAndDivide64(Libraries::Kernel::sceKernelReadTsc(),
-                                           Libraries::GnmDriver::sceGnmGetGpuCoreClockFrequency(),
+        data = Common::MultiplyAndDivide64(Libraries::Kernel::sceKernelReadTsc(), GpuCoreClock(),
                                            Libraries::Kernel::sceKernelGetTscFrequency());
         break;
     default:

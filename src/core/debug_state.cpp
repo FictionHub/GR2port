@@ -9,7 +9,6 @@
 #include "common/singleton.h"
 #include "core/signals.h"
 #include "debug_state.h"
-#include "devtools/widget/common.h"
 #include "libraries/kernel/time.h"
 #include "libraries/system/msgdialog.h"
 

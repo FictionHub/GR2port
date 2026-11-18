@@ -316,8 +316,6 @@ set(AUDIO_LIB src/core/libraries/audio/audioin.cpp
 
 set(GNM_LIB src/core/libraries/gnmdriver/gnmdriver.cpp
             src/core/libraries/gnmdriver/gnmdriver.h
-            src/core/libraries/gnmdriver/gnmdriver_init.h
-            src/core/libraries/gnmdriver/gnm_error.h
 )
 
 set(KERNEL_LIB src/core/libraries/kernel/coredump/coredump.cpp
@@ -781,7 +779,6 @@ set(COMPANION_LIBS  src/core/libraries/companion/companion_httpd.cpp
 )
 set(DEV_TOOLS src/core/devtools/layer.cpp
               src/core/devtools/layer.h
-              src/core/devtools/widget/common.h
               src/core/devtools/widget/frame_graph.cpp
               src/core/devtools/widget/frame_graph.h
               src/core/devtools/widget/gpu_memory.cpp
@@ -1024,8 +1021,6 @@ endif()
 
 set(GRAPHICS src/graphics/amdgpu/pixel_format.cpp
              src/graphics/amdgpu/pixel_format.h
-             src/graphics/amdgpu/pm4_cmds.h
-             src/graphics/amdgpu/pm4_opcodes.h
              src/graphics/amdgpu/resource.h
              src/graphics/amdgpu/tiling.cpp
              src/graphics/amdgpu/tiling.h

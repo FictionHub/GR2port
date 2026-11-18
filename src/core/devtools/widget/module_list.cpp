@@ -5,7 +5,6 @@
 
 #include <imgui.h>
 
-#include "common.h"
 #include "core/debug_state.h"
 #include "imgui/imgui_std.h"
 
