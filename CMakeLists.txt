@@ -593,8 +593,6 @@ list(APPEND NETWORK_LIBS src/core/libraries/gr2_online/gr2_online.cpp
                          src/core/libraries/gr2_online/online_np_web_api.h
                          src/core/libraries/gr2_online/online_patches.cpp
                          src/core/libraries/gr2_online/online_patches.h
-                         src/core/libraries/gr2_online/online_save.cpp
-                         src/core/libraries/gr2_online/online_save.h
                          src/core/libraries/gr2_online/online_secure.cpp
                          src/core/libraries/gr2_online/online_secure.h
                          src/core/libraries/gr2_online/online_session.cpp
