@@ -120,7 +120,7 @@ inline constexpr u32 LightGridRows = 36;
 inline constexpr u32 LightGridSlices = 8;
 inline constexpr u32 LightsPerCell = 48;
 /// Materials of G2_BG_Glass draws per packet.
-inline constexpr u32 MaxGlassMaterials = 256;
+inline constexpr u32 MaxGlassMaterials = 1024;
 /// Branch instances the kernel sways per packet, and branch ribbon draws.
 inline constexpr u32 MaxBranchJobs = 512;
 inline constexpr u32 MaxBranches = 512;
