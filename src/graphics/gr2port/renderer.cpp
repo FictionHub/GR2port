@@ -1856,6 +1856,7 @@ Settings::Values Live(const Settings::Values& started, const Settings::Values& w
     to.anisotropic_filtering = from.anisotropic_filtering;
     to.texture_streaming_mb = from.texture_streaming_mb;
     to.field_of_view = from.field_of_view;
+    to.screen_shake = from.screen_shake;
     live.display.vsync = wanted.display.vsync;
     return live;
 }

@@ -316,6 +316,7 @@
     "Keyboard": "Bàn phím",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Giữ cùng lúc tối đa ba phím cho\n{0}\n\nKhông có gì thay đổi sau {1} giây.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Giữ cùng lúc tối đa ba nút trên tay cầm cho\n{0}\n\nKhông có gì thay đổi sau {1} giây.",
-    "Field of View": "Góc nhìn"
+    "Field of View": "Góc nhìn",
+    "Screen Shake": "Rung màn hình"
   }
 }

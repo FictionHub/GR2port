@@ -231,6 +231,8 @@ enum Control : int {
     IdCharacterDetail,
     IdDistortionLabel,
     IdDistortion,
+    IdScreenShakeLabel,
+    IdScreenShake,
     IdGraphicsNote,
     IdGameFolderGroup,
     IdGameFolder,
@@ -488,12 +490,13 @@ constexpr std::array<const wchar_t*, 5> UpscaleQualityChoices{L"Native AA", L"Qu
                                                               L"Performance", L"Ultra Performance"};
 
 // The Graphics tab: the preset across the top, each pass's choice in two columns of rows 26
-// pixels apart, then the note. Quality choices are in the order of Settings::Quality; switches
-// put On first.
+// pixels apart, then the note. The page scrolls to the note's end, down to GraphicsPageBottom.
+// Quality choices are in the order of Settings::Quality; switches put On first.
 constexpr int PresetTop = 88;
 constexpr int PassTop = 118;
 constexpr int PassStep = 26;
-constexpr int GraphicsNoteTop = 352;
+constexpr int GraphicsNoteTop = 378;
+constexpr int GraphicsPageBottom = 462;
 // The Texture Streaming list is wider than its combo box, to show the GPU's name.
 constexpr int TextureStreamingListWidth = 280;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
@@ -529,6 +532,11 @@ constexpr std::array<const wchar_t*, 15> FieldOfViewChoices{
     L"80%",  L"85%",  L"90%",  L"95%",  L"PS4 Original", L"105%", L"110%", L"115%",
     L"120%", L"125%", L"130%", L"135%", L"140%",         L"145%", L"150%"};
 constexpr int OwnFieldOfView = 4;
+// The screen shake's choices, in the order of Settings::ScreenShakeLevels, and the game's own.
+constexpr std::array<const wchar_t*, 11> ScreenShakeChoices{L"Off", L"10%", L"20%",         L"30%",
+                                                            L"40%", L"50%", L"60%",         L"70%",
+                                                            L"80%", L"90%", L"PS4 Original"};
+constexpr int OwnScreenShake = 10;
 
 struct GraphicsColumn {
     int label_left;
@@ -563,6 +571,8 @@ constexpr std::array GraphicsRows{
     GraphicsRow{IdCharacterDetailLabel, IdCharacterDetail, L"Character Detail", LeftColumn, 7,
                 DetailChoices},
     GraphicsRow{IdDistortionLabel, IdDistortion, L"Distortion", LeftColumn, 8, SwitchChoices},
+    GraphicsRow{IdScreenShakeLabel, IdScreenShake, L"Screen Shake", LeftColumn, 9,
+                ScreenShakeChoices},
     GraphicsRow{IdOutlinesLabel, IdOutlines, L"Outlines", RightColumn, 0, SwitchChoices},
     GraphicsRow{IdDecalsLabel, IdDecals, L"Decals", RightColumn, 1, SwitchChoices},
     GraphicsRow{IdGlassLabel, IdGlass, L"Glass Refraction", RightColumn, 2, SwitchChoices},
@@ -1431,10 +1441,12 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdDistortion), graphics.distortion ? 0 : 1);
 }
 
-// The field of view, the upscaler and its quality, which presets leave.
+// The field of view, the screen shake, the upscaler and its quality, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdFieldOfView),
            IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
+    Select(Item(dialog, IdScreenShake),
+           IndexOf(Settings::ScreenShakeLevels, graphics.screen_shake, OwnScreenShake));
     Select(Item(dialog, IdUpscaler), static_cast<int>(graphics.upscaler));
     Select(Item(dialog, IdUpscaleQuality), static_cast<int>(graphics.upscale_quality));
 }
@@ -1468,6 +1480,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     ReadChoice(Item(dialog, IdCharacterDetail), Settings::DetailLevels, graphics.character_detail);
     graphics.distortion = Selected(Item(dialog, IdDistortion)) != 1;
     ReadChoice(Item(dialog, IdFieldOfView), Settings::FieldOfViewLevels, graphics.field_of_view);
+    ReadChoice(Item(dialog, IdScreenShake), Settings::ScreenShakeLevels, graphics.screen_shake);
     const int upscaler = Selected(Item(dialog, IdUpscaler));
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -1816,7 +1829,8 @@ void Build(HWND window, Dialog& dialog) {
     for (size_t i = 0; i < PageCount; ++i) {
         dialog.pages[i] =
             CreateWindowExW(WS_EX_CONTROLPARENT, PageClass, L"",
-                            WS_CHILD | (i == DisplayPage ? WS_VISIBLE | WS_VSCROLL : 0),
+                            WS_CHILD | (i == DisplayPage ? WS_VISIBLE : 0) |
+                                (i == DisplayPage || i == GraphicsPage ? WS_VSCROLL : 0),
                             page_area.left, page_area.top, page_area.right - page_area.left,
                             page_area.bottom - page_area.top, tab, nullptr, instance, nullptr);
     }
@@ -1860,12 +1874,16 @@ void Build(HWND window, Dialog& dialog) {
         add_row(row);
     }
     KeepTabOrder(page_order);
-    RECT display_area{};
-    GetClientRect(display_page, &display_area);
-    SCROLLINFO display_scroll{sizeof(display_scroll), SIF_RANGE | SIF_PAGE};
-    display_scroll.nMax = Scaled(dialog, DisplayPageBottom) - page_origin.y - 1;
-    display_scroll.nPage = static_cast<UINT>(display_area.bottom);
-    SetScrollInfo(display_page, SB_VERT, &display_scroll, FALSE);
+    // Sets the page's scroll bar to scroll it down to bottom.
+    const auto set_scroll = [&](HWND page, int bottom) {
+        RECT area{};
+        GetClientRect(page, &area);
+        SCROLLINFO scroll{sizeof(scroll), SIF_RANGE | SIF_PAGE};
+        scroll.nMax = Scaled(dialog, bottom) - page_origin.y - 1;
+        scroll.nPage = static_cast<UINT>(area.bottom);
+        SetScrollInfo(page, SB_VERT, &scroll, FALSE);
+    };
+    set_scroll(display_page, DisplayPageBottom);
 
     const HWND graphics_page = dialog.pages[GraphicsPage];
     std::vector<HWND> graphics_order;
@@ -1913,6 +1931,7 @@ void Build(HWND window, Dialog& dialog) {
         SS_LEFT, IdGraphicsNote, LabelLeft, GraphicsNoteTop, ExtrasList.right - LabelLeft,
         5 * InfoHeight));
     KeepTabOrder(graphics_order);
+    set_scroll(graphics_page, GraphicsPageBottom);
     for (const Settings::Preset& preset : Settings::Presets) {
         AddText(Item(dialog, IdPreset), Wide(preset.name));
     }

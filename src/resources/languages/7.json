@@ -135,6 +135,7 @@
     "Graphics Settings": "Definições gráficas",
     "Some changes take effect the next time the game starts.": "Algumas alterações só terão efeito no próximo arranque do jogo.",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Mantenha premidas até três teclas em simultâneo para\n{0}\n\nNada muda em {1} s.",
-    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Mantenha premidos até três botões do comando em simultâneo para\n{0}\n\nNada muda em {1} s."
+    "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Mantenha premidos até três botões do comando em simultâneo para\n{0}\n\nNada muda em {1} s.",
+    "Screen Shake": "Tremor do ecrã"
   }
 }

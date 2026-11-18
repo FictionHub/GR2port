@@ -316,6 +316,7 @@
     "Keyboard": "Näppäimistö",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Pidä enintään kolmea näppäintä yhdessä painettuna toiminnolle\n{0}\n\nMikään ei muutu {1} s:n kuluttua.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Pidä enintään kolmea ohjaimen painiketta yhdessä painettuna toiminnolle\n{0}\n\nMikään ei muutu {1} s:n kuluttua.",
-    "Field of View": "Näkökenttä"
+    "Field of View": "Näkökenttä",
+    "Screen Shake": "Näytön tärinä"
   }
 }

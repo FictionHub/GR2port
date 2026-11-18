@@ -316,6 +316,7 @@
     "Keyboard": "Клавіатура",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Утримуйте разом до трьох клавіш для дії\n{0}\n\nСкасування через {1} с.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Утримуйте разом до трьох кнопок на контролері для дії\n{0}\n\nСкасування через {1} с.",
-    "Field of View": "Поле зору"
+    "Field of View": "Поле зору",
+    "Screen Shake": "Тремтіння екрана"
   }
 }

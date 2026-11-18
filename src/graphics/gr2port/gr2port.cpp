@@ -35,6 +35,7 @@
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/player_control.h"
 #include "graphics/gr2port/renderer.h"
+#include "graphics/gr2port/screen_shake.h"
 #include "graphics/gr2port/script_timers.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/smoke_and_dust.h"
@@ -152,6 +153,7 @@ void Install(VAddr module_base) {
         MotionEnds::Install(module_base, c, StubAreaSize);
     }
     FieldOfView::Install(module_base, c, StubAreaSize);
+    ScreenShake::Install(module_base, c, StubAreaSize);
     if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
             Hooks::Result::Mismatch ||
         Hooks::ObserveEntry(module_base, NextContext, c, StubAreaSize, &OnNextContext, 0) ==

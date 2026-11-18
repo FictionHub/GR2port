@@ -146,6 +146,7 @@ void ReadGraphics(const json& section, Graphics& graphics) {
     detail("near_environment_detail", DetailLevels, graphics.near_environment_detail);
     detail("character_detail", DetailLevels, graphics.character_detail);
     detail("field_of_view", FieldOfViewLevels, graphics.field_of_view);
+    detail("screen_shake", ScreenShakeLevels, graphics.screen_shake);
     graphics.upscaler = ReadName(section, "upscaler", graphics.upscaler, UpscalerNames);
     graphics.upscale_quality =
         ReadName(section, "upscale_quality", graphics.upscale_quality, UpscaleQualityNames);
@@ -282,6 +283,7 @@ json ToJson(const Values& values) {
         {"near_environment_detail", values.graphics.near_environment_detail},
         {"character_detail", values.graphics.character_detail},
         {"field_of_view", values.graphics.field_of_view},
+        {"screen_shake", values.graphics.screen_shake},
         {"upscaler", NameOf(values.graphics.upscaler, UpscalerNames)},
         {"upscale_quality", NameOf(values.graphics.upscale_quality, UpscaleQualityNames)},
         {"texture_streaming_mb", values.graphics.texture_streaming_mb},

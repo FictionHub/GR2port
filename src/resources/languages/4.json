@@ -316,6 +316,7 @@
     "Keyboard": "Tastatur",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Halten Sie bis zu drei Tasten gleichzeitig gedrückt für\n{0}\n\nAbbruch ohne Änderung in {1} s.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Halten Sie bis zu drei Tasten auf dem Controller gleichzeitig gedrückt für\n{0}\n\nAbbruch ohne Änderung in {1} s.",
-    "Field of View": "Sichtfeld"
+    "Field of View": "Sichtfeld",
+    "Screen Shake": "Bildschirmwackeln"
   }
 }

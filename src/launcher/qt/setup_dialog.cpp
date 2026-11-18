@@ -298,12 +298,13 @@ constexpr std::array<std::string_view, 5> UpscaleQualityChoices{"Native AA", "Qu
                                                                 "Performance", "Ultra Performance"};
 
 // The Graphics tab: the preset across the top, each pass's choice in two columns of rows 26
-// pixels apart, then the note. Quality choices are in the order of Settings::Quality; switches
-// put On first.
+// pixels apart, then the note. The page scrolls to the note's end, down to GraphicsPageBottom.
+// Quality choices are in the order of Settings::Quality; switches put On first.
 constexpr int PresetTop = 88;
 constexpr int PassTop = 118;
 constexpr int PassStep = 26;
-constexpr int GraphicsNoteTop = 352;
+constexpr int GraphicsNoteTop = 378;
+constexpr int GraphicsPageBottom = 462;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
 // driver's budget, as Auto does.
 constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
@@ -335,6 +336,10 @@ constexpr std::array<std::string_view, 15> FieldOfViewChoices{
     "80%",  "85%",  "90%",  "95%",  "PS4 Original", "105%", "110%", "115%",
     "120%", "125%", "130%", "135%", "140%",         "145%", "150%"};
 constexpr int OwnFieldOfView = 4;
+// The screen shake's choices, in the order of Settings::ScreenShakeLevels, and the game's own.
+constexpr std::array<std::string_view, 11> ScreenShakeChoices{
+    "Off", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "PS4 Original"};
+constexpr int OwnScreenShake = 10;
 
 struct GraphicsColumn {
     int label_left;
@@ -460,6 +465,7 @@ struct Dialog {
     QComboBox* near_detail = nullptr;
     QComboBox* character_detail = nullptr;
     QComboBox* distortion = nullptr;
+    QComboBox* screen_shake = nullptr;
     std::array<QCheckBox*, Toggles.size()> toggles{};
     QSlider* gyro_deadzone = nullptr;
     QComboBox* active_pad = nullptr;
@@ -957,10 +963,12 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.distortion->setCurrentIndex(graphics.distortion ? 0 : 1);
 }
 
-// The field of view, the upscaler and its quality, which presets leave.
+// The field of view, the screen shake, the upscaler and its quality, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.field_of_view->setCurrentIndex(
         IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
+    dialog.screen_shake->setCurrentIndex(
+        IndexOf(Settings::ScreenShakeLevels, graphics.screen_shake, OwnScreenShake));
     const int upscaler = static_cast<int>(graphics.upscaler);
     dialog.upscaler->setCurrentIndex(upscaler < static_cast<int>(UpscalerChoices.size()) ? upscaler
                                                                                          : 0);
@@ -994,6 +1002,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     ReadChoice(dialog.character_detail, Settings::DetailLevels, graphics.character_detail);
     graphics.distortion = dialog.distortion->currentIndex() != 1;
     ReadChoice(dialog.field_of_view, Settings::FieldOfViewLevels, graphics.field_of_view);
+    ReadChoice(dialog.screen_shake, Settings::ScreenShakeLevels, graphics.screen_shake);
     const int upscaler = dialog.upscaler->currentIndex();
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -1373,6 +1382,7 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
     dialog.bloom = row("Bloom", LeftColumn, 6, SwitchChoices);
     dialog.character_detail = row("Character Detail", LeftColumn, 7, DetailChoices);
     dialog.distortion = row("Distortion", LeftColumn, 8, SwitchChoices);
+    dialog.screen_shake = row("Screen Shake", LeftColumn, 9, ScreenShakeChoices);
     dialog.outlines = row("Outlines", RightColumn, 0, SwitchChoices);
     dialog.decals = row("Decals", RightColumn, 1, SwitchChoices);
     dialog.glass_refraction = row("Glass Refraction", RightColumn, 2, SwitchChoices);
@@ -1879,16 +1889,22 @@ void Build(Dialog& dialog) {
         dialog.pages[i]->setVisible(i == DisplayPage);
     }
 
+    // Puts the page in a scroll area that scrolls it down to bottom.
+    const auto scroll = [&](size_t page, int bottom) {
+        auto* const area = new QScrollArea{window};
+        area->setGeometry(dialog.pages[page]->geometry());
+        area->setFrameShape(QFrame::NoFrame);
+        area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        area->setWidgetResizable(true);
+        dialog.pages[page]->setMinimumHeight(bottom - dialog.pages[page]->y());
+        area->setWidget(dialog.pages[page]);
+        area->setVisible(page == DisplayPage);
+        dialog.pages[page] = area;
+    };
     BuildDisplay(dialog, dialog.pages[DisplayPage]);
-    auto* const display_scroll = new QScrollArea{window};
-    display_scroll->setGeometry(dialog.pages[DisplayPage]->geometry());
-    display_scroll->setFrameShape(QFrame::NoFrame);
-    display_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    display_scroll->setWidgetResizable(true);
-    dialog.pages[DisplayPage]->setMinimumHeight(DisplayPageBottom - dialog.pages[DisplayPage]->y());
-    display_scroll->setWidget(dialog.pages[DisplayPage]);
-    dialog.pages[DisplayPage] = display_scroll;
+    scroll(DisplayPage, DisplayPageBottom);
     BuildGraphics(dialog, dialog.pages[GraphicsPage]);
+    scroll(GraphicsPage, GraphicsPageBottom);
     BuildController(dialog, dialog.pages[ControllerPage]);
     BuildMouse(dialog, dialog.pages[MousePage]);
     BuildDlc(dialog, dialog.pages[DlcPage]);

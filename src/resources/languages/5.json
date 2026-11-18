@@ -316,6 +316,7 @@
     "Keyboard": "Tastiera",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Tieni premuti insieme fino a tre tasti per\n{0}\n\nAnnullamento senza modifiche tra {1} s.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Tieni premuti insieme fino a tre pulsanti del controller per\n{0}\n\nAnnullamento senza modifiche tra {1} s.",
-    "Field of View": "Campo visivo"
+    "Field of View": "Campo visivo",
+    "Screen Shake": "Scuotimento schermo"
   }
 }

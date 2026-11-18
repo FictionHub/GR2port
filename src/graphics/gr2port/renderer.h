@@ -14,8 +14,9 @@ void Start();
 /// The settings the renderer draws with once it took wanted, in a game that started with
 /// started: wanted's where a setting changes while the game runs, started's elsewhere. Shadows,
 /// fog shadows, motion blur, antialiasing, bloom, outlines, decals, glass refraction, anisotropic
-/// filtering, the texture streaming budget and VSync change, and so does the field of view, which
-/// FieldOfView takes; ambient occlusion turns off and on at the size it started with.
+/// filtering, the texture streaming budget and VSync change, and so do the field of view and the
+/// screen shake, which FieldOfView and ScreenShake take; ambient occlusion turns off and on at the
+/// size it started with.
 Settings::Values Live(const Settings::Values& started, const Settings::Values& wanted);
 
 /// Any thread, after the stored settings changed: the render thread takes them before its next
