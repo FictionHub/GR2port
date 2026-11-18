@@ -5,11 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <ffx_vk_fsr4_v07.h>
-#include <ffx_vk_fsr4_v07_assets.h>
-#include <ffx_vk_fsr4_v07_schedule.h>
+#include <ffx_vk_fsr4_lite.h>
+#include <ffx_vk_fsr4_lite_assets.h>
+#include <ffx_vk_fsr4_lite_schedule.h>
 
-#include "graphics/gr2_fsr3/fsr4_v07_bridge.h"
+#include "graphics/gr2_fsr3/fsr4_lite_bridge.h"
 
 _Static_assert(FFX_FSR4_VK_PASS_COUNT == GR2_FSR4_SHADER_COUNT, "The backend takes the 10 passes");
 _Static_assert(FFX_FSR4_PASS_COUNT == GR2_FSR4_SHADER_COUNT,

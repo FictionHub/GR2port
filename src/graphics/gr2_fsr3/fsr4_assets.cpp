@@ -20,7 +20,7 @@
 #include "graphics/gr2_fsr3/fsr4_assets.h"
 
 // <vulkan/vulkan.h> must first be included through vk_common.h, which configures it.
-#include "graphics/gr2_fsr3/fsr4_v07_bridge.h"
+#include "graphics/gr2_fsr3/fsr4_lite_bridge.h"
 
 namespace Gr2Fsr3 {
 

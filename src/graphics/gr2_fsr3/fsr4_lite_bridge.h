@@ -3,7 +3,7 @@
 
 #pragma once
 
-// C interface to the FSR 4.1.2 Lite Vulkan provider. Only fsr4_v07_bridge.c includes the
+// C interface to the FSR 4.1.2 Lite Vulkan provider. Only fsr4_lite_bridge.c includes the
 // provider headers, whose type names collide with the FidelityFX SDK headers of the FSR 3.1
 // libraries. A C++ includer includes vk_common.h first.
 

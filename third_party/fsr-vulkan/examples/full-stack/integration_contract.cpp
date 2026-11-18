@@ -4,8 +4,8 @@
  * a production host creates its Vulkan device and supplies real images/fences.
  */
 #include <ffx_vk_fsr3_3_1_5_bridge.h>
-#include <ffx_vk_fsr4_v07.h>
-#include <ffx_vk_fsr4_v07_assets.h>
+#include <ffx_vk_fsr4_lite.h>
+#include <ffx_vk_fsr4_lite_assets.h>
 #include <ffx_vk_framegeneration_presenter.h>
 #include <ffx_vk_portable.h>
 #include <ffx_vk_radiancecache_contract.h>

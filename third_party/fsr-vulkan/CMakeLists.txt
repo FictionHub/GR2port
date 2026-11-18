@@ -46,8 +46,8 @@ set(FFX_2_3_0_GENERATED_FSR3FRAMEGENERATION
 # this reusable module. This target supplies the small, provenance-neutral host
 # contract that selects one coherent generated shader/weight bundle.
 add_library(ffx_vulkan_fsr4_v07_assets STATIC
-    src/ffx_vk_fsr4_v07_schedule.c
-    src/ffx_vk_fsr4_v07_assets.c
+    src/ffx_vk_fsr4_lite_schedule.c
+    src/ffx_vk_fsr4_lite_assets.c
 )
 add_library(ffx-vulkan::fsr4-v07-assets ALIAS ffx_vulkan_fsr4_v07_assets)
 set_property(TARGET ffx_vulkan_fsr4_v07_assets PROPERTY
@@ -107,8 +107,8 @@ endif()
 
 if(FFX_VK_PORTABLE_BUILD_FSR4_V07_VULKAN)
     add_library(ffx_vulkan_fsr4_v07_vulkan STATIC
-        src/ffx_vk_fsr4_v07.c
-        src/ffx_vk_fsr4_v07_provider.c
+        src/ffx_vk_fsr4_lite.c
+        src/ffx_vk_fsr4_lite_provider.c
     )
     add_library(ffx-vulkan::fsr4-v07-vulkan ALIAS
         ffx_vulkan_fsr4_v07_vulkan)

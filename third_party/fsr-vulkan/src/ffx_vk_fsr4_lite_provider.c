@@ -1,18 +1,18 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 /*
  * The FSR 4.1.2 Lite provider entry points, run on the explicit FfxInterface installed before
- * context creation (ffx_vk_fsr4_v07.c), without AMD's DLL.
+ * context creation (ffx_vk_fsr4_lite.c), without AMD's DLL.
  *
  * A frame is 10 compute passes: the pre-pass, 8 model passes and the post-pass, in the order,
- * with the bindings and dispatch sizes AMD's provider uses (ffx_vk_fsr4_v07_schedule.c).
+ * with the bindings and dispatch sizes AMD's provider uses (ffx_vk_fsr4_lite_schedule.c).
  *
  * Jitter is computed with a Halton[2,3] sequence matching what the AMD SDK
  * generates (see ffxQueryDescUpscaleGetJitterOffset handling below).
  */
 
-#include "ffx_vk_fsr4_v07_types.h"
-#include "ffx_vk_fsr4_v07.h"
-#include "ffx_vk_fsr4_v07_schedule.h"
+#include "ffx_vk_fsr4_lite_types.h"
+#include "ffx_vk_fsr4_lite.h"
+#include "ffx_vk_fsr4_lite_schedule.h"
 
 #include <math.h>
 #include <string.h>

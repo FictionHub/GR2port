@@ -21,7 +21,7 @@ for its provenance and terms.
 Do not describe the experimental source-v07 provider as AMD FSR 4.1.1, Ray
 Regeneration, or ML Frame Generation.
 
-GR2port changes the FSR 4 files (`src/ffx_vk_fsr4_v07*.c`, `include/ffx_vk_fsr4_v07*.h`):
+GR2port changes the FSR 4 files (`src/ffx_vk_fsr4_lite*.c`, `include/ffx_vk_fsr4_lite*.h`):
 they run AMD FSR 4.1.2 Lite instead of the source-v07 network, and no longer match this
 project's upstream. The Lite SPIR-V and initializers they load ship separately in
 `third_party/upscaler-files/fsr4_lite.tar.xz`, taken from the AMD FSR SDK 2.4.0 under the MIT

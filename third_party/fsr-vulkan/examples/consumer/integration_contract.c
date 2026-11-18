@@ -3,8 +3,8 @@
  * does not create a device: applications own instance/device/queue creation and
  * pass the features they actually enabled into the FSR3 and FSR4 create calls.
  */
-#include <ffx_vk_fsr4_v07.h>
-#include <ffx_vk_fsr4_v07_assets.h>
+#include <ffx_vk_fsr4_lite.h>
+#include <ffx_vk_fsr4_lite_assets.h>
 #include <ffx_vk_framegeneration_presenter.h>
 
 int main(void)

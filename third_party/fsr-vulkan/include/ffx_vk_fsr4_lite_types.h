@@ -1,5 +1,5 @@
 /*
- * ffx_vk_fsr4_v07_types.h
+ * ffx_vk_fsr4_lite_types.h
  *
  * Self-contained type definitions extracted from the AMD FidelityFX SDK
  * (Kits/FidelityFX/api/internal/) for the source-v07 Vulkan provider.

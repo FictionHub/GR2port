@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // Vulkan backend of the FSR 4.1.2 Lite provider: the FfxInterface callback table that
-// ffx_vk_fsr4_v07_provider.c records its compute passes through.
+// ffx_vk_fsr4_lite_provider.c records its compute passes through.
 //
 // Requirements:
 //   Vulkan 1.3 with shaderFloat16, shaderIntegerDotProduct and subgroupSizeControl (32 allowed
@@ -15,7 +15,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "ffx_vk_fsr4_v07_types.h"
+#include "ffx_vk_fsr4_lite_types.h"
 
 #ifdef __cplusplus
 extern "C" {

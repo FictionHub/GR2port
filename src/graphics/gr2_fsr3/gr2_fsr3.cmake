@@ -70,24 +70,24 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
 
     # The FSR 4.1.2 Lite provider and the module's C bridge to it. Only C sources include
     # the provider headers: their FFX type names collide with the SDK headers of FSR 3.1.
-    add_library(gr2_ffx_fsr4_v07 STATIC
-        ${GR2_FFX_ROOT}/src/ffx_vk_fsr4_v07.c
-        ${GR2_FFX_ROOT}/src/ffx_vk_fsr4_v07_assets.c
-        ${GR2_FFX_ROOT}/src/ffx_vk_fsr4_v07_provider.c
-        ${GR2_FFX_ROOT}/src/ffx_vk_fsr4_v07_schedule.c)
-    target_include_directories(gr2_ffx_fsr4_v07 PUBLIC ${GR2_FFX_ROOT}/include)
+    add_library(gr2_ffx_fsr4_lite STATIC
+        ${GR2_FFX_ROOT}/src/ffx_vk_fsr4_lite.c
+        ${GR2_FFX_ROOT}/src/ffx_vk_fsr4_lite_assets.c
+        ${GR2_FFX_ROOT}/src/ffx_vk_fsr4_lite_provider.c
+        ${GR2_FFX_ROOT}/src/ffx_vk_fsr4_lite_schedule.c)
+    target_include_directories(gr2_ffx_fsr4_lite PUBLIC ${GR2_FFX_ROOT}/include)
     # Other threads own queues of the device, and the module destroys a context only after the
     # GPU has finished its work.
-    target_compile_definitions(gr2_ffx_fsr4_v07 PRIVATE FFX_FSR4_VK_HOST_RETIRES_WORK=1)
-    target_compile_options(gr2_ffx_fsr4_v07 PRIVATE ${GR2_FFX_NO_WARNINGS})
-    target_link_libraries(gr2_ffx_fsr4_v07 PUBLIC Vulkan::Headers)
+    target_compile_definitions(gr2_ffx_fsr4_lite PRIVATE FFX_FSR4_VK_HOST_RETIRES_WORK=1)
+    target_compile_options(gr2_ffx_fsr4_lite PRIVATE ${GR2_FFX_NO_WARNINGS})
+    target_link_libraries(gr2_ffx_fsr4_lite PUBLIC Vulkan::Headers)
     if (UNIX)
-        target_link_libraries(gr2_ffx_fsr4_v07 PRIVATE m)
+        target_link_libraries(gr2_ffx_fsr4_lite PRIVATE m)
     endif()
 
-    add_library(gr2_fsr4_bridge STATIC ${GR2_FSR3_DIR}/fsr4_v07_bridge.c)
-    target_link_libraries(gr2_fsr4_bridge PUBLIC Vulkan::Headers PRIVATE gr2_ffx_fsr4_v07)
-    set_target_properties(gr2_ffx_fsr4_v07 gr2_fsr4_bridge PROPERTIES C_STANDARD 11)
+    add_library(gr2_fsr4_bridge STATIC ${GR2_FSR3_DIR}/fsr4_lite_bridge.c)
+    target_link_libraries(gr2_fsr4_bridge PUBLIC Vulkan::Headers PRIVATE gr2_ffx_fsr4_lite)
+    set_target_properties(gr2_ffx_fsr4_lite gr2_fsr4_bridge PROPERTIES C_STANDARD 11)
 
     # Helper shaders, compiled like the host shaders.
     if (TARGET glslang-standalone)
@@ -133,7 +133,7 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
         ${GR2_FSR3_DIR}/fsr4_assets.cpp
         ${GR2_FSR3_DIR}/fsr4_assets.h
         ${GR2_FSR3_DIR}/fsr4_context.h
-        ${GR2_FSR3_DIR}/fsr4_v07_bridge.h
+        ${GR2_FSR3_DIR}/fsr4_lite_bridge.h
         ${GR2_FSR3_DIR}/vk_trampolines.cpp
         ${GR2_FSR3_DIR}/vk_trampolines.h
         ${GR2_FSR3_DIR}/xess_vulkan.h)

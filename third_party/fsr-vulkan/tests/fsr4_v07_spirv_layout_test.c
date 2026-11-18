@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "ffx_vk_fsr4_v07.h"
-#include "ffx_vk_fsr4_v07_assets.h"
+#include "ffx_vk_fsr4_lite.h"
+#include "ffx_vk_fsr4_lite_assets.h"
 
 #include <stdio.h>
 #include <stdlib.h>

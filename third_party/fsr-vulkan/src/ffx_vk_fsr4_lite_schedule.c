@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
-#include "ffx_vk_fsr4_v07_schedule.h"
+#include "ffx_vk_fsr4_lite_schedule.h"
 
 #include <string.h>
 

@@ -22,7 +22,7 @@
 #include "common/path_util.h"
 #include "graphics/gr2_fsr3/dlss_ngx.h"
 #include "graphics/gr2_fsr3/fsr4_assets.h"
-#include "graphics/gr2_fsr3/fsr4_v07_bridge.h"
+#include "graphics/gr2_fsr3/fsr4_lite_bridge.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_inputs_comp.h"
 #include "graphics/gr2_fsr3/vk_trampolines.h"
 #include "graphics/gr2_fsr3/xess_vulkan.h"

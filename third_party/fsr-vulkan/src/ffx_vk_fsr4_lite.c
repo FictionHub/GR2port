@@ -12,7 +12,7 @@
 //     bind 256, 257  UNIFORM_BUFFER   b0 CsTensorSizes, b1 MLSR_Optimized_Constants
 //     bind 320       SAMPLER          s0 (immutable linear clamp sampler)
 
-#include "ffx_vk_fsr4_v07.h"
+#include "ffx_vk_fsr4_lite.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>

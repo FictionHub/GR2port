@@ -1,5 +1,5 @@
-#include "ffx_vk_fsr4_v07_schedule.h"
-#include "ffx_vk_fsr4_v07_assets.h"
+#include "ffx_vk_fsr4_lite_schedule.h"
+#include "ffx_vk_fsr4_lite_assets.h"
 
 #include <limits.h>
 #include <stdio.h>
