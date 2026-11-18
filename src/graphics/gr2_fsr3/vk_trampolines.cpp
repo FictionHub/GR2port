@@ -5,7 +5,7 @@
 
 #include "graphics/gr2_fsr3/vk_trampolines.h"
 
-// The FidelityFX libraries and the FSR 4 v07 provider call these Vulkan commands directly, and
+// The FidelityFX libraries and the FSR 4 provider call these Vulkan commands directly, and
 // GR2port links no Vulkan loader. Each definition forwards to the dispatcher of GR2port's device
 // once its upscaler starts, and is checked against its PFN_ type because VK_NO_PROTOTYPES hides the
 // prototypes.

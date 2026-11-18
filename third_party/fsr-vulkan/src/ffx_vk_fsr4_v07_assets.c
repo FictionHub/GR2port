@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 #include "ffx_vk_fsr4_v07_assets.h"
 
 #include <stdio.h>
@@ -44,25 +45,13 @@ bool ffxFsr4V07BuildAssetSet(FfxFsr4ModelPreset preset,
     memset(outAssets, 0, sizeof(*outAssets));
     outAssets->preset = preset;
     snprintf(outAssets->tier, sizeof(outAssets->tier), "%s", tier);
-    if (!format_asset(outAssets->pre, sizeof(outAssets->pre),
-                      "fsr4_model_v07_i8_%s_%s_pre.spv", model, tier, 0) ||
-        !format_asset(outAssets->post, sizeof(outAssets->post),
-                      "fsr4_model_v07_i8_%s_%s_post.spv", model, tier, 0) ||
-        !format_asset(outAssets->initializer, sizeof(outAssets->initializer),
-                      "fsr4_model_v07_i8_%s_initializers.bin", model, "", 0) ||
-        !format_asset(outAssets->prePassWeights, sizeof(outAssets->prePassWeights),
-                      "fsr4_model_v07_i8_%s_pre_weights.bin", model, "", 0))
+    if (!format_asset(outAssets->initializer, sizeof(outAssets->initializer),
+                      "fsr4_lite_%s%s_initializer.bin", model, "", 0))
         return false;
-
-    for (unsigned pass = 1; pass <= FFX_FSR4_MODEL_PASS_COUNT; ++pass) {
-        if (!format_asset(outAssets->model[pass - 1],
-                          sizeof(outAssets->model[pass - 1]),
-                          "fsr4_model_v07_i8_%s_%s_pass%u.spv",
-                          model, tier, pass))
+    for (unsigned pass = 0; pass < FFX_FSR4_PASS_COUNT; ++pass) {
+        if (!format_asset(outAssets->pass[pass], sizeof(outAssets->pass[pass]),
+                          "fsr4_lite_%s_%s_pass%u.spv", model, tier, pass))
             return false;
     }
-    snprintf(outAssets->rcas, sizeof(outAssets->rcas), "%s", "rcas.spv");
-    snprintf(outAssets->spdAutoExposure, sizeof(outAssets->spdAutoExposure),
-             "%s", "spd_auto_exposure.spv");
     return true;
 }

@@ -354,7 +354,7 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
         .max_allocation_size = vk11.maxMemoryAllocationSize,
     };
     const std::filesystem::path folder =
-        Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "fsr4_v07";
+        Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "fsr4_lite";
     const Gr2Fsr3::Fsr4LoadResult loaded =
         Gr2Fsr3::LoadFsr4Assets(folder, Fsr4Preset(g_quality), output, limits);
     if (!loaded.assets) {
@@ -368,8 +368,6 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
         .physical_device = static_cast<VkPhysicalDevice>(g_device->gpu),
         .initializer = assets.initializer.data(),
         .initializer_size = assets.initializer.size(),
-        .pre_weights = assets.pre_weights.data(),
-        .pre_weights_size = assets.pre_weights.size(),
         .max_render_width = render.width,
         .max_render_height = render.height,
         .max_output_width = output.width,
@@ -693,7 +691,7 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
     if (chosen != Settings::Upscaler::Fsr4) {
         return;
     }
-    // What the FSR 4 v07 shaders can declare, as far as the GPU has it.
+    // What the FSR 4 Lite shaders can declare, as far as the GPU has it; every pass runs 32 wide.
     const auto& supported11 = supported.get<vk::PhysicalDeviceVulkan11Features>();
     const auto& supported12 = supported.get<vk::PhysicalDeviceVulkan12Features>();
     features.features.shaderStorageImageReadWithoutFormat =
@@ -709,6 +707,8 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
     vk12.uniformAndStorageBuffer8BitAccess = supported12.uniformAndStorageBuffer8BitAccess;
     vk13.shaderIntegerDotProduct =
         supported.get<vk::PhysicalDeviceVulkan13Features>().shaderIntegerDotProduct;
+    vk13.subgroupSizeControl =
+        supported.get<vk::PhysicalDeviceVulkan13Features>().subgroupSizeControl;
     const auto [result, extensions] = gpu.enumerateDeviceExtensionProperties(nullptr, dispatch);
     const bool has_derivatives =
         result == vk::Result::eSuccess &&
@@ -746,6 +746,7 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
         .shader_int16 = enabled.shaderInt16 == VK_TRUE,
         .shader_int64 = enabled.shaderInt64 == VK_TRUE,
         .shader_integer_dot_product = vk13.shaderIntegerDotProduct == VK_TRUE,
+        .subgroup_size_control = vk13.subgroupSizeControl == VK_TRUE,
         .storage_buffer_8bit = vk12.storageBuffer8BitAccess == VK_TRUE,
         .uniform_storage_buffer_8bit = vk12.uniformAndStorageBuffer8BitAccess == VK_TRUE,
         .storage_buffer_16bit = vk11.storageBuffer16BitAccess == VK_TRUE,
@@ -795,10 +796,11 @@ bool Start(const Device& device, Memory& memory) {
     }
     case Settings::Upscaler::Fsr4:
         if (!g_fsr4_features.shader_integer_dot_product ||
-            !g_fsr4_features.storage_image_extended_formats) {
-            LOG_WARNING(Render_Vulkan, "GR2port upscaler: the GPU lacks integer dot products or "
-                                       "extended storage formats for FSR 4; the game's "
-                                       "antialiasing runs");
+            !g_fsr4_features.storage_image_extended_formats ||
+            !g_fsr4_features.subgroup_size_control) {
+            LOG_WARNING(Render_Vulkan, "GR2port upscaler: the GPU lacks integer dot products, "
+                                       "extended storage formats or subgroup size control for "
+                                       "FSR 4; the game's antialiasing runs");
             return true;
         }
         break;

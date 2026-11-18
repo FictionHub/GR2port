@@ -7,7 +7,7 @@
 
 namespace Gr2Fsr3 {
 
-/// Sets the dispatcher of the Vulkan commands that the FidelityFX libraries and the FSR 4 v07
+/// Sets the dispatcher of the Vulkan commands that the FidelityFX libraries and the FSR 4
 /// provider call: GR2port's device's. Call before the first FidelityFX call; it must outlive them.
 void SetDispatcher(const vk::detail::DispatchLoaderDynamic& dispatcher);
 

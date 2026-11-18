@@ -68,7 +68,7 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
         endforeach()
     endif()
 
-    # The source-v07 FSR 4 INT8 provider and the module's C bridge to it. Only C sources include
+    # The FSR 4.1.2 Lite provider and the module's C bridge to it. Only C sources include
     # the provider headers: their FFX type names collide with the SDK headers of FSR 3.1.
     add_library(gr2_ffx_fsr4_v07 STATIC
         ${GR2_FFX_ROOT}/src/ffx_vk_fsr4_v07.c
@@ -125,7 +125,7 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
         SOURCES
             ${GR2_FSR3_DIR}/shaders/fsr4_inputs.comp)
 
-    # vk_trampolines.cpp defines the Vulkan commands that the FidelityFX libraries and the FSR 4 v07
+    # vk_trampolines.cpp defines the Vulkan commands that the FidelityFX libraries and the FSR 4
     # provider call.
     target_sources(gr2port PRIVATE
         ${GR2_FSR3_DIR}/dlss_ngx.cpp

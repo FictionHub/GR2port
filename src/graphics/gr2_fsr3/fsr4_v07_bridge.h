@@ -3,9 +3,9 @@
 
 #pragma once
 
-// C interface to the experimental source-v07 FSR 4 INT8/DOT4 Vulkan provider. Only
-// fsr4_v07_bridge.c includes the provider headers, whose type names collide with the FidelityFX
-// SDK headers of the FSR 3.1 libraries. A C++ includer includes vk_common.h first.
+// C interface to the FSR 4.1.2 Lite Vulkan provider. Only fsr4_v07_bridge.c includes the
+// provider headers, whose type names collide with the FidelityFX SDK headers of the FSR 3.1
+// libraries. A C++ includer includes vk_common.h first.
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -17,12 +17,11 @@
 extern "C" {
 #endif
 
-#define GR2_FSR4_SHADER_COUNT 14u // 0 pre-pass, 1-12 model passes, 13 post-pass
-#define GR2_FSR4_FILE_COUNT 16u   // The shaders, the initializer and the pre-pass weights.
+#define GR2_FSR4_SHADER_COUNT 10u // 0 pre-pass, 1-8 model passes, 9 post-pass
+#define GR2_FSR4_FILE_COUNT 11u   // The shaders and the initializer.
 #define GR2_FSR4_NAME_MAX 96u
 #define GR2_FSR4_ENTRY_POINT_MAX 128u
-#define GR2_FSR4_INITIALIZER_BYTES 89216u
-#define GR2_FSR4_PRE_WEIGHTS_BYTES 1024u
+#define GR2_FSR4_INITIALIZER_BYTES 27392u
 #define GR2_FSR4_FRAMES_IN_FLIGHT 3u
 
 #define GR2_FSR4_PRESET_NATIVE 0u
@@ -48,7 +47,7 @@ extern "C" {
 
 typedef struct Gr2Fsr4Context Gr2Fsr4Context;
 
-/// File names of one model set: 0-13 the shaders, 14 the initializer, 15 the pre-pass weights.
+/// File names of one model set: 0-9 the shaders, 10 the initializer.
 typedef struct Gr2Fsr4AssetNames {
     char tier[8];
     char files[GR2_FSR4_FILE_COUNT][GR2_FSR4_NAME_MAX];
@@ -66,8 +65,6 @@ typedef struct Gr2Fsr4CreateInfo {
     Gr2Fsr4Shader shaders[GR2_FSR4_SHADER_COUNT];
     const void* initializer;
     size_t initializer_size;
-    const void* pre_weights;
-    size_t pre_weights_size;
     uint32_t max_render_width;
     uint32_t max_render_height;
     uint32_t max_output_width;
@@ -127,7 +124,7 @@ bool Gr2Fsr4GetAssetNames(uint32_t preset, uint32_t output_width, uint32_t outpu
 /// Size of the activation storage buffer for an output extent, or 0 above 7680x4320.
 uint64_t Gr2Fsr4ScratchBytes(uint32_t output_width, uint32_t output_height);
 
-/// VkResult of checking a shader against the descriptor layout of pass `pass` (0-13).
+/// VkResult of checking a shader against the descriptor layout of pass `pass` (0-9).
 int32_t Gr2Fsr4ValidateShader(const Gr2Fsr4Shader* shader, uint32_t pass);
 
 /// Creates a context. Thread safe as long as one creation runs at a time.

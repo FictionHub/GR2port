@@ -1,25 +1,13 @@
-// Experimental source-v07 FSR4 INT8/DOT4 Vulkan backend.
-//
-// Drop-in replacement for the DX12 backend. Implements the FfxInterface
-// callback table so the existing ffx_provider_fsr4 dispatch logic can run
-// on Vulkan without modification.
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// Vulkan backend of the FSR 4.1.2 Lite provider: the FfxInterface callback table that
+// ffx_vk_fsr4_v07_provider.c records its compute passes through.
 //
 // Requirements:
-//   Vulkan 1.3  (or 1.2 + VK_KHR_shader_integer_dot_product)
-//   VK_KHR_shader_float16_int8          (for int8 storage in SPIR-V)
-//   VK_KHR_16bit_storage                (for float16 I/O)
-//   VK_KHR_shader_integer_dot_product   (core in 1.3, promoted from extension)
-//   Linear sampled-image filtering for R16G16B16A16_SFLOAT,
-//     R8G8B8A8_UNORM, and R32_SFLOAT
-//
-// Build FSR4 INT8 shaders to SPIR-V with:
-//   dxc -spirv -T cs_6_4 -enable-16bit-types -HV 2021
-//       -DWMMA_ENABLED=0 -DFSR4_ENABLE_DOT4=1
-//       -fspv-target-env=vulkan1.3
-//       -fspv-extension=SPV_KHR_integer_dot_product
-//       -I <sdk>/upscalers/fsr4/dx12
-//       -I <sdk>/api/internal/dx12
-//       -E <entry> <shader>.hlsl -Fo <shader>.spv
+//   Vulkan 1.3 with shaderFloat16, shaderIntegerDotProduct and subgroupSizeControl (32 allowed
+//     in compute shaders)
+//   VK_KHR_compute_shader_derivatives with computeDerivativeGroupLinear
+//   shaderStorageImageWriteWithoutFormat and shaderStorageImageExtendedFormats
+//   Linear sampled-image filtering for R16G16B16A16_SFLOAT, R8G8B8A8_UNORM and R32_SFLOAT
 
 #pragma once
 
@@ -74,8 +62,8 @@ typedef struct FfxFsr4VkExternalImageState {
     VkAccessFlags           restoreAccessMask;
 } FfxFsr4VkExternalImageState;
 
-// FSR4 has: pass0 (pre), pass1-12 (model), pass13 (post), rcas, spd_auto_exposure
-#define FFX_FSR4_VK_PASS_COUNT 16
+// FSR 4.1.2 Lite: pass 0 (pre), passes 1-8 (model), pass 9 (post)
+#define FFX_FSR4_VK_PASS_COUNT 10
 
 typedef struct FfxFsr4VkCreateInfo {
     VkDevice                    device;
@@ -84,27 +72,13 @@ typedef struct FfxFsr4VkCreateInfo {
     // Optional custom allocator; pass NULL for default VkAllocationCallbacks
     const VkAllocationCallbacks* allocator;
 
-    // All SPIR-V blobs for each shader pass.
-    // Index mapping (same as DX12 pass IDs):
-    //   [0]    = pre-pass  (fsr4_model_v07_i8_<preset>/pre.hlsl)
-    //   [1-12] = model passes (passes_<res>.hlsl, MLSR_PASS_N define)
-    //   [13]   = post-pass (post.hlsl)
-    //   [14]   = RCAS sharpening (rcas.hlsl)
-    //   [15]   = SPD auto-exposure (spd_auto_exposure.hlsl)
+    // The SPIR-V of each pass in dispatch order: [0] pre-pass, [1-8] model passes, [9] post-pass.
     FfxFsr4VkShaderBlob shaders[FFX_FSR4_VK_PASS_COUNT];
 
-    /*
-     * Model data is deliberately supplied separately from shader bytecode.
-     * The generated INT8 passes read an initializer buffer and the pre-pass
-     * reads a second, 1 KiB constant block.  Omitting either produces valid
-     * Vulkan dispatches but undefined neural-network output.
-     *
-     * The backend deep-copies both blobs during creation.
-     */
+    // The network's initializer, read by the pre-pass and model passes 2, 5 and 7. The backend
+    // copies it during creation.
     const void* modelInitializer;
     size_t      modelInitializerSize;
-    const void* prePassWeights;
-    size_t      prePassWeightsSize;
 
     // Scratch memory for the backend's internal bookkeeping.
     // Allocate at least ffxFsr4VkGetScratchMemorySize() bytes.
@@ -187,7 +161,6 @@ void ffxFsr4VkMarkImageInitialized  (FfxInterface* iface, FfxResourceInternal ri
 
 /* Provider-side access to the backend-owned deep copies of model data. */
 const void* ffxFsr4VkGetModelInitializer(FfxInterface* iface, size_t* sizeBytes);
-const void* ffxFsr4VkGetPrePassWeights(FfxInterface* iface, size_t* sizeBytes);
 
 #ifdef __cplusplus
 }

@@ -15,7 +15,7 @@
 
 namespace Gr2Fsr3 {
 
-/// Features the Vulkan device was created with that FSR 4 v07 shaders can need.
+/// Features the Vulkan device was created with that FSR 4 Lite shaders can need.
 struct Fsr4DeviceFeatures {
     bool shader_float16{};
     bool shader_float64{};
@@ -23,6 +23,7 @@ struct Fsr4DeviceFeatures {
     bool shader_int16{};
     bool shader_int64{};
     bool shader_integer_dot_product{};
+    bool subgroup_size_control{}; ///< Pipelines may require a subgroup size (32).
     bool storage_buffer_8bit{};
     bool uniform_storage_buffer_8bit{};
     bool storage_buffer_16bit{};
@@ -44,15 +45,14 @@ struct Fsr4DeviceLimits {
     u64 max_allocation_size{};
 };
 
-/// Shader modules of a model set: 0 pre-pass, 1-12 model passes, 13 post-pass.
-constexpr std::size_t Fsr4ShaderCount = 14;
+/// Shader modules of a model set: 0 pre-pass, 1-8 model passes, 9 post-pass.
+constexpr std::size_t Fsr4ShaderCount = 10;
 
-/// The files of one FSR 4 v07 model set, read and checked.
+/// The files of one FSR 4 Lite model set, read and checked.
 struct Fsr4Assets {
     std::array<std::vector<u32>, Fsr4ShaderCount> shaders;
     std::array<std::string, Fsr4ShaderCount> entry_points;
     std::vector<u8> initializer;
-    std::vector<u8> pre_weights;
 };
 
 /// The assets, or the first problem as a notice; the summary is for the log.
@@ -65,7 +65,7 @@ struct Fsr4LoadResult {
 /**
  * Reads the model set of `preset` (GR2_FSR4_PRESET_*) for `output_size` from `folder` and checks
  * every file: present and complete, the model data sizes, SPIR-V with one GLCompute entry point,
- * capabilities and extensions the device enables, the v07 descriptor layout, and a scratch buffer
+ * capabilities and extensions the device enables, the Lite descriptor layout, and a scratch buffer
  * the device can bind. Any thread.
  */
 Fsr4LoadResult LoadFsr4Assets(const std::filesystem::path& folder, u32 preset,

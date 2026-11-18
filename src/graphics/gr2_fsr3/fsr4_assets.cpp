@@ -28,13 +28,12 @@ namespace {
 
 static_assert(Fsr4ShaderCount == GR2_FSR4_SHADER_COUNT);
 
-// Far above the size of any shader or model data file of a v07 model set.
+// Far above the size of any shader or model data file of a Lite model set.
 constexpr std::uintmax_t MaxFileBytes = 64_MB;
 
-// File index and exact size of the initializer and the pre-pass weights.
-constexpr std::array<std::pair<std::size_t, std::size_t>, 2> ModelDataSizes{{
+// File index and exact size of the initializer.
+constexpr std::array<std::pair<std::size_t, std::size_t>, 1> ModelDataSizes{{
     {Fsr4ShaderCount, GR2_FSR4_INITIALIZER_BYTES},
-    {Fsr4ShaderCount + 1, GR2_FSR4_PRE_WEIGHTS_BYTES},
 }};
 
 constexpr u32 Subgroup(vk::SubgroupFeatureFlagBits bit) {
@@ -309,7 +308,7 @@ Fsr4LoadResult LoadFsr4Assets(const std::filesystem::path& folder, u32 preset,
             .entry_point = scan->entry_point.c_str(),
         };
         if (const s32 layout = Gr2Fsr4ValidateShader(&shader, pass); layout != VK_SUCCESS) {
-            result.notice = fmt::format("FSR 4: {} does not match the v07 descriptor layout ({})",
+            result.notice = fmt::format("FSR 4: {} does not match the Lite descriptor layout ({})",
                                         name, vk::to_string(static_cast<vk::Result>(layout)));
             return result;
         }
@@ -324,7 +323,6 @@ Fsr4LoadResult LoadFsr4Assets(const std::filesystem::path& folder, u32 preset,
         assets.entry_points[pass] = scan->entry_point;
     }
     assets.initializer = std::move(files[Fsr4ShaderCount]);
-    assets.pre_weights = std::move(files[Fsr4ShaderCount + 1]);
 
     const auto distinct = [](auto& values) {
         std::ranges::sort(values);

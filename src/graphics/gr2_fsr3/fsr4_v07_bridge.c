@@ -11,15 +11,13 @@
 
 #include "graphics/gr2_fsr3/fsr4_v07_bridge.h"
 
-_Static_assert(FFX_FSR4_VK_PASS_COUNT == 16, "The backend takes 14 network passes, RCAS and SPD");
-_Static_assert(FFX_FSR4_MODEL_PASS_COUNT + 2u == GR2_FSR4_SHADER_COUNT,
+_Static_assert(FFX_FSR4_VK_PASS_COUNT == GR2_FSR4_SHADER_COUNT, "The backend takes the 10 passes");
+_Static_assert(FFX_FSR4_PASS_COUNT == GR2_FSR4_SHADER_COUNT,
                "The network is a pre-pass, the model passes and a post-pass");
-_Static_assert(GR2_FSR4_SHADER_COUNT + 2u == GR2_FSR4_FILE_COUNT,
-               "A model set is its shaders, the initializer and the pre-pass weights");
+_Static_assert(GR2_FSR4_SHADER_COUNT + 1u == GR2_FSR4_FILE_COUNT,
+               "A model set is its shaders and the initializer");
 _Static_assert(FFX_FSR4_V07_INITIALIZER_BYTES == GR2_FSR4_INITIALIZER_BYTES,
                "Initializer size of the provider");
-_Static_assert(FFX_FSR4_V07_PRE_PASS_WEIGHTS_BYTES == GR2_FSR4_PRE_WEIGHTS_BYTES,
-               "Pre-pass weights size of the provider");
 _Static_assert(FFX_FSR4_V07_ASSET_PATH_MAX == GR2_FSR4_NAME_MAX, "File name size of the provider");
 _Static_assert(FFX_FSR4_MODEL_PRESET_DRS == GR2_FSR4_PRESET_DRS, "Preset values of the provider");
 _Static_assert(FFX_API_RETURN_ERROR_PARAMETER == GR2_FSR4_API_ERROR_PARAMETER,
@@ -87,13 +85,10 @@ bool Gr2Fsr4GetAssetNames(uint32_t preset, uint32_t output_width, uint32_t outpu
     }
     memset(names, 0, sizeof(*names));
     memcpy(names->tier, set.tier, sizeof(set.tier));
-    memcpy(names->files[0], set.pre, sizeof(set.pre));
-    for (uint32_t pass = 0; pass < FFX_FSR4_MODEL_PASS_COUNT; ++pass) {
-        memcpy(names->files[pass + 1u], set.model[pass], sizeof(set.model[pass]));
+    for (uint32_t pass = 0; pass < FFX_FSR4_PASS_COUNT; ++pass) {
+        memcpy(names->files[pass], set.pass[pass], sizeof(set.pass[pass]));
     }
-    memcpy(names->files[13], set.post, sizeof(set.post));
-    memcpy(names->files[14], set.initializer, sizeof(set.initializer));
-    memcpy(names->files[15], set.prePassWeights, sizeof(set.prePassWeights));
+    memcpy(names->files[GR2_FSR4_SHADER_COUNT], set.initializer, sizeof(set.initializer));
     return true;
 }
 
@@ -121,7 +116,6 @@ Gr2Fsr4Status Gr2Fsr4Create(const Gr2Fsr4CreateInfo* info, Gr2Fsr4Context** cont
     memset(&create, 0, sizeof(create));
     create.device = info->device;
     create.physicalDevice = info->physical_device;
-    // RCAS and SPD stay absent: the module sharpens in its store pass and auto exposure is off.
     for (uint32_t pass = 0; pass < GR2_FSR4_SHADER_COUNT; ++pass) {
         snprintf(ctx->entry_points[pass], GR2_FSR4_ENTRY_POINT_MAX, "%s",
                  info->shaders[pass].entry_point);
@@ -131,8 +125,6 @@ Gr2Fsr4Status Gr2Fsr4Create(const Gr2Fsr4CreateInfo* info, Gr2Fsr4Context** cont
     }
     create.modelInitializer = info->initializer;
     create.modelInitializerSize = info->initializer_size;
-    create.prePassWeights = info->pre_weights;
-    create.prePassWeightsSize = info->pre_weights_size;
     create.scratchBuffer = scratch;
     create.scratchBufferSize = scratch_size;
     const VkResult backend = ffxFsr4VkCreateContext(&create, &ctx->iface);
@@ -193,7 +185,7 @@ Gr2Fsr4Status Gr2Fsr4Dispatch(Gr2Fsr4Context* context, const Gr2Fsr4DispatchInfo
         }
     }
 
-    // Sharpening, auto exposure and every flag stay off; the provider reads none of the masks.
+    // Sharpening and every flag stay off; the provider reads none of the masks.
     ffxDispatchDescUpscale desc;
     memset(&desc, 0, sizeof(desc));
     desc.header.type = FFX_API_DISPATCH_DESC_TYPE_UPSCALE;
