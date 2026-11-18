@@ -9,6 +9,7 @@
 #include "common/gravity_rush.h"
 #include "common/logging/log.h"
 #include "common/memory_patcher.h"
+#include "core/game_check/arrival_hang.h"
 #include "core/libraries/error_codes.h"
 #include "core/memory.h"
 #include "graphics/gr2port/camera_reach.h"
@@ -86,6 +87,7 @@ void PS4_SYSV_ABI OnParticleTables(u32, const Hooks::Arguments* arguments, u64) 
 // FUN_0142ec00(T + 0xa0, view, ...): rdi is the frame graph, rsi the view the frame draws.
 void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers* registers, u64) {
     Capture::OnFrame(registers->rdi, registers->rsi);
+    GameCheck::ArrivalHang::OnWorldFrame();
     FrameGraphDraws::SetFrameGraphRunning(true);
     ScriptTimers::OnFrame();
 }

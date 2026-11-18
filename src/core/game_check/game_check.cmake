@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 target_sources(gr2port PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/arrival_hang.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/arrival_hang.h
     ${CMAKE_CURRENT_LIST_DIR}/dump_reference.cpp
     ${CMAKE_CURRENT_LIST_DIR}/dump_reference.h
     ${CMAKE_CURRENT_LIST_DIR}/game_check.cpp

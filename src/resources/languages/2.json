@@ -173,6 +173,7 @@
     "extracted folder": "dossier extrait",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Dump incorrect : les quatre archives du jeu doivent toutes être des fichiers .psarc, ou toutes être extraites dans des dossiers du même nom.\n{}",
     "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Dump incorrect : ces fichiers de jeu diffèrent d'un dump correct de Gravity Rush 2 avec sa mise à jour 1.11. Veuillez refaire le dump du jeu et de la mise à jour.\n{}",
+    "Bad game files detected. Please re-dump your game.": "Fichiers de jeu incorrects détectés. Veuillez refaire le dump du jeu.",
     "Game Files": "Fichiers du jeu",
     "Verify Game Files": "Vérifier les fichiers du jeu",
     "Reads the game's four archives in full and compares them with a good dump. This takes a few minutes.": "Lit en entier les quatre archives du jeu et les compare à un dump correct. Cela prend quelques minutes.",

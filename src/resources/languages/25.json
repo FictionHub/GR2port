@@ -173,6 +173,7 @@
     "extracted folder": "εξαγμένος φάκελος",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Λανθασμένο dump: τα τέσσερα αρχεία του παιχνιδιού πρέπει να είναι είτε όλα αρχεία .psarc είτε όλα εξαγμένα σε φακέλους με τα ίδια ονόματα.\n{}",
     "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Λανθασμένο dump: αυτά τα αρχεία του παιχνιδιού διαφέρουν από ένα σωστό dump του Gravity Rush 2 με την ενημέρωση 1.11. Κάντε ξανά dump του παιχνιδιού και της ενημέρωσης.\n{}",
+    "Bad game files detected. Please re-dump your game.": "Εντοπίστηκαν λανθασμένα αρχεία παιχνιδιού. Κάντε ξανά dump του παιχνιδιού.",
     "Game Files": "Αρχεία παιχνιδιού",
     "Verify Game Files": "Επαλήθευση αρχείων παιχνιδιού",
     "Reads the game's four archives in full and compares them with a good dump. This takes a few minutes.": "Διαβάζει ολόκληρα τα τέσσερα αρχεία .psarc του παιχνιδιού και τα συγκρίνει με ένα σωστό dump. Διαρκεί λίγα λεπτά.",

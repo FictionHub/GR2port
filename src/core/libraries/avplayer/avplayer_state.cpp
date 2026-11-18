@@ -5,6 +5,7 @@
 #include "common/elf_info.h"
 #include "common/logging/log.h"
 #include "common/thread.h"
+#include "core/game_check/arrival_hang.h"
 #include "core/libraries/avplayer/avplayer_error.h"
 #include "core/libraries/avplayer/avplayer_state.h"
 #include "core/libraries/kernel/process.h"
@@ -115,6 +116,7 @@ AvPlayerState::AvPlayerState(const AvPlayerInitData& init_data)
 }
 
 AvPlayerState::~AvPlayerState() {
+    Gr2Port::GameCheck::ArrivalHang::OnMovieClosed(this);
     {
         std::unique_lock lock(m_source_mutex);
         m_up_source.reset();
@@ -151,6 +153,7 @@ bool AvPlayerState::AddSource(std::string_view path, AvPlayerSourceType source_t
         }
     }
     AddSourceEvent();
+    Gr2Port::GameCheck::ArrivalHang::OnMovieOpened(this, path);
     return true;
 }
 

@@ -173,6 +173,7 @@
     "extracted folder": "purettu kansio",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Virheellinen vedos: pelin neljän arkiston on oltava joko kaikki .psarc-tiedostoja tai kaikki purettu samannimisiin kansioihin.\n{}",
     "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Virheellinen vedos: nämä pelitiedostot poikkeavat Gravity Rush 2:n ja sen päivityksen 1.11 kunnollisesta vedoksesta. Tee pelistä ja päivityksestä uusi vedos.\n{}",
+    "Bad game files detected. Please re-dump your game.": "Virheellisiä pelitiedostoja havaittu. Tee pelistä uusi vedos.",
     "Game Files": "Pelitiedostot",
     "Verify Game Files": "Tarkista pelitiedostot",
     "Reads the game's four archives in full and compares them with a good dump. This takes a few minutes.": "Lukee pelin neljä arkistoa kokonaan ja vertaa niitä kunnolliseen vedokseen. Tämä kestää muutaman minuutin.",

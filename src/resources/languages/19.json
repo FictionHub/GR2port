@@ -173,6 +173,7 @@
     "extracted folder": "çıkarılmış klasör",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "Hatalı döküm: oyunun dört arşivinin tümü ya .psarc dosyası olmalı ya da tümü aynı adlı klasörlere çıkarılmış olmalı.\n{}",
     "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "Hatalı döküm: bu oyun dosyaları, 1.11 güncellemesini içeren doğru bir Gravity Rush 2 dökümünden farklı. Lütfen oyunun ve güncellemenin dökümünü yeniden al.\n{}",
+    "Bad game files detected. Please re-dump your game.": "Hatalı oyun dosyaları algılandı. Lütfen oyunun dökümünü yeniden alın.",
     "Game Files": "Oyun Dosyaları",
     "Verify Game Files": "Oyun Dosyalarını Doğrula",
     "Reads the game's four archives in full and compares them with a good dump. This takes a few minutes.": "Oyunun dört arşivini baştan sona okur ve doğru bir dökümle karşılaştırır. Bu işlem birkaç dakika sürer.",

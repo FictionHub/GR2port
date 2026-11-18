@@ -19,6 +19,7 @@
 #include "core/debug_state.h"
 #include "core/devtools/layer.h"
 #include "core/emulator_settings.h"
+#include "core/game_check/arrival_hang.h"
 #include "core/libraries/kernel/time.h"
 #include "core/libraries/pad/pad.h"
 #include "core/libraries/system/userservice.h"
@@ -207,6 +208,10 @@ void WindowSDL::WaitEvent() {
         break;
     case SDL_EVENT_QUIT_DIALOG:
         Overlay::ToggleQuitWindow();
+        break;
+    case SDL_EVENT_BAD_DUMP:
+        Gr2Port::GameCheck::ArrivalHang::Tell(window);
+        is_open = false;
         break;
     case SDL_EVENT_TOGGLE_FULLSCREEN: {
         // GR2port: the display settings choose the fullscreen mode.

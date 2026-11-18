@@ -173,6 +173,7 @@
     "extracted folder": "已解包的資料夾",
     "Bad dump: the game's four archives must all be .psarc files, or all be extracted to folders of the same names.\n{}": "傾印檔有誤：遊戲的四個封存檔必須全部是 .psarc 檔案，或全部解包到同名的資料夾。\n{}",
     "Bad dump: these game files differ from a good dump of Gravity Rush 2 with its 1.11 update. Please dump the game and the update again.\n{}": "傾印檔有誤：這些遊戲檔案與含 1.11 更新檔的 Gravity Rush 2 正確傾印檔不同。請重新傾印遊戲與更新檔。\n{}",
+    "Bad game files detected. Please re-dump your game.": "偵測到有誤的遊戲檔案。請重新傾印遊戲。",
     "Game Files": "遊戲檔案",
     "Verify Game Files": "驗證遊戲檔案",
     "Reads the game's four archives in full and compares them with a good dump. This takes a few minutes.": "完整讀取遊戲的四個封存檔，並與正確傾印檔比對。需要幾分鐘。",
