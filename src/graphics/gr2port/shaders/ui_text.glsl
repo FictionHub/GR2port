@@ -6,7 +6,14 @@
 // out from, the origin of its matrix, so it keeps its alignment and its letters keep their
 // spacing. Text without that matrix narrows around each triangle's middle. The photo viewfinder's
 // window narrows by the scale to the square the photo takes. Everything else stays as the game
-// draws it. TEXT_ATTRIBUTES is the vertex program's outputs, 1 or 2.
+// draws it.
+// With a fit scale, the whole screen drawing instead goes to the middle of the target at its 16:9
+// shape, and text keeps its place in it. A corner at the target's edge along a scaled axis stays
+// there, so a layer that reaches the edge, such as a backdrop, a fade or the vignette's sides,
+// still reaches it. A triangle drawn in perspective, such as a pause menu button, stays as drawn:
+// its camera already has the screen's shape. A movie the game plays on the screen keeps its 16:9
+// shape too, its sides included. The viewfinder narrows as before, by the fit scale.
+// TEXT_ATTRIBUTES is the vertex program's outputs, 1 or 2.
 
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
@@ -17,6 +24,11 @@ layout(triangle_strip, max_vertices = 3) out;
 layout(push_constant) uniform Constants {
     uint64_t draws_address;
     vec2 text_scale;
+    // The fit scale, 1 on an axis that keeps the game's layout; the target's size; and the run's
+    // viewport: x, y, width and height.
+    vec2 fit_scale;
+    vec2 target_size;
+    vec4 viewport;
 };
 
 // Scene::UiDraw: the words of its constants' address and of its flags, and the flags.
@@ -29,6 +41,7 @@ const uint DrawFlags = 38u;
 const uint DrawText = 1u;
 const uint DrawAnchored = 2u;
 const uint DrawFinder = 4u;
+const uint DrawMovie = 8u;
 // The viewfinder's window: the middle 1024 x 1024 of the game's 1920 x 1080 canvas.
 const vec2 FinderEdge = vec2(512.0 / 960.0, 512.0 / 540.0);
 
@@ -42,6 +55,17 @@ float Finder(float position, float edge, float scale) {
     }
     return sign(position) * (edge * scale + outside * (1.0 - edge * scale) / (1.0 - edge));
 }
+
+// A position in the viewport's -1 to 1 range in the target's, and back.
+vec2 ToTarget(vec2 at) {
+    return (viewport.xy + (at * 0.5 + 0.5) * viewport.zw) / target_size * 2.0 - 1.0;
+}
+vec2 FromTarget(vec2 at) {
+    return ((at * 0.5 + 0.5) * target_size - viewport.xy) / viewport.zw * 2.0 - 1.0;
+}
+
+// How near a corner must be to the target's edge to reach it.
+const float EdgeReach = 0.99;
 
 layout(location = 15) flat in uint draw_index_in[];
 layout(location = 0) in vec4 attr0_in[];
@@ -79,15 +103,27 @@ void main() {
         }
     }
     const bool finder = (flags & DrawFinder) != 0u;
+    const bool scaled = any(lessThan(fit_scale, vec2(1.0)));
+    bool fit = scaled && !finder;
+    for (int i = 0; i < 3; i++) {
+        fit = fit && abs(gl_in[i].gl_Position.w - 1.0) < 1.0e-3;
+    }
+    const vec2 finder_scale = scaled ? fit_scale : text_scale;
+    const bool movie = (flags & DrawMovie) != 0u;
     for (int i = 0; i < 3; i++) {
         vec4 position = gl_in[i].gl_Position;
         if (narrow) {
             position.xy = (anchor + (position.xy / position.w - anchor) * text_scale) * position.w;
         } else if (finder && position.w > 0.0) {
             const vec2 at = position.xy / position.w;
-            position.xy = vec2(Finder(at.x, FinderEdge.x, text_scale.x),
-                               Finder(at.y, FinderEdge.y, text_scale.y)) *
+            position.xy = vec2(Finder(at.x, FinderEdge.x, finder_scale.x),
+                               Finder(at.y, FinderEdge.y, finder_scale.y)) *
                           position.w;
+        }
+        if (fit) {
+            const vec2 at = ToTarget(position.xy / position.w);
+            const bvec2 edge = movie ? bvec2(false) : greaterThanEqual(abs(at), vec2(EdgeReach));
+            position.xy = FromTarget(mix(at * fit_scale, at, edge)) * position.w;
         }
         gl_Position = position;
         draw_index = draw_index_in[i];

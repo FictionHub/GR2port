@@ -25,6 +25,7 @@
 #include "graphics/gr2port/menu_kit.h"
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/settings.h"
+#include "graphics/gr2port/ui.h"
 #include "graphics/gr2port/ui_capture.h"
 
 namespace Gr2Port::GraphicsMenu {
@@ -639,12 +640,17 @@ int g_top = 0;
 float g_thumb = -1.0f;
 std::chrono::steady_clock::time_point g_thumb_time;
 // On a screen that is not 16:9 the game stretches its canvas, and the rows' plates keep their
-// shape: the scale of a plate's width on the canvas.
+// shape: the scale of a plate's width on the stretched canvas.
 float g_plate_scale = 1.0f;
 std::atomic<u64> g_saves{0};
 
 std::mutex g_records_mutex;
 std::map<std::string, std::vector<u8>, std::less<>> g_records;
+
+// The scale of a plate's width on the canvas, 1 where the screen drawing keeps its 16:9 shape.
+float PlateScale() {
+    return Ui::FitsScreen() ? 1.0f : g_plate_scale;
+}
 
 VAddr Object(const OwnRow& row) {
     return reinterpret_cast<VAddr>(row.object.data());
@@ -802,7 +808,7 @@ void PlaceTexts(const OwnRow& row) {
     if (const u64 caption = row.texts[ValueTexts]; caption != 0) {
         const float middle = 0.5f * CanvasWidth + row.place.world[12] * UnitPixels;
         Write<float>(caption + TextCanvasX,
-                     middle + (Read<float>(caption + TextCanvasX) - middle) * g_plate_scale);
+                     middle + (Read<float>(caption + TextCanvasX) - middle) * PlateScale());
     }
 }
 
@@ -1263,8 +1269,8 @@ void ShowBar() {
     const float thumb = std::max(MinThumb, (bottom - top) * shown / count);
     const float thumb_top = top + (bottom - top - thumb) * g_thumb;
     UiCapture::SetScrollBar({
-        .x = 0.5f * CanvasWidth + first.world[12] * UnitPixels + BarRight * g_plate_scale,
-        .width = BarWidth * g_plate_scale,
+        .x = 0.5f * CanvasWidth + first.world[12] * UnitPixels + BarRight * PlateScale(),
+        .width = BarWidth * PlateScale(),
         .top = top,
         .bottom = bottom,
         .thumb_top = thumb_top,

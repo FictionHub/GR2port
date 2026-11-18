@@ -23,6 +23,10 @@ inline constexpr vk::Format GainFormat = vk::Format::eR16G16B16A16Sfloat;
 /// After Textures::Start: creates the samplers.
 bool Start(const Device& device, Memory& memory);
 
+/// After Start: whether the screen drawing keeps its 16:9 shape in the middle of the screen, as the
+/// chosen aspect asks and the device allows. Otherwise a screen that is not 16:9 stretches it.
+bool FitsScreen();
+
 /// With the GPU idle: creates the pipeline that draws the back buffer on the window. hdr_white is
 /// 0 for an SDR window, else the HDR window's paper white in units of 10000 nits.
 bool Resize(vk::Format window_format, float hdr_white);

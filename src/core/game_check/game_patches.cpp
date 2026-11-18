@@ -437,6 +437,10 @@ float AspectRatio() {
     return ChosenAspect(Settings::Get().game.aspect).ratio;
 }
 
+bool FitsUi() {
+    return ChosenAspect(Settings::Get().game.aspect).fits_ui;
+}
+
 bool HalloweenItems() {
     return Settings::Get().game.halloween_items;
 }

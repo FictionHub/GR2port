@@ -1342,6 +1342,8 @@ inline constexpr u32 UiDrawAnchored = 2;
 /// A piece of the photo viewfinder: its window and what lies in it, or the dimmed surround from the
 /// window to the picture's edge.
 inline constexpr u32 UiDrawFinder = 4;
+/// A movie's frame copied over the whole picture: a movie the game plays on the screen.
+inline constexpr u32 UiDrawMovie = 8;
 
 /// Consecutive screen draws of one target, pair of programs, blend, primitive type and viewport:
 /// x, y, width and height, with a negative height where the game's y scale is.

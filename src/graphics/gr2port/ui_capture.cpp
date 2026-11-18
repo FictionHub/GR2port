@@ -19,6 +19,7 @@
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/textures.h"
+#include "graphics/gr2port/ui.h"
 #include "graphics/gr2port/ui_capture.h"
 
 namespace Gr2Port::UiCapture {
@@ -66,11 +67,12 @@ struct FinderTexture {
     friend bool operator==(const FinderTexture&, const FinderTexture&) = default;
 };
 constexpr FinderTexture FinderVignette{960, 540, 41};
+constexpr FinderTexture FinderGuide{808, 20, 10};
 constexpr std::array FinderTextures{
     FinderVignette,
     FinderTexture{512, 512, 41},
     FinderTexture{256, 512, 41},
-    FinderTexture{808, 20, 10},
+    FinderGuide,
     FinderTexture{32, 856, 41},
     FinderTexture{88, 88, 10},
     FinderTexture{192, 192, 41},
@@ -239,6 +241,8 @@ std::array<u64, Scene::MaxUiTargets> g_written{};
 // The targets the frame wrote so far, and the back buffers seen so far.
 u32 g_frame_writes = 0;
 u32 g_back_buffers = 0;
+// The targets the game's movie program writes, each of which holds a movie's latest frame.
+u32 g_movie_targets = 0;
 std::array<Scene::VertexCommand, Scene::MaxUiDraws> g_commands;
 std::array<u32, Scene::MaxUiDynamicTextures> g_dynamic;
 
@@ -258,8 +262,9 @@ u64 g_unported = 0;
 u64 g_dropped = 0;
 u64 g_write_ns = 0;
 u32 g_unread = 0;
-// Whether this frame, and the last, drew the viewfinder's vignette: the camera's view, whose draws
-// of the other FinderTextures are the viewfinder's.
+// Whether this frame, and the last, drew the viewfinder's guide frame: the camera's view, whose
+// draws of the other FinderTextures are the viewfinder's. Gameplay and the pause menu draw the
+// vignette too, and the pause menu draws textures of other pieces' shapes.
 bool g_finder_frame = false;
 bool g_finder_last = false;
 
@@ -688,12 +693,24 @@ void Writer::Draw(u32 opcode, const u32* body) {
                 draw.flags |= Scene::UiDrawAnchored;
             }
         }
+        if (pixel_index == static_cast<u32>(Scene::UiPixelProgram::Movie) &&
+            target < Scene::MaxUiTargets) {
+            g_movie_targets |= 1u << target;
+        }
+        // Menus draw movies as sprites; a movie played on the screen is copied over the picture.
+        const u32 source = draw.textures[0] - Scene::UiTargetHandles;
+        if (vertex_index == static_cast<u32>(Scene::UiVertexProgram::Master) &&
+            pixel_index == static_cast<u32>(Scene::UiPixelProgram::Copy) && target == ui.picture &&
+            draw.textures[0] >= Scene::UiTargetHandles && source < Scene::MaxUiTargets &&
+            (g_movie_targets >> source & 1) != 0) {
+            draw.flags |= Scene::UiDrawMovie;
+        }
         if (vertex_index == static_cast<u32>(Scene::UiVertexProgram::Transform) &&
             pixel_index == static_cast<u32>(Scene::UiPixelProgram::Sprite) &&
             target == ui.picture) {
             const FinderTexture shape{(ps_user[2] & 0x3fff) + 1, (ps_user[2] >> 14 & 0x3fff) + 1,
                                       ps_user[1] >> 20 & 0x3f};
-            g_finder_frame = g_finder_frame || shape == FinderVignette;
+            g_finder_frame = g_finder_frame || shape == FinderGuide;
             if ((g_finder_frame || g_finder_last) &&
                 std::ranges::any_of(FinderTextures,
                                     [&](const FinderTexture& known) { return known == shape; })) {
@@ -953,9 +970,12 @@ void AddScrollBar(Writer& writer, u32 picture) {
         g_targets[picture].height == 0) {
         return;
     }
-    // The canvas fills the picture, whatever the picture's shape.
-    const float tall = static_cast<float>(g_targets[picture].height) / CanvasHeight /
-                       (static_cast<float>(g_targets[picture].width) / CanvasWidth);
+    // The canvas fills the picture, whatever the picture's shape, unless the screen drawing keeps
+    // its 16:9 shape.
+    const float tall = Ui::FitsScreen()
+                           ? 1.0f
+                           : static_cast<float>(g_targets[picture].height) / CanvasHeight /
+                                 (static_cast<float>(g_targets[picture].width) / CanvasWidth);
     static std::vector<float> vertices;
     vertices.clear();
     AddBar(vertices, bar.x, bar.top, bar.bottom, bar.width, tall, TrackColor, bar.opacity);

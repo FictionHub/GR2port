@@ -39,18 +39,22 @@ struct Aspect {
     /// own 16:9 1080p.
     std::string_view category;
     float ratio;
+    /// Whether the game's screen drawing keeps its 16:9 shape in the middle of the screen, with
+    /// the layers that reach the screen's edges still reaching them. Otherwise it stretches to the
+    /// screen.
+    bool fits_ui;
 };
 
 inline constexpr std::array Aspects{
-    Aspect{"16:9", "Resolution/No upscaling/16:9", 16.0f / 9.0f},
-    Aspect{"4:3", "Resolution/No upscaling/4:3", 4.0f / 3.0f},
-    Aspect{"3:2", "Resolution/No upscaling/3:2", 3.0f / 2.0f},
-    Aspect{"16:10", "Resolution/No upscaling/16:10", 16.0f / 10.0f},
-    Aspect{"21:10", "Resolution/No upscaling/Ultrawide 21:10", 21.0f / 10.0f},
-    Aspect{"21:9", "Resolution/No upscaling/Ultrawide 21:9", 7.0f / 3.0f},
-    Aspect{"2.39:1", "Resolution/No upscaling/Ultrawide 2.39:1", 2.39f},
-    Aspect{"32:10", "Resolution/No upscaling/Super ultrawide 32:10", 32.0f / 10.0f},
-    Aspect{"32:9", "Resolution/No upscaling/Super ultrawide 32:9", 32.0f / 9.0f},
+    Aspect{"16:9", "Resolution/No upscaling/16:9", 16.0f / 9.0f, false},
+    Aspect{"4:3", "Resolution/No upscaling/4:3", 4.0f / 3.0f, false},
+    Aspect{"3:2", "Resolution/No upscaling/3:2", 3.0f / 2.0f, false},
+    Aspect{"16:10", "Resolution/No upscaling/16:10", 16.0f / 10.0f, true},
+    Aspect{"21:10", "Resolution/No upscaling/Ultrawide 21:10", 21.0f / 10.0f, true},
+    Aspect{"21:9", "Resolution/No upscaling/Ultrawide 21:9", 7.0f / 3.0f, true},
+    Aspect{"2.39:1", "Resolution/No upscaling/Ultrawide 2.39:1", 2.39f, false},
+    Aspect{"32:10", "Resolution/No upscaling/Super ultrawide 32:10", 32.0f / 10.0f, true},
+    Aspect{"32:9", "Resolution/No upscaling/Super ultrawide 32:9", 32.0f / 9.0f, true},
 };
 
 struct RenderSize {
@@ -104,6 +108,9 @@ void ApplySettings();
 
 /// The chosen aspect's width over height.
 float AspectRatio();
+
+/// Whether the chosen aspect keeps the game's screen drawing at its 16:9 shape.
+bool FitsUi();
 
 /// Whether the Halloween photo items mod pack is on.
 bool HalloweenItems();

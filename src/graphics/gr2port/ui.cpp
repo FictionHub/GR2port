@@ -93,11 +93,16 @@ constexpr float LayoutAspect = 16.0f / 9.0f;
 // The pipelines run ui_text.glsl: the chosen aspect is not 16:9, so the game stretches its screen
 // drawing.
 bool g_narrow_text = false;
+// With g_narrow_text: the chosen aspect keeps the whole screen drawing at its 16:9 shape.
+bool g_fit_ui = false;
 
-// The draws' device address, then ui_text.glsl's scale.
+// The draws' device address, then ui_text.glsl's scales, the target's size and the viewport.
 struct Push {
     u64 draws;
     std::array<float, 2> text_scale;
+    std::array<float, 2> fit_scale;
+    std::array<float, 2> target_size;
+    std::array<float, 4> viewport;
 };
 
 bool Pairs(u32 vertex_program, u32 pixel_program) {
@@ -128,6 +133,16 @@ std::array<float, 2> TextScale(vk::Extent2D screen, vk::Extent2D target) {
         return {1.0f, 1.0f};
     }
     return {std::min(1.0f, LayoutAspect / aspect), std::min(1.0f, aspect / LayoutAspect)};
+}
+
+// The scale of a run's text and the scale it fits the screen drawing by: with g_fit_ui the screen
+// drawing fits by TextScale and text narrows no further.
+std::array<std::array<float, 2>, 2> RunScales(vk::Extent2D screen, vk::Extent2D target) {
+    const std::array<float, 2> scale = TextScale(screen, target);
+    if (g_fit_ui) {
+        return {std::array{1.0f, 1.0f}, scale};
+    }
+    return {scale, std::array{1.0f, 1.0f}};
 }
 
 void TargetBarrier(vk::CommandBuffer cmd, u32 target, vk::ImageLayout from, vk::ImageLayout to,
@@ -413,7 +428,13 @@ bool Start(const Device& device, Memory& memory) {
     const float aspect = GamePatches::AspectRatio();
     if (std::abs(aspect - LayoutAspect) > 0.01f) {
         g_narrow_text = device.geometry_shaders;
-        if (g_narrow_text) {
+        g_fit_ui = g_narrow_text && GamePatches::FitsUi();
+        if (g_fit_ui) {
+            LOG_INFO(Render_Vulkan,
+                     "GR2port UI: the screen drawing keeps its 16:9 shape in the middle of a "
+                     "{:.3f} screen",
+                     aspect);
+        } else if (g_narrow_text) {
             LOG_INFO(Render_Vulkan, "GR2port UI: text keeps its 16:9 shape on a {:.3f} screen",
                      aspect);
         } else {
@@ -453,6 +474,10 @@ bool Start(const Device& device, Memory& memory) {
     }
     LOG_INFO(Render_Vulkan, "GR2port UI: {} pipelines made at start", made);
     return true;
+}
+
+bool FitsScreen() {
+    return g_fit_ui;
 }
 
 bool Resize(vk::Format window_format, float hdr_white) {
@@ -625,11 +650,18 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
                                      ? vk::PrimitiveTopology::eTriangleStrip
                                      : vk::PrimitiveTopology::eTriangleList,
                                  dl);
-        const Push push{.draws = draws,
-                        .text_scale = TextScale(screen, g_images[run.target].extent)};
+        const vk::Extent2D target = g_images[run.target].extent;
+        const auto [text_scale, fit_scale] = RunScales(screen, target);
+        const Push push{
+            .draws = draws,
+            .text_scale = text_scale,
+            .fit_scale = fit_scale,
+            .target_size = {static_cast<float>(target.width), static_cast<float>(target.height)},
+            .viewport = {run.viewport[0], run.viewport[1], run.viewport[2], run.viewport[3]},
+        };
         cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
                           &push, dl);
-        const vk::Viewport viewport{
+        vk::Viewport viewport{
             .x = run.viewport[0],
             .y = run.viewport[1],
             .width = run.viewport[2],
@@ -637,6 +669,16 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
             .minDepth = 0.0f,
             .maxDepth = 1.0f,
         };
+        // The strokes' own geometry program does not fit them, so their viewport narrows around
+        // the target's middle instead.
+        if (run.vertex == StrokeVertex) {
+            const float middle_x = 0.5f * static_cast<float>(target.width);
+            const float middle_y = 0.5f * static_cast<float>(target.height);
+            viewport.x = middle_x + (viewport.x - middle_x) * fit_scale[0];
+            viewport.width *= fit_scale[0];
+            viewport.y = middle_y + (viewport.y - middle_y) * fit_scale[1];
+            viewport.height *= fit_scale[1];
+        }
         cmd.setViewport(0, viewport, dl);
         cmd.setScissor(0, vk::Rect2D{{0, 0}, g_images[run.target].extent}, dl);
         cmd.drawIndirect(buffer,
