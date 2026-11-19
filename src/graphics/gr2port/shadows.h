@@ -22,9 +22,13 @@ inline constexpr vk::Format DepthFormat = vk::Format::eD16Unorm;
 bool Start(const Device& device, Memory& memory);
 
 /// Render thread, with the GPU idle: takes a shadow quality. Its casters draw unless it is Off,
-/// into maps of its sizes, made again when they differ. False when the maps have no memory; the
-/// cascades then stay as they were.
+/// into maps of its sizes for the scene's picture, made again when they differ. False when the
+/// maps have no memory; the cascades then stay as they were.
 bool Choose(Settings::Quality quality);
+
+/// Render thread, with the GPU idle: takes the scene's picture, whose PictureShare scales the
+/// maps' sides, and makes the maps again as Choose does.
+bool Resize(vk::Extent2D picture);
 
 /// Render thread, outside rendering: draws the casters of the packet at address into the
 /// cascades and leaves them for fragment and compute shaders to sample. The packet is at offset in

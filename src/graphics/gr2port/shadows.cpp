@@ -28,6 +28,9 @@ constexpr u32 LastCascade = Scene::Cascades - 1;
 constexpr std::array<std::array<u32, 2>, 3> MapSides{{{2048, 4096}, {2048, 2048}, {1024, 2048}}};
 u32 g_array_size = MapSides[0][0];
 u32 g_last_size = MapSides[0][1];
+// The chosen quality, and the scene's picture, whose PictureShare scales the sides.
+Settings::Quality g_quality = Settings::Quality::Original;
+vk::Extent2D g_picture{1920, 1080};
 // With shadows off the maps stay clear: every point is lit.
 bool g_draw_casters = true;
 // GCN polygon offset slopes count sixteenths.
@@ -177,10 +180,14 @@ bool Choose(Settings::Quality quality) {
     const Device& d = *g_device;
     const auto& dl = d.dispatch;
     const bool casters = quality != Settings::Quality::Off;
-    const auto& sides = MapSides[std::min(static_cast<u32>(quality), 2u)];
+    std::array<u32, 2> sides = MapSides[std::min(static_cast<u32>(quality), 2u)];
+    for (u32& side : sides) {
+        side = Settings::ForPicture(side, g_picture.width, g_picture.height);
+    }
     // Without casters the maps only clear, at the sizes they have.
     if (g_maps.image && (!casters || (sides[0] == g_array_size && sides[1] == g_last_size))) {
         g_draw_casters = casters;
+        g_quality = quality;
         return true;
     }
     const vk::ImageUsageFlags usage =
@@ -206,6 +213,7 @@ bool Choose(Settings::Quality quality) {
     g_array_size = sides[0];
     g_last_size = sides[1];
     g_draw_casters = casters;
+    g_quality = quality;
     g_layers[LastCascade] = g_last_map.view;
     for (u32 c = 0; c < LastCascade; c++) {
         const vk::ImageViewCreateInfo info{
@@ -218,6 +226,11 @@ bool Choose(Settings::Quality quality) {
     }
     WriteSet(d);
     return true;
+}
+
+bool Resize(vk::Extent2D picture) {
+    g_picture = picture;
+    return Choose(g_quality);
 }
 
 bool Start(const Device& device, Memory& memory) {

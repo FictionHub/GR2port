@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <functional>
 #include <map>
@@ -127,9 +128,11 @@ inline constexpr std::array<u32, 8> HdrPaperWhiteLevels{80, 100, 120, 150, 200, 
 struct Graphics {
     std::string preset{"ps4"};
     /// The sun's shadow maps: Original 2048, 2048 and 4096 texels a side, Medium 2048 for each,
-    /// Low 1024, 1024 and 2048; Off draws no shadows.
+    /// Low 1024, 1024 and 2048; Off draws no shadows. A scene below 1080p takes the sides at its
+    /// PictureShare.
     Quality shadows{Quality::Original};
     /// The fog's grid of cells: Original 160 x 90 x 128, Medium 120 x 68 x 96, Low 80 x 45 x 64.
+    /// A scene below 1080p takes the columns and rows at its PictureShare.
     Quality fog{Quality::Original};
     /// Ambient occlusion: Original at the scene's size, Medium at half its size, or Off.
     Quality ambient_occlusion{Quality::Original};
@@ -163,7 +166,7 @@ struct Graphics {
     u32 far_environment_detail{100};
     /// How far from the eye the environment's and the characters' models keep their finer meshes,
     /// in percent of the game's distances, each a DetailLevels entry. GamePatches scales the
-    /// game's own level of detail distances by them.
+    /// game's own level of detail distances by them and by the render size's PictureShare.
     u32 near_environment_detail{100};
     u32 character_detail{100};
     /// The gameplay cameras' field of view in percent of the game's own angle, a
@@ -191,6 +194,19 @@ struct Graphics {
 constexpr bool FinestDetail(const Graphics& graphics) {
     return graphics.far_environment_detail >= FarDetailLevels.front() ||
            graphics.near_environment_detail >= DetailLevels.front();
+}
+
+/// The game's fog cells, shadow maps and level of detail distances suit its own 1920 x 1080
+/// picture. A smaller picture takes them at its share of that picture, the smaller of its width's
+/// and its height's, so their cost falls with its pixels; a larger one keeps the game's.
+constexpr float PictureShare(u32 width, u32 height) {
+    return std::min(
+        {1.0f, static_cast<float>(width) / 1920.0f, static_cast<float>(height) / 1080.0f});
+}
+
+/// A size the game makes for its own picture, at a width x height picture's PictureShare.
+constexpr u32 ForPicture(u32 size, u32 width, u32 height) {
+    return static_cast<u32>(static_cast<float>(size) * PictureShare(width, height) + 0.5f);
 }
 
 /// An integrated GPU's share of installed RAM when texture streaming takes the budget itself: the

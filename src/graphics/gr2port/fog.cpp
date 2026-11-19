@@ -31,6 +31,8 @@ namespace {
 // The fog's cells by fog quality: the game's 160 x 90 x 128, then 120 x 68 x 96 and 80 x 45 x 64.
 constexpr std::array<vk::Extent3D, 3> CellExtents{
     vk::Extent3D{160, 90, 128}, vk::Extent3D{120, 68, 96}, vk::Extent3D{80, 45, 64}};
+// The fog quality's cells, and the cells for the scene's picture.
+vk::Extent3D g_quality_cells = CellExtents[0];
 vk::Extent3D g_cells_extent = CellExtents[0];
 constexpr vk::Extent3D MapExtent{128, 128, 32};
 constexpr vk::Extent3D NoiseExtent{64, 64, 64};
@@ -157,18 +159,33 @@ void ComputeBarrier(vk::CommandBuffer cmd, vk::PipelineStageFlags2 src_stage,
                          g_device->dispatch);
 }
 
-bool CreateVolumes() {
-    const vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eStorage |
-                                      vk::ImageUsageFlagBits::eSampled |
-                                      vk::ImageUsageFlagBits::eTransferDst;
+constexpr vk::ImageUsageFlags VolumeUsage = vk::ImageUsageFlagBits::eStorage |
+                                            vk::ImageUsageFlagBits::eSampled |
+                                            vk::ImageUsageFlagBits::eTransferDst;
+
+bool CreateCells() {
     for (u32 i = 0; i < 2; i++) {
-        g_clouds[i] = g_memory->CreateVolume(CloudFormat, g_cells_extent, usage);
-        g_shadow[i] = g_memory->CreateVolume(CellFormat, g_cells_extent, usage);
+        g_clouds[i] = g_memory->CreateVolume(CloudFormat, g_cells_extent, VolumeUsage);
+        g_shadow[i] = g_memory->CreateVolume(CellFormat, g_cells_extent, VolumeUsage);
     }
-    g_scattered = g_memory->CreateVolume(ScatterFormat, g_cells_extent, usage);
+    g_scattered = g_memory->CreateVolume(ScatterFormat, g_cells_extent, VolumeUsage);
+    for (const auto* volumes : {&g_clouds, &g_shadow}) {
+        for (const Image& image : *volumes) {
+            if (!image.image) {
+                return false;
+            }
+        }
+    }
+    return static_cast<bool>(g_scattered.image);
+}
+
+bool CreateVolumes() {
+    if (!CreateCells()) {
+        return false;
+    }
     for (u32 i = 0; i < Layers; i++) {
-        g_maps[i] = g_memory->CreateVolume(CellFormat, MapExtent, usage);
-        g_map_darkness[i] = g_memory->CreateVolume(CellFormat, MapExtent, usage);
+        g_maps[i] = g_memory->CreateVolume(CellFormat, MapExtent, VolumeUsage);
+        g_map_darkness[i] = g_memory->CreateVolume(CellFormat, MapExtent, VolumeUsage);
     }
     for (Image& image : g_noise) {
         image = g_memory->CreateVolume(CellFormat, NoiseExtent,
@@ -177,19 +194,35 @@ bool CreateVolumes() {
     }
     g_staging = g_memory->CreateBuffer(Noises * NoiseBytes, vk::BufferUsageFlagBits::eTransferSrc,
                                        Placement::Staging);
-    for (const auto* volumes : {&g_clouds, &g_shadow}) {
-        for (const Image& image : *volumes) {
-            if (!image.image) {
-                return false;
-            }
-        }
-    }
     for (u32 i = 0; i < Layers; i++) {
         if (!g_maps[i].image || !g_map_darkness[i].image || !g_noise[i].image) {
             return false;
         }
     }
-    return g_scattered.image && g_staging.mapped != nullptr;
+    return g_staging.mapped != nullptr;
+}
+
+// Points the sets at the cells' volumes.
+void WriteCellSets() {
+    for (u32 i = 0; i < 2; i++) {
+        const u32 last = 1 - i;
+        Write(g_cell_sets[i], 0, 0, Combined, g_clouds[last], g_clamp_sampler);
+        for (u32 k = 0; k < Layers; k++) {
+            Write(g_cell_sets[i], 2 + 2 * k, 0, Combined, g_maps[k], g_map_sampler);
+            Write(g_cell_sets[i], 3 + 2 * k, 0, Combined, g_map_darkness[k], g_map_sampler);
+        }
+        Write(g_cell_sets[i], 6, 0, Storage, g_clouds[i], {});
+        Write(g_shadow_sets[i], 0, 0, Combined, g_shadow[last], g_clamp_sampler);
+        Write(g_shadow_sets[i], 1, 0, Storage, g_shadow[i], {});
+        for (u32 s = 0; s < 2; s++) {
+            const vk::DescriptorSet set = g_scatter_sets[i][s];
+            Write(set, 0, 0, Combined, g_noise[PerlinNoise], g_wrap_sampler);
+            Write(set, 1, 0, Combined, g_clouds[i], g_nearest_sampler);
+            Write(set, 3, 0, Combined, g_shadow[s], g_nearest_sampler);
+            Write(set, 4, 0, Storage, g_scattered, {});
+        }
+    }
+    Write(g_apply_set, 1, 0, Combined, g_scattered, g_clamp_sampler);
 }
 
 bool CreateSets() {
@@ -266,25 +299,7 @@ bool CreateSets() {
         Write(g_darkness_sets[i], 0, 0, Combined, g_maps[i], g_map_sampler);
         Write(g_darkness_sets[i], 1, 0, Storage, g_map_darkness[i], {});
     }
-    for (u32 i = 0; i < 2; i++) {
-        const u32 last = 1 - i;
-        Write(g_cell_sets[i], 0, 0, Combined, g_clouds[last], g_clamp_sampler);
-        for (u32 k = 0; k < Layers; k++) {
-            Write(g_cell_sets[i], 2 + 2 * k, 0, Combined, g_maps[k], g_map_sampler);
-            Write(g_cell_sets[i], 3 + 2 * k, 0, Combined, g_map_darkness[k], g_map_sampler);
-        }
-        Write(g_cell_sets[i], 6, 0, Storage, g_clouds[i], {});
-        Write(g_shadow_sets[i], 0, 0, Combined, g_shadow[last], g_clamp_sampler);
-        Write(g_shadow_sets[i], 1, 0, Storage, g_shadow[i], {});
-        for (u32 s = 0; s < 2; s++) {
-            const vk::DescriptorSet set = g_scatter_sets[i][s];
-            Write(set, 0, 0, Combined, g_noise[PerlinNoise], g_wrap_sampler);
-            Write(set, 1, 0, Combined, g_clouds[i], g_nearest_sampler);
-            Write(set, 3, 0, Combined, g_shadow[s], g_nearest_sampler);
-            Write(set, 4, 0, Storage, g_scattered, {});
-        }
-    }
-    Write(g_apply_set, 1, 0, Combined, g_scattered, g_clamp_sampler);
+    WriteCellSets();
     return true;
 }
 
@@ -431,44 +446,11 @@ void Bake(vk::CommandBuffer cmd, const Scene::Header& header, u64 fog) {
     }
 }
 
-} // namespace
-
-vk::ImageView ScatteredView() {
-    return g_scattered.view;
-}
-
-bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
-    g_device = &device;
-    g_memory = &memory;
-    const Settings::Graphics& graphics = Settings::Get().graphics;
-    g_cells_extent = CellExtents[std::min(static_cast<u32>(graphics.fog), 2u)];
-    g_sun_shadow = graphics.fog_shadows;
-    if (!device.storage_extended_formats) {
-        LOG_WARNING(Render_Vulkan, "GR2port: no 8-bit storage images, so no fog");
-        return true;
-    }
-    g_clamp_sampler = CreateSampler(vk::Filter::eLinear, vk::SamplerAddressMode::eClampToEdge,
-                                    vk::SamplerAddressMode::eClampToEdge);
-    g_wrap_sampler = CreateSampler(vk::Filter::eLinear, vk::SamplerAddressMode::eRepeat,
-                                   vk::SamplerAddressMode::eRepeat);
-    g_map_sampler = CreateSampler(vk::Filter::eLinear, vk::SamplerAddressMode::eRepeat,
-                                  vk::SamplerAddressMode::eClampToBorder);
-    g_nearest_sampler = CreateSampler(vk::Filter::eNearest, vk::SamplerAddressMode::eClampToEdge,
-                                      vk::SamplerAddressMode::eClampToEdge);
-    if (!g_clamp_sampler || !g_wrap_sampler || !g_map_sampler || !g_nearest_sampler ||
-        !CreateVolumes() || !CreateSets()) {
-        LOG_ERROR(Render_Vulkan, "GR2port: the fog's volumes or sets failed");
-        return false;
-    }
-    const std::array bake_sets{g_bake_layout, Textures::SetLayout()};
-    const std::array darkness_sets{g_darkness_layout};
+bool CreateCellPipelines() {
+    const Device& device = *g_device;
     const std::array cell_sets{g_cell_layout, Textures::SetLayout()};
     const std::array shadow_sets{g_shadow_layout, Shadows::SetLayout()};
     const std::array scatter_sets{g_scatter_layout};
-    const std::array apply_sets{g_apply_layout};
-    g_bake = CreateComputePipeline(device, FOG_BAKE_COMP, sizeof(BakePush), bake_sets);
-    g_darkness_pipeline =
-        CreateComputePipeline(device, FOG_DARKNESS_COMP, sizeof(FogPush), darkness_sets);
     // The cell programs' grid, constant ids 0 to 2 of fog.glsl.
     const std::array<s32, 3> grid{static_cast<s32>(g_cells_extent.width),
                                   static_cast<s32>(g_cells_extent.height),
@@ -490,6 +472,46 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
         CreateComputePipeline(device, FOG_SHADOW_COMP, sizeof(CellPush), shadow_sets, &grid_info);
     g_scatter =
         CreateComputePipeline(device, FOG_SCATTER_COMP, sizeof(FogPush), scatter_sets, &grid_info);
+    return g_cells_pipeline.pipeline && g_shadow_pipeline.pipeline && g_scatter.pipeline;
+}
+
+} // namespace
+
+vk::ImageView ScatteredView() {
+    return g_scattered.view;
+}
+
+bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
+    g_device = &device;
+    g_memory = &memory;
+    const Settings::Graphics& graphics = Settings::Get().graphics;
+    g_quality_cells = CellExtents[std::min(static_cast<u32>(graphics.fog), 2u)];
+    g_cells_extent = g_quality_cells;
+    g_sun_shadow = graphics.fog_shadows;
+    if (!device.storage_extended_formats) {
+        LOG_WARNING(Render_Vulkan, "GR2port: no 8-bit storage images, so no fog");
+        return true;
+    }
+    g_clamp_sampler = CreateSampler(vk::Filter::eLinear, vk::SamplerAddressMode::eClampToEdge,
+                                    vk::SamplerAddressMode::eClampToEdge);
+    g_wrap_sampler = CreateSampler(vk::Filter::eLinear, vk::SamplerAddressMode::eRepeat,
+                                   vk::SamplerAddressMode::eRepeat);
+    g_map_sampler = CreateSampler(vk::Filter::eLinear, vk::SamplerAddressMode::eRepeat,
+                                  vk::SamplerAddressMode::eClampToBorder);
+    g_nearest_sampler = CreateSampler(vk::Filter::eNearest, vk::SamplerAddressMode::eClampToEdge,
+                                      vk::SamplerAddressMode::eClampToEdge);
+    if (!g_clamp_sampler || !g_wrap_sampler || !g_map_sampler || !g_nearest_sampler ||
+        !CreateVolumes() || !CreateSets()) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the fog's volumes or sets failed");
+        return false;
+    }
+    const std::array bake_sets{g_bake_layout, Textures::SetLayout()};
+    const std::array darkness_sets{g_darkness_layout};
+    const std::array apply_sets{g_apply_layout};
+    g_bake = CreateComputePipeline(device, FOG_BAKE_COMP, sizeof(BakePush), bake_sets);
+    g_darkness_pipeline =
+        CreateComputePipeline(device, FOG_DARKNESS_COMP, sizeof(FogPush), darkness_sets);
+    const bool cells = CreateCellPipelines();
     g_apply = CreateGraphicsPipeline(device, {
                                                  .vertex = FULLSCREEN_VERT,
                                                  .fragment = FOG_APPLY_FRAG,
@@ -498,18 +520,44 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
                                                  .push_constant_bytes = sizeof(FogPush),
                                                  .set_layouts = apply_sets,
                                              });
-    g_enabled = g_bake.pipeline && g_darkness_pipeline.pipeline && g_cells_pipeline.pipeline &&
-                g_shadow_pipeline.pipeline && g_scatter.pipeline && g_apply.pipeline;
+    g_enabled = g_bake.pipeline && g_darkness_pipeline.pipeline && cells && g_apply.pipeline;
     return g_enabled;
 }
 
-void Resize(vk::ImageView depth) {
+bool Resize(vk::ImageView depth, vk::Extent2D picture) {
     if (!g_enabled) {
-        return;
+        return true;
+    }
+    const vk::Extent3D cells{
+        Settings::ForPicture(g_quality_cells.width, picture.width, picture.height),
+        Settings::ForPicture(g_quality_cells.height, picture.width, picture.height),
+        g_quality_cells.depth};
+    if (cells != g_cells_extent) {
+        for (auto* volumes : {&g_clouds, &g_shadow}) {
+            for (Image& image : *volumes) {
+                g_memory->Destroy(image);
+            }
+        }
+        g_memory->Destroy(g_scattered);
+        for (Pipeline* pipeline : {&g_cells_pipeline, &g_shadow_pipeline, &g_scatter}) {
+            DestroyPipeline(*g_device, *pipeline);
+        }
+        g_cells_extent = cells;
+        if (!CreateCells() || !CreateCellPipelines()) {
+            LOG_ERROR(Render_Vulkan, "GR2port: the fog's {}x{}x{} cells failed", cells.width,
+                      cells.height, cells.depth);
+            return false;
+        }
+        WriteCellSets();
+        // Clear discards every volume's texels, so the noise is copied and the maps baked again.
+        g_cleared = false;
+        g_noise_source = {};
+        g_maps_stale = true;
     }
     const Image depth_image{.view = depth};
     Write(g_apply_set, 0, 0, Combined, depth_image, g_nearest_sampler,
           vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+    return true;
 }
 
 void Choose(bool sun_shadow) {
