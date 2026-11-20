@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <span>
 #include <unordered_map>
@@ -368,6 +369,56 @@ const Pipeline& PipelineFor(const Scene::UiRun& run) {
     return entry->second;
 }
 
+// Whether one of run's draws in packet copies a movie's frame over the picture.
+bool HasMovie(const u8* packet, const Scene::UiRun& run) {
+    const u32 end = std::min(run.first + run.count, Scene::MaxUiDraws);
+    for (u32 i = run.first; i < end; i++) {
+        u32 flags;
+        std::memcpy(&flags,
+                    packet + Scene::UiDrawsOffset + u64{i} * sizeof(Scene::UiDraw) +
+                        offsetof(Scene::UiDraw, flags),
+                    sizeof(flags));
+        if ((flags & Scene::UiDrawMovie) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Clears to black the open target's area outside its middle at fit_scale of its size: beside a
+// movie's frame, which the geometry program fits there.
+void ClearSides(vk::CommandBuffer cmd, vk::Extent2D target, std::array<float, 2> fit_scale) {
+    // The sides' inner edges, rounded outward: the frame draws over any overlap.
+    const auto side = [](u32 size, float scale) {
+        return static_cast<u32>(std::ceil(0.5f * static_cast<float>(size) * (1.0f - scale)));
+    };
+    const u32 x = std::min(side(target.width, fit_scale[0]), target.width / 2);
+    const u32 y = std::min(side(target.height, fit_scale[1]), target.height / 2);
+    std::array<vk::ClearRect, 4> rects;
+    u32 count = 0;
+    const auto add = [&](u32 left, u32 top, u32 width, u32 height) {
+        if (width != 0 && height != 0) {
+            rects[count++] = {
+                .rect = {{static_cast<s32>(left), static_cast<s32>(top)}, {width, height}},
+                .layerCount = 1,
+            };
+        }
+    };
+    add(0, 0, x, target.height);
+    add(target.width - x, 0, x, target.height);
+    add(x, 0, target.width - 2 * x, y);
+    add(x, target.height - y, target.width - 2 * x, y);
+    if (count == 0) {
+        return;
+    }
+    const vk::ClearAttachment black{
+        .aspectMask = vk::ImageAspectFlagBits::eColor,
+        .colorAttachment = 0,
+        .clearValue = {.color = vk::ClearColorValue{.float32 = std::array{0.0f, 0.0f, 0.0f, 1.0f}}},
+    };
+    cmd.clearAttachments(black, std::span{rects.data(), count}, g_device->dispatch);
+}
+
 } // namespace
 
 bool Start(const Device& device, Memory& memory) {
@@ -681,6 +732,11 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
         }
         cmd.setViewport(0, viewport, dl);
         cmd.setScissor(0, vk::Rect2D{{0, 0}, g_images[run.target].extent}, dl);
+        // At 16:9 a movie's frame covers the whole picture, so beside the fitted frame the picture
+        // would keep what the game drew before it, such as the game's last frame.
+        if ((fit_scale[0] < 1.0f || fit_scale[1] < 1.0f) && HasMovie(packet, run)) {
+            ClearSides(cmd, target, fit_scale);
+        }
         cmd.drawIndirect(buffer,
                          offset + Scene::UiCommandsOffset +
                              u64{run.first} * sizeof(Scene::VertexCommand),
