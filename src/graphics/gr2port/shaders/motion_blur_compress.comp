@@ -1,0 +1,46 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's MotionBlur compression (CS 0x1c311c4): per pixel, its motion's length in pixels and
+// a depth term from the view's inverse z, both scaled by 1/32. Each float step follows the
+// program's own.
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform texture2D velocity_texture;
+layout(set = 0, binding = 1) uniform texture2D depth_texture;
+layout(set = 0, binding = 2) uniform sampler point_sampler;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D compressed_image;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Constants {
+    vec4 target_size;
+    vec2 inverse_z;
+    float velocity_scale;
+};
+layout(push_constant) uniform Push {
+    Constants constants;
+};
+
+void main() {
+    const uvec2 pixel = gl_WorkGroupID.xy * 16u + gl_LocalInvocationID.xy;
+    const vec2 size = constants.target_size.xy;
+    if (size.y < float(pixel.y) || size.x < float(pixel.x)) {
+        return;
+    }
+    const vec2 velocity =
+        texelFetch(sampler2D(velocity_texture, point_sampler), ivec2(pixel), 0).xy;
+    // The port's depth is reversed; the program reads the game's.
+    const float depth =
+        1.0 - texelFetch(sampler2D(depth_texture, point_sampler), ivec2(pixel), 0).x;
+    const float scale = constants.velocity_scale;
+    const float moved_y = (scale * size.y) * velocity.y;
+    const float moved_x = ((size.x * scale) * velocity.x) * 0.5;
+    const float half_y = -0.5 * moved_y;
+    const float length2 = half_y * half_y + moved_x * moved_x;
+    const float view_z = constants.inverse_z.x * (2.0 * depth + -1.0) + constants.inverse_z.y;
+    const float speed = 0.03125 * sqrt(max(uintBitsToFloat(0x358637bdu), length2));
+    const float reach = min(1.0, 0.03125 * (1.0 / view_z));
+    imageStore(compressed_image, ivec2(pixel), vec4(speed, reach, 0.0, 0.0));
+}
