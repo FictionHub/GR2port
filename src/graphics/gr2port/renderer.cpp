@@ -595,8 +595,8 @@ bool Thread::ResizeScene(vk::Extent2D output) {
         !Water::Resize(extent, Glass::BehindView()) || !SelfTranslucent::Resize(extent)) {
         return false;
     }
-    if (!Fog::Resize(depth.view, output) || !Shadows::Resize(output) ||
-        !Particles::Resize(depth.view, World::AlbedoView(), extent)) {
+    Fog::Resize(depth.view);
+    if (!Particles::Resize(depth.view, World::AlbedoView(), extent)) {
         return false;
     }
     Effects::Resize(depth.view, Glass::BehindView());

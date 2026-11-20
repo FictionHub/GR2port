@@ -23,9 +23,8 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format);
 /// Render thread, between frames: whether the sun's shadow pass runs.
 void Choose(bool sun_shadow);
 
-/// With the GPU idle: points the apply pass at the scene's depth and makes the cells again when
-/// a picture of that size takes a different grid. False when the cells have no memory.
-bool Resize(vk::ImageView depth, vk::Extent2D picture);
+/// With the GPU idle: points the apply pass at the scene's depth.
+void Resize(vk::ImageView depth);
 
 /// The fog's scattered light for shaders to sample in the general layout, null when it is off.
 vk::ImageView ScatteredView();

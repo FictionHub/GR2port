@@ -39,21 +39,16 @@ const Aspect& ChosenAspect(const std::string& name) {
     return aspect != Aspects.end() ? *aspect : Aspects.front();
 }
 
-const RenderSize& ChosenSize(const std::string& name) {
-    auto size = std::ranges::find(RenderSizes, std::string_view{name}, &RenderSize::name);
-    if (size == RenderSizes.end()) {
-        size = std::ranges::find(RenderSizes, std::string_view{"1080p"}, &RenderSize::name);
-    }
-    return *size;
-}
-
 // Whether a resolution patch's name holds the chosen size: "<width>x" for the aspects narrower
 // than 16:9, which keep the 16:9 width, else "x<height>".
 bool IsChosenSize(std::string_view name, const Aspect& aspect, const std::string& size) {
-    const RenderSize& chosen = ChosenSize(size);
+    auto chosen = std::ranges::find(RenderSizes, std::string_view{size}, &RenderSize::name);
+    if (chosen == RenderSizes.end()) {
+        chosen = std::ranges::find(RenderSizes, std::string_view{"1080p"}, &RenderSize::name);
+    }
     const bool narrow = aspect.ratio < 16.0f / 9.0f;
     const std::string tag =
-        narrow ? std::to_string(chosen.columns) + "x" : "x" + std::to_string(chosen.lines);
+        narrow ? std::to_string(chosen->columns) + "x" : "x" + std::to_string(chosen->lines);
     for (size_t at = name.find(tag); at != std::string_view::npos; at = name.find(tag, at + 1)) {
         const size_t next = narrow ? at - 1 : at + tag.size();
         if ((narrow ? at == 0 : next == name.size()) || name[next] < '0' || name[next] > '9') {
@@ -136,14 +131,14 @@ std::string FloatBytes(float value) {
     return WordBytes(std::bit_cast<u32>(value));
 }
 
-// Queues the patch that writes a row's distances at share of the game's; 1 keeps the row.
-void QueueDetail(u64 row, std::span<const float> distances, float share) {
-    if (share == 1.0f) {
+// Queues the patch that writes a row's distances at percent of the game's; 100 keeps the row.
+void QueueDetail(u64 row, std::span<const float> distances, u32 percent) {
+    if (percent == 100) {
         return;
     }
     std::string bytes;
     for (const float distance : distances) {
-        bytes += FloatBytes(distance * share);
+        bytes += FloatBytes(distance * static_cast<float>(percent) / 100.0f);
     }
     QueueBytes(row, std::move(bytes));
 }
@@ -425,13 +420,8 @@ void ApplySettings() {
     EmulatorSettings.SetP2PPort(P2pPort, true);
     QueueAreaMargins(graphics.far_environment_detail);
     QueueVideoHeap(heap_growth);
-    // The render size's 16:9 picture: the other aspects keep its width or its height.
-    const RenderSize& size = ChosenSize(Settings::Get().game.render_size);
-    const float share = Settings::PictureShare(size.columns, size.lines);
-    QueueDetail(WorldDetailRow, WorldDetail,
-                share * static_cast<float>(graphics.near_environment_detail) / 100.0f);
-    QueueDetail(CharacterDetailRow, CharacterDetail,
-                share * static_cast<float>(graphics.character_detail) / 100.0f);
+    QueueDetail(WorldDetailRow, WorldDetail, graphics.near_environment_detail);
+    QueueDetail(CharacterDetailRow, CharacterDetail, graphics.character_detail);
     if (Settings::FinestDetail(graphics)) {
         QueueFramePools();
     }
