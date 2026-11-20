@@ -144,6 +144,7 @@
     "Pick a game function first.": "Önce bir oyun işlevi seç.",
     "No key was pressed; {0} keeps its key.": "Tuşa basılmadı; {0} tuşunu koruyor.",
     "{0} now does {1}.": "{0} artık şunu yapıyor: {1}.",
+    "{0} now also does {1}.": "{0} artık şunu da yapıyor: {1}.",
     "{0} has no key now.": "{0} için artık tuş yok.",
     "{0} (in use)": "{0} (kullanımda)",
     "Game Function": "Oyun İşlevi",

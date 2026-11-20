@@ -144,6 +144,7 @@
     "Pick a game function first.": "Valitse ensin pelin toiminto.",
     "No key was pressed; {0} keeps its key.": "Näppäintä ei painettu; {0} säilyttää näppäimensä.",
     "{0} now does {1}.": "{0} tekee nyt toiminnon {1}.",
+    "{0} now also does {1}.": "{0} tekee nyt myös toiminnon {1}.",
     "{0} has no key now.": "{0} on nyt ilman näppäintä.",
     "{0} (in use)": "{0} (käytössä)",
     "Game Function": "Pelin toiminto",

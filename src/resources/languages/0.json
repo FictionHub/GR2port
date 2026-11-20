@@ -144,6 +144,7 @@
     "Pick a game function first.": "先にゲーム操作を選んでください。",
     "No key was pressed; {0} keeps its key.": "キーが押されませんでした。{0}のキーはそのままです。",
     "{0} now does {1}.": "{0}に{1}を設定しました。",
+    "{0} now also does {1}.": "{0}にも{1}を設定しました。",
     "{0} has no key now.": "{0}はキーなしです。",
     "{0} (in use)": "{0}(使用中)",
     "Game Function": "ゲーム操作",

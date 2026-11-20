@@ -144,6 +144,7 @@
     "Pick a game function first.": "Nejprve vyberte herní funkci.",
     "No key was pressed; {0} keeps its key.": "Nebyla stisknuta žádná klávesa; funkce „{0}“ si ponechává svou klávesu.",
     "{0} now does {1}.": "{0}: nyní „{1}“.",
+    "{0} now also does {1}.": "{0}: nyní také „{1}“.",
     "{0} has no key now.": "„{0}“: bez klávesy.",
     "{0} (in use)": "{0} (používá se)",
     "Game Function": "Herní funkce",

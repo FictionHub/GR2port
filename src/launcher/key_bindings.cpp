@@ -61,9 +61,11 @@ constexpr std::array<const wchar_t*, Game::TypeCount> TypeNames{L"Type A", L"Typ
 
 struct Editor {
     KeyBindings keys;
-    // The Button Bindings dialog edits buttons, named as layout's prompts show them.
+    // The Button Bindings dialog edits buttons and back paddles, named as layout's prompts show
+    // them.
     bool pad = false;
-    PadBindings buttons;
+    Input::PadBindings::Map buttons;
+    Input::PadBindings::Map paddles;
     std::string layout;
     u32 type = 0;
     u32 game_type = 0;
@@ -278,7 +280,7 @@ struct PadInput {
     SDL_GamepadAxis axis;
 };
 
-constexpr std::array<PadInput, 16> PadInputs{{
+constexpr std::array<PadInput, 20> PadInputs{{
     {"cross", SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_AXIS_INVALID},
     {"circle", SDL_GAMEPAD_BUTTON_EAST, SDL_GAMEPAD_AXIS_INVALID},
     {"square", SDL_GAMEPAD_BUTTON_WEST, SDL_GAMEPAD_AXIS_INVALID},
@@ -295,6 +297,10 @@ constexpr std::array<PadInput, 16> PadInputs{{
     {"pad_down", SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_AXIS_INVALID},
     {"pad_left", SDL_GAMEPAD_BUTTON_DPAD_LEFT, SDL_GAMEPAD_AXIS_INVALID},
     {"pad_right", SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SDL_GAMEPAD_AXIS_INVALID},
+    {"lpaddle_high", SDL_GAMEPAD_BUTTON_LEFT_PADDLE1, SDL_GAMEPAD_AXIS_INVALID},
+    {"rpaddle_high", SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1, SDL_GAMEPAD_AXIS_INVALID},
+    {"lpaddle_low", SDL_GAMEPAD_BUTTON_LEFT_PADDLE2, SDL_GAMEPAD_AXIS_INVALID},
+    {"rpaddle_low", SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2, SDL_GAMEPAD_AXIS_INVALID},
 }};
 
 // A pad button's name as the layout's prompts show it: the face buttons by position, the rest by
@@ -305,26 +311,31 @@ std::wstring PadText(std::string_view layout, std::string_view name) {
     }
     struct Names {
         std::string_view layout;
-        std::array<const wchar_t*, 12> text;
+        std::array<const wchar_t*, 16> text;
     };
-    // cross circle square triangle l1 r1 l2 r2 l3 r3 options back
+    // cross circle square triangle l1 r1 l2 r2 l3 r3 options back, then the back paddles: upper
+    // left, upper right, lower left, lower right
     static constexpr std::array<Names, 5> Layouts{{
         {"xbox",
-         {L"A", L"B", L"X", L"Y", L"LB", L"RB", L"LT", L"RT", L"LS", L"RS", L"Menu", L"View"}},
+         {L"A", L"B", L"X", L"Y", L"LB", L"RB", L"LT", L"RT", L"LS", L"RS", L"Menu", L"View", L"P3",
+          L"P1", L"P4", L"P2"}},
         {"switch",
-         {L"B", L"A", L"Y", L"X", L"L", L"R", L"ZL", L"ZR", L"LS", L"RS", L"+", L"\x2212"}},
+         {L"B", L"A", L"Y", L"X", L"L", L"R", L"ZL", L"ZR", L"LS", L"RS", L"+", L"\x2212", L"GL",
+          L"GR", L"SR", L"SL"}},
         {"steamdeck",
-         {L"A", L"B", L"X", L"Y", L"L1", L"R1", L"L2", L"R2", L"L3", L"R3", L"Menu", L"View"}},
+         {L"A", L"B", L"X", L"Y", L"L1", L"R1", L"L2", L"R2", L"L3", L"R3", L"Menu", L"View", L"L4",
+          L"R4", L"L5", L"R5"}},
         {"steamcontroller",
          {L"A", L"B", L"X", L"Y", L"LB", L"RB", L"LT", L"RT", L"Stick", L"Right Pad", L"Start",
-          L"Back"}},
+          L"Back", L"L4", L"R4", L"L5", L"R5"}},
         {"playstation",
          {L"Cross", L"Circle", L"Square", L"Triangle", L"L1", L"R1", L"L2", L"R2", L"L3", L"R3",
-          L"OPTIONS", L"SHARE"}},
+          L"OPTIONS", L"SHARE", L"LB", L"RB", L"L Fn", L"R Fn"}},
     }};
-    static constexpr std::array<std::string_view, 12> Order{
-        "cross", "circle", "square", "triangle", "l1",      "r1",
-        "l2",    "r2",     "l3",     "r3",       "options", "back"};
+    static constexpr std::array<std::string_view, 16> Order{
+        "cross",        "circle",       "square",      "triangle",   "l1",      "r1",
+        "l2",           "r2",           "l3",          "r3",         "options", "back",
+        "lpaddle_high", "rpaddle_high", "lpaddle_low", "rpaddle_low"};
     const auto names = std::ranges::find(Layouts, layout, &Names::layout);
     const Names& chosen = names != Layouts.end() ? *names : Layouts.back();
     if (const auto at = std::ranges::find(Order, name); at != Order.end()) {
@@ -668,15 +679,25 @@ void SetCell(HWND list, int row, int column, const std::wstring& text) {
     SendMessageW(list, LVM_SETITEMTEXTW, row, reinterpret_cast<LPARAM>(&item));
 }
 
-// The pad button bound to the PlayStation button a function is on in the type shown; blank for a
-// function on a stick, a flick or a combination.
+// The pad button bound to the PlayStation button a function is on in the type shown, then the
+// back paddles that press it too; blank for a function on a stick, a flick or a combination.
 std::wstring PadCell(const Editor& editor, const Game::Function& function) {
     const std::string_view button = GameButton(function, editor.type);
     if (button.empty()) {
         return {};
     }
-    const auto bound = editor.buttons.find(button);
-    return PadText(editor.layout, bound != editor.buttons.end() ? bound->second : std::string{});
+    std::wstring names;
+    if (const auto bound = editor.buttons.find(button);
+        bound != editor.buttons.end() && !bound->second.empty()) {
+        names = PadText(editor.layout, bound->second);
+    }
+    for (const std::string_view paddle : Input::PadBindings::Paddles()) {
+        if (const auto bound = editor.paddles.find(paddle);
+            bound != editor.paddles.end() && bound->second == button) {
+            names += (names.empty() ? L"" : L", ") + PadText(editor.layout, paddle);
+        }
+    }
+    return names.empty() ? PadText(editor.layout, {}) : names;
 }
 
 // The pad column shows the type's pad inputs; the key column is the same in every type, and the
@@ -716,7 +737,7 @@ std::wstring FunctionsOn(const Editor& editor, std::string_view button) {
 }
 
 // Takes a pad button for the selected function's PlayStation button. A pad button that another
-// PlayStation button had moves to this one.
+// PlayStation button had moves to this one, and a back paddle presses it beside its pad button.
 void ChangeButton(HWND window, Editor& editor, int row) {
     const Game::Function& function = Game::Functions()[row];
     const std::wstring label = Tr(Wide(function.label));
@@ -729,6 +750,12 @@ void ChangeButton(HWND window, Editor& editor, int row) {
     const std::string input = CaptureKey(window, editor, label, true);
     if (input.empty()) {
         ShowStatus(window, Tr(L"No button was pressed; {0} keeps its button.", {label}));
+        return;
+    }
+    if (Input::PadBindings::IsPaddle(input)) {
+        editor.paddles[input] = std::string(button);
+        ShowRows(editor);
+        ShowStatus(window, Tr(L"{0} now also does {1}.", {PadText(editor.layout, input), label}));
         return;
     }
     std::wstring status = Tr(L"{0} now does {1}.", {PadText(editor.layout, input), label});
@@ -897,13 +924,16 @@ INT_PTR CALLBACK EditorProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
                                GameButton(Game::Functions()[row], editor->type);
                            !button.empty()) {
                     editor->buttons[std::string(button)].clear();
+                    std::erase_if(editor->paddles,
+                                  [&](const auto& paddle) { return paddle.second == button; });
                 }
                 ShowRows(*editor);
             }
             return TRUE;
         case IdDefaults:
             if (editor->pad) {
-                editor->buttons = DefaultPadBindings();
+                editor->buttons = DefaultPadBindings().buttons;
+                editor->paddles.clear();
             } else {
                 editor->keys = DefaultKeyBindings();
             }
@@ -961,8 +991,8 @@ std::optional<KeyBindings> EditKeyBindings(HWND owner, const KeyBindings& keys, 
     return editor.keys;
 }
 
-std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& buttons, u32 control_type,
-                                           std::string_view layout) {
+std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& bindings,
+                                           u32 control_type, std::string_view layout) {
     struct alignas(4) Template {
         DLGTEMPLATE header;
         WORD menu;
@@ -975,7 +1005,8 @@ std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& button
 
     Editor editor;
     editor.pad = true;
-    editor.buttons = buttons;
+    editor.buttons = bindings.buttons;
+    editor.paddles = bindings.paddles;
     editor.layout = layout;
     editor.keys.resize(Game::Functions().size());
     editor.game_type = std::min(control_type, Game::TypeCount - 1);
@@ -987,7 +1018,7 @@ std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& button
     if (result != IDOK) {
         return std::nullopt;
     }
-    return editor.buttons;
+    return PadBindings{editor.buttons, editor.paddles};
 }
 
 std::string CaptureCombination(HWND owner, HFONT font, UINT dpi, const std::wstring& function,

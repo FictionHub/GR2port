@@ -23,6 +23,13 @@ constexpr std::array<std::string_view, 16> PadInputs{
     "l3",    "r3",     "options", "back",     "pad_up", "pad_down", "pad_left", "pad_right",
 };
 
+constexpr std::array<std::string_view, 4> PaddleInputs{
+    "lpaddle_high",
+    "rpaddle_high",
+    "lpaddle_low",
+    "rpaddle_low",
+};
+
 std::string Compact(std::string_view line) {
     std::string compact{line.substr(0, line.find('#'))};
     std::erase_if(compact, [](unsigned char c) { return std::isspace(c) != 0; });
@@ -37,6 +44,14 @@ std::span<const std::string_view> GameButtons() {
 
 bool IsPadInput(std::string_view name) {
     return std::ranges::find(PadInputs, name) != PadInputs.end();
+}
+
+std::span<const std::string_view> Paddles() {
+    return PaddleInputs;
+}
+
+bool IsPaddle(std::string_view name) {
+    return std::ranges::find(PaddleInputs, name) != PaddleInputs.end();
 }
 
 Map Defaults() {
@@ -59,7 +74,7 @@ std::optional<std::pair<std::string, std::string>> ParseLine(std::string_view co
         output = "touchpad_center";
     }
     if (std::ranges::find(Buttons, output) == Buttons.end() ||
-        (input != "unmapped" && !IsPadInput(input))) {
+        (input != "unmapped" && !IsPadInput(input) && !IsPaddle(input))) {
         return std::nullopt;
     }
     return std::pair{std::move(output), input == "unmapped" ? std::string{} : std::move(input)};
@@ -69,7 +84,7 @@ Map Read(const std::filesystem::path& file) {
     Map buttons;
     std::ifstream in(file);
     for (std::string line; std::getline(in, line);) {
-        if (auto pad = ParseLine(Compact(line))) {
+        if (auto pad = ParseLine(Compact(line)); pad && !IsPaddle(pad->second)) {
             const auto [at, added] = buttons.try_emplace(std::move(pad->first), pad->second);
             if (!added && at->second.empty()) {
                 at->second = std::move(pad->second);
@@ -83,6 +98,17 @@ Map Read(const std::filesystem::path& file) {
         buttons.try_emplace(std::string(button));
     }
     return buttons;
+}
+
+Map ReadPaddles(const std::filesystem::path& file) {
+    Map paddles;
+    std::ifstream in(file);
+    for (std::string line; std::getline(in, line);) {
+        if (auto pad = ParseLine(Compact(line)); pad && IsPaddle(pad->second)) {
+            paddles.try_emplace(std::move(pad->second), std::move(pad->first));
+        }
+    }
+    return paddles;
 }
 
 } // namespace Input::PadBindings

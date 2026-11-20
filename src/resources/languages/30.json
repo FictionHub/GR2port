@@ -144,6 +144,7 @@
     "Pick a game function first.": "Спершу виберіть дію.",
     "No key was pressed; {0} keeps its key.": "Нічого не натиснуто: клавішу дії «{0}» не змінено.",
     "{0} now does {1}.": "{0}: тепер «{1}».",
+    "{0} now also does {1}.": "{0}: тепер також «{1}».",
     "{0} has no key now.": "«{0}» — без клавіші.",
     "{0} (in use)": "{0} (у грі)",
     "Game Function": "Дія",

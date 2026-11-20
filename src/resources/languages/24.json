@@ -144,6 +144,7 @@
     "Pick a game function first.": "Előbb válassz egy játékfunkciót.",
     "No key was pressed; {0} keeps its key.": "Nem nyomtál billentyűt; {0} megtartja a billentyűjét.",
     "{0} now does {1}.": "{0} mostantól: {1}.",
+    "{0} now also does {1}.": "{0} mostantól ezt is: {1}.",
     "{0} has no key now.": "{0}: most nincs billentyűje.",
     "{0} (in use)": "{0} (foglalt)",
     "Game Function": "Játékfunkció",

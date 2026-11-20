@@ -17,6 +17,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QStringList>
 #include <QTabBar>
 #include <QTableWidget>
 #include <QTimer>
@@ -251,7 +252,7 @@ struct PadInput {
     SDL_GamepadAxis axis;
 };
 
-constexpr std::array<PadInput, 16> PadInputs{{
+constexpr std::array<PadInput, 20> PadInputs{{
     {"cross", SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_AXIS_INVALID},
     {"circle", SDL_GAMEPAD_BUTTON_EAST, SDL_GAMEPAD_AXIS_INVALID},
     {"square", SDL_GAMEPAD_BUTTON_WEST, SDL_GAMEPAD_AXIS_INVALID},
@@ -268,6 +269,10 @@ constexpr std::array<PadInput, 16> PadInputs{{
     {"pad_down", SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_AXIS_INVALID},
     {"pad_left", SDL_GAMEPAD_BUTTON_DPAD_LEFT, SDL_GAMEPAD_AXIS_INVALID},
     {"pad_right", SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SDL_GAMEPAD_AXIS_INVALID},
+    {"lpaddle_high", SDL_GAMEPAD_BUTTON_LEFT_PADDLE1, SDL_GAMEPAD_AXIS_INVALID},
+    {"rpaddle_high", SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1, SDL_GAMEPAD_AXIS_INVALID},
+    {"lpaddle_low", SDL_GAMEPAD_BUTTON_LEFT_PADDLE2, SDL_GAMEPAD_AXIS_INVALID},
+    {"rpaddle_low", SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2, SDL_GAMEPAD_AXIS_INVALID},
 }};
 
 // A pad button's name as the layout's prompts show it: the face buttons by position, the rest by
@@ -278,22 +283,31 @@ QString PadText(std::string_view layout, std::string_view name) {
     }
     struct Names {
         std::string_view layout;
-        std::array<std::string_view, 12> text;
+        std::array<std::string_view, 16> text;
     };
-    // cross circle square triangle l1 r1 l2 r2 l3 r3 options back
+    // cross circle square triangle l1 r1 l2 r2 l3 r3 options back, then the back paddles: upper
+    // left, upper right, lower left, lower right
     static constexpr std::array<Names, 5> Layouts{{
-        {"xbox", {"A", "B", "X", "Y", "LB", "RB", "LT", "RT", "LS", "RS", "Menu", "View"}},
-        {"switch", {"B", "A", "Y", "X", "L", "R", "ZL", "ZR", "LS", "RS", "+", "\xe2\x88\x92"}},
-        {"steamdeck", {"A", "B", "X", "Y", "L1", "R1", "L2", "R2", "L3", "R3", "Menu", "View"}},
+        {"xbox",
+         {"A", "B", "X", "Y", "LB", "RB", "LT", "RT", "LS", "RS", "Menu", "View", "P3", "P1", "P4",
+          "P2"}},
+        {"switch",
+         {"B", "A", "Y", "X", "L", "R", "ZL", "ZR", "LS", "RS", "+", "\xe2\x88\x92", "GL", "GR",
+          "SR", "SL"}},
+        {"steamdeck",
+         {"A", "B", "X", "Y", "L1", "R1", "L2", "R2", "L3", "R3", "Menu", "View", "L4", "R4", "L5",
+          "R5"}},
         {"steamcontroller",
-         {"A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Stick", "Right Pad", "Start", "Back"}},
+         {"A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Stick", "Right Pad", "Start", "Back", "L4",
+          "R4", "L5", "R5"}},
         {"playstation",
          {"Cross", "Circle", "Square", "Triangle", "L1", "R1", "L2", "R2", "L3", "R3", "OPTIONS",
-          "SHARE"}},
+          "SHARE", "LB", "RB", "L Fn", "R Fn"}},
     }};
-    static constexpr std::array<std::string_view, 12> Order{
-        "cross", "circle", "square", "triangle", "l1",      "r1",
-        "l2",    "r2",     "l3",     "r3",       "options", "back"};
+    static constexpr std::array<std::string_view, 16> Order{
+        "cross",        "circle",       "square",      "triangle",   "l1",      "r1",
+        "l2",           "r2",           "l3",          "r3",         "options", "back",
+        "lpaddle_high", "rpaddle_high", "lpaddle_low", "rpaddle_low"};
     const auto names = std::ranges::find(Layouts, layout, &Names::layout);
     const Names& chosen = names != Layouts.end() ? *names : Layouts.back();
     if (const auto at = std::ranges::find(Order, name); at != Order.end()) {
@@ -604,9 +618,11 @@ private:
 
 struct Editor {
     KeyBindings keys;
-    // The Button Bindings dialog edits buttons, named as layout's prompts show them.
+    // The Button Bindings dialog edits buttons and back paddles, named as layout's prompts show
+    // them.
     bool pad = false;
-    PadBindings buttons;
+    Input::PadBindings::Map buttons;
+    Input::PadBindings::Map paddles;
     std::string layout;
     u32 type = 0;
     u32 game_type = 0;
@@ -615,15 +631,25 @@ struct Editor {
     QLabel* status = nullptr;
 };
 
-// The pad button bound to the PlayStation button a function is on in the type shown; blank for a
-// function on a stick, a flick or a combination.
+// The pad button bound to the PlayStation button a function is on in the type shown, then the
+// back paddles that press it too; blank for a function on a stick, a flick or a combination.
 QString PadCell(const Editor& editor, const Game::Function& function) {
     const std::string_view button = GameButton(function, editor.type);
     if (button.empty()) {
         return {};
     }
-    const auto bound = editor.buttons.find(button);
-    return PadText(editor.layout, bound != editor.buttons.end() ? bound->second : std::string{});
+    QStringList names;
+    if (const auto bound = editor.buttons.find(button);
+        bound != editor.buttons.end() && !bound->second.empty()) {
+        names.append(PadText(editor.layout, bound->second));
+    }
+    for (const std::string_view paddle : Input::PadBindings::Paddles()) {
+        if (const auto bound = editor.paddles.find(paddle);
+            bound != editor.paddles.end() && bound->second == button) {
+            names.append(PadText(editor.layout, paddle));
+        }
+    }
+    return names.isEmpty() ? PadText(editor.layout, {}) : names.join(QStringLiteral(", "));
 }
 
 // The pad column shows the type's pad inputs; the key column is the same in every type, and the
@@ -657,7 +683,7 @@ QString FunctionsOn(const Editor& editor, std::string_view button) {
 }
 
 // Takes a pad button for the selected function's PlayStation button. A pad button that another
-// PlayStation button had moves to this one.
+// PlayStation button had moves to this one, and a back paddle presses it beside its pad button.
 void ChangeButton(Editor& editor, int row) {
     const Game::Function& function = Game::Functions()[row];
     const QString label = Tr(function.label);
@@ -673,6 +699,14 @@ void ChangeButton(Editor& editor, int row) {
     if (input.empty()) {
         editor.status->setText(
             Tr("No button was pressed; {0} keeps its button.", {label.toStdString()}));
+        return;
+    }
+    if (Input::PadBindings::IsPaddle(input)) {
+        editor.paddles[input] = std::string(button);
+        ShowRows(editor);
+        editor.status->setText(
+            Tr("{0} now also does {1}.",
+               {PadText(editor.layout, input).toStdString(), label.toStdString()}));
         return;
     }
     QString status =
@@ -822,13 +856,16 @@ bool ShowEditor(QWidget* owner, Editor& editor, u32 control_type) {
                            GameButton(Game::Functions()[row], editor.type);
                        !button.empty()) {
                 editor.buttons[std::string(button)].clear();
+                std::erase_if(editor.paddles,
+                              [&](const auto& paddle) { return paddle.second == button; });
             }
             ShowRows(editor);
         }
     });
     QObject::connect(defaults, &QPushButton::clicked, &dialog, [&editor] {
         if (editor.pad) {
-            editor.buttons = DefaultPadBindings();
+            editor.buttons = DefaultPadBindings().buttons;
+            editor.paddles.clear();
         } else {
             editor.keys = DefaultKeyBindings();
         }
@@ -855,16 +892,17 @@ std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& ke
     return editor.keys;
 }
 
-std::optional<PadBindings> EditPadBindings(QWidget* owner, const PadBindings& buttons,
+std::optional<PadBindings> EditPadBindings(QWidget* owner, const PadBindings& bindings,
                                            u32 control_type, std::string_view layout) {
     Editor editor;
     editor.pad = true;
-    editor.buttons = buttons;
+    editor.buttons = bindings.buttons;
+    editor.paddles = bindings.paddles;
     editor.layout = layout;
     if (!ShowEditor(owner, editor, control_type)) {
         return std::nullopt;
     }
-    return editor.buttons;
+    return PadBindings{editor.buttons, editor.paddles};
 }
 
 std::string CaptureCombination(QWidget* owner, const QString& function, bool pad) {

@@ -144,6 +144,7 @@
     "Pick a game function first.": "Välj en spelfunktion först.",
     "No key was pressed; {0} keeps its key.": "Ingen tangent trycktes ned; ”{0}” behåller sin tangent.",
     "{0} now does {1}.": "{0} styr nu ”{1}”.",
+    "{0} now also does {1}.": "{0} styr nu också ”{1}”.",
     "{0} has no key now.": "”{0}” har nu ingen tangent.",
     "{0} (in use)": "{0} (används)",
     "Game Function": "Spelfunktion",

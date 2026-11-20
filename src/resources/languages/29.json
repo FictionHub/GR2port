@@ -144,6 +144,7 @@
     "Pick a game function first.": "Pilih fungsi game terlebih dahulu.",
     "No key was pressed; {0} keeps its key.": "Tidak ada tombol ditekan; {0} tetap memakai tombolnya.",
     "{0} now does {1}.": "{0} sekarang melakukan {1}.",
+    "{0} now also does {1}.": "{0} sekarang juga melakukan {1}.",
     "{0} has no key now.": "{0} sekarang tidak punya tombol.",
     "{0} (in use)": "{0} (dipakai)",
     "Game Function": "Fungsi Game",

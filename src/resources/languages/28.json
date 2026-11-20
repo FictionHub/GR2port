@@ -144,6 +144,7 @@
     "Pick a game function first.": "Hãy chọn một chức năng trò chơi trước.",
     "No key was pressed; {0} keeps its key.": "Không có phím nào được nhấn; {0} giữ nguyên phím.",
     "{0} now does {1}.": "{0} giờ thực hiện {1}.",
+    "{0} now also does {1}.": "{0} giờ cũng thực hiện {1}.",
     "{0} has no key now.": "{0} giờ không có phím.",
     "{0} (in use)": "{0} (đang dùng)",
     "Game Function": "Chức năng trò chơi",

@@ -70,10 +70,15 @@ KeyBindings ReadKeyBindings(const std::filesystem::path& file);
 bool SaveKeyBindings(const std::filesystem::path& file, const KeyBindings& keys);
 
 /// The pad button that presses each PlayStation button the game's functions use, by the input
-/// config's names: "cross" -> "r1" means R1 presses cross. A button left out has none.
-using PadBindings = std::map<std::string, std::string, std::less<>>;
+/// config's names: "cross" -> "r1" means R1 presses cross. A button left out has none. Each back
+/// paddle in paddles presses a button beside that button's own pad button: "lpaddle_high" ->
+/// "cross" means the upper left paddle presses cross too.
+struct PadBindings {
+    std::map<std::string, std::string, std::less<>> buttons;
+    std::map<std::string, std::string, std::less<>> paddles;
+};
 
-/// Each button presses itself, and Back presses the touch pad.
+/// Each button presses itself, Back presses the touch pad, and the back paddles press nothing.
 PadBindings DefaultPadBindings();
 
 /// The input config's controller lines for those buttons; the defaults when it has none.

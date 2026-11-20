@@ -144,6 +144,7 @@
     "Pick a game function first.": "请先选择一项游戏功能。",
     "No key was pressed; {0} keeps its key.": "未按下任何按键；“{0}”的按键保持不变。",
     "{0} now does {1}.": "已将“{0}”分配给“{1}”。",
+    "{0} now also does {1}.": "已将“{0}”也分配给“{1}”。",
     "{0} has no key now.": "“{0}”现在没有按键。",
     "{0} (in use)": "{0}（使用中）",
     "Game Function": "游戏功能",

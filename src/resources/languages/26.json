@@ -144,6 +144,7 @@
     "Pick a game function first.": "Alege mai întâi o funcție a jocului.",
     "No key was pressed; {0} keeps its key.": "Nicio tastă apăsată; {0} își păstrează tasta.",
     "{0} now does {1}.": "{0} face acum {1}.",
+    "{0} now also does {1}.": "{0} face acum și {1}.",
     "{0} has no key now.": "{0} nu mai are tastă.",
     "{0} (in use)": "{0} (în uz)",
     "Game Function": "Funcție joc",

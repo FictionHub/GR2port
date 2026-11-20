@@ -144,6 +144,7 @@
     "Pick a game function first.": "Escolha primeiro uma função do jogo.",
     "No key was pressed; {0} keeps its key.": "Nenhuma tecla pressionada; {0} mantém sua tecla.",
     "{0} now does {1}.": "{0} agora faz {1}.",
+    "{0} now also does {1}.": "{0} agora também faz {1}.",
     "{0} has no key now.": "{0} agora está sem tecla.",
     "{0} (in use)": "{0} (em uso)",
     "Game Function": "Função do jogo",

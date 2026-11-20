@@ -20,9 +20,9 @@ std::optional<KeyBindings> EditKeyBindings(HWND owner, const KeyBindings& keys, 
 
 /// Shows the Button Bindings dialog over owner, opened on the control type the game used last,
 /// naming the pad's buttons as layout's prompts show them ("xbox", "switch", ...). Returns the
-/// edited buttons on OK.
-std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& buttons, u32 control_type,
-                                           std::string_view layout);
+/// edited buttons and back paddles on OK.
+std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& bindings,
+                                           u32 control_type, std::string_view layout);
 
 /// Waits over owner for up to three keys, or pad buttons when pad is set, held together until all
 /// are released, and returns them as an input config line's inputs ("lctrl, t"). Empty when the

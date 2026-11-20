@@ -144,6 +144,7 @@
     "Pick a game function first.": "먼저 게임 기능을 선택하세요.",
     "No key was pressed; {0} keeps its key.": "키를 누르지 않았습니다. {0}의 키는 그대로 유지됩니다.",
     "{0} now does {1}.": "{0}에 {1} 기능을 지정했습니다.",
+    "{0} now also does {1}.": "{0}에도 {1} 기능을 지정했습니다.",
     "{0} has no key now.": "{0}의 키는 해제했습니다.",
     "{0} (in use)": "{0}(사용 중)",
     "Game Function": "게임 기능",

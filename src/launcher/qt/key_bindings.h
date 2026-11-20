@@ -22,8 +22,8 @@ std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& ke
 
 /// Shows the Button Bindings dialog over owner, opened on the control type the game used last,
 /// naming the pad's buttons as layout's prompts show them ("xbox", "switch", ...). Returns the
-/// edited buttons on OK.
-std::optional<PadBindings> EditPadBindings(QWidget* owner, const PadBindings& buttons,
+/// edited buttons and back paddles on OK.
+std::optional<PadBindings> EditPadBindings(QWidget* owner, const PadBindings& bindings,
                                            u32 control_type, std::string_view layout);
 
 /// Waits over owner for up to three keys, or pad buttons when pad is set, held together until all

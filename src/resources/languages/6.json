@@ -144,6 +144,7 @@
     "Pick a game function first.": "Kies eerst een spelfunctie.",
     "No key was pressed; {0} keeps its key.": "Geen toets ingedrukt; ‘{0}’ behoudt de huidige toets.",
     "{0} now does {1}.": "{0} voert nu ‘{1}’ uit.",
+    "{0} now also does {1}.": "{0} voert nu ook ‘{1}’ uit.",
     "{0} has no key now.": "‘{0}’ heeft nu geen toets meer.",
     "{0} (in use)": "{0} (in gebruik)",
     "Game Function": "Spelfunctie",

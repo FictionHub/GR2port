@@ -144,6 +144,7 @@
     "Pick a game function first.": "Velg en spillfunksjon først.",
     "No key was pressed; {0} keeps its key.": "Ingen tast ble trykket; {0} beholder tasten sin.",
     "{0} now does {1}.": "{0} gjør nå {1}.",
+    "{0} now also does {1}.": "{0} gjør nå også {1}.",
     "{0} has no key now.": "{0} har ingen tast nå.",
     "{0} (in use)": "{0} (i bruk)",
     "Game Function": "Spillfunksjon",

@@ -258,14 +258,14 @@ bool SaveKeyBindings(const std::filesystem::path& file, const KeyBindings& keys)
 }
 
 PadBindings DefaultPadBindings() {
-    return Input::PadBindings::Defaults();
+    return {Input::PadBindings::Defaults(), {}};
 }
 
 PadBindings ReadPadBindings(const std::filesystem::path& file) {
-    return Input::PadBindings::Read(file);
+    return {Input::PadBindings::Read(file), Input::PadBindings::ReadPaddles(file)};
 }
 
-bool SavePadBindings(const std::filesystem::path& file, const PadBindings& buttons) {
+bool SavePadBindings(const std::filesystem::path& file, const PadBindings& bindings) {
     const auto blank = [](std::string_view line) {
         return std::ranges::all_of(line, [](unsigned char c) { return std::isspace(c) != 0; });
     };
@@ -290,9 +290,15 @@ bool SavePadBindings(const std::filesystem::path& file, const PadBindings& butto
         block.emplace_back("# Controller bindings");
     }
     for (const std::string_view button : Input::PadBindings::GameButtons()) {
-        const auto bound = buttons.find(button);
-        const bool none = bound == buttons.end() || bound->second.empty();
+        const auto bound = bindings.buttons.find(button);
+        const bool none = bound == bindings.buttons.end() || bound->second.empty();
         block.push_back(std::string(button) + " = " + (none ? "unmapped" : bound->second));
+    }
+    for (const std::string_view paddle : Input::PadBindings::Paddles()) {
+        if (const auto bound = bindings.paddles.find(paddle);
+            bound != bindings.paddles.end() && !bound->second.empty()) {
+            block.push_back(bound->second + " = " + std::string(paddle));
+        }
     }
     const size_t at = block_at.value_or(lines.size());
     if (at < lines.size() && !blank(lines[at])) {
