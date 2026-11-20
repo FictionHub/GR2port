@@ -1344,6 +1344,9 @@ inline constexpr u32 UiDrawAnchored = 2;
 inline constexpr u32 UiDrawFinder = 4;
 /// A movie's frame copied over the whole picture: a movie the game plays on the screen.
 inline constexpr u32 UiDrawMovie = 8;
+/// A Transform program's draw whose matrix gives no depth, its third row zero: a comic page's
+/// camera, which keeps the 16:9 shape.
+inline constexpr u32 UiDrawNoDepth = 16;
 
 /// Consecutive screen draws of one target, pair of programs, blend, primitive type and viewport:
 /// x, y, width and height, with a negative height where the game's y scale is.

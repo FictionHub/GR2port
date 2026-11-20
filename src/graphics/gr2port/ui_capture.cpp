@@ -665,6 +665,17 @@ void Writer::Draw(u32 opcode, const u32* body) {
             drop("no vertex constants");
             return;
         }
+        // The Transform programs place a vertex by the 4x4 matrix at the start of their
+        // constants, column by column, and never read its third row.
+        if (vertex_index == static_cast<u32>(Scene::UiVertexProgram::Transform) ||
+            vertex_index == static_cast<u32>(Scene::UiVertexProgram::TransformB)) {
+            const auto matrix =
+                Load<std::array<float, 16>>(ReadBuffer(vs_user + VsUserConstants).base);
+            if (matrix[2] == 0.0f && matrix[6] == 0.0f && matrix[10] == 0.0f &&
+                matrix[14] == 0.0f) {
+                draw.flags |= Scene::UiDrawNoDepth;
+            }
+        }
     }
     if (vertex_program->palette) {
         draw.vs_palette = constants_of(stroke ? &g_sh[ShUserDataGs] : vs_user + VsUserPalette);

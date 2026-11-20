@@ -11,8 +11,11 @@
 // shape, and text keeps its place in it. A corner at the target's edge along a scaled axis stays
 // there, so a layer that reaches the edge, such as a backdrop, a fade or the vignette's sides,
 // still reaches it. A triangle drawn in perspective, such as a pause menu button, stays as drawn:
-// its camera already has the screen's shape. A movie the game plays on the screen keeps its 16:9
-// shape too, its sides included. The viewfinder narrows as before, by the fit scale.
+// its camera already has the screen's shape. A comic page's camera keeps the 16:9 shape and gives
+// no depth, so a triangle in perspective with no depth fits too. Its panels slide past the screen's
+// edges, so there a corner stays at the edge only on an axis where the triangle reaches both edges,
+// as the page's paper does. A movie the game plays on the screen keeps its 16:9 shape too, its
+// sides included. The viewfinder narrows as before, by the fit scale.
 // TEXT_ATTRIBUTES is the vertex program's outputs, 1 or 2.
 
 #extension GL_EXT_buffer_reference : require
@@ -42,6 +45,7 @@ const uint DrawText = 1u;
 const uint DrawAnchored = 2u;
 const uint DrawFinder = 4u;
 const uint DrawMovie = 8u;
+const uint DrawNoDepth = 16u;
 // The viewfinder's window: the middle 1024 x 1024 of the game's 1920 x 1080 canvas.
 const vec2 FinderEdge = vec2(512.0 / 960.0, 512.0 / 540.0);
 
@@ -104,9 +108,27 @@ void main() {
     }
     const bool finder = (flags & DrawFinder) != 0u;
     const bool scaled = any(lessThan(fit_scale, vec2(1.0)));
-    bool fit = scaled && !finder;
+    bool affine = true;
+    bool depthless = (flags & DrawNoDepth) != 0u;
     for (int i = 0; i < 3; i++) {
-        fit = fit && abs(gl_in[i].gl_Position.w - 1.0) < 1.0e-3;
+        affine = affine && abs(gl_in[i].gl_Position.w - 1.0) < 1.0e-3;
+        depthless = depthless && gl_in[i].gl_Position.w > 0.0;
+    }
+    const bool fit = scaled && !finder && (affine || depthless);
+    // The axes on which the triangle reaches both of the target's edges.
+    bvec2 spans = bvec2(true);
+    if (fit && !affine) {
+        vec2 target_low = vec2(1.0e30);
+        vec2 target_high = vec2(-1.0e30);
+        for (int i = 0; i < 3; i++) {
+            const vec2 at = ToTarget(gl_in[i].gl_Position.xy / gl_in[i].gl_Position.w);
+            target_low = min(target_low, at);
+            target_high = max(target_high, at);
+        }
+        spans = bvec2(lessThanEqual(target_low, vec2(-EdgeReach)).x &&
+                          greaterThanEqual(target_high, vec2(EdgeReach)).x,
+                      lessThanEqual(target_low, vec2(-EdgeReach)).y &&
+                          greaterThanEqual(target_high, vec2(EdgeReach)).y);
     }
     const vec2 finder_scale = scaled ? fit_scale : text_scale;
     const bool movie = (flags & DrawMovie) != 0u;
@@ -122,7 +144,9 @@ void main() {
         }
         if (fit) {
             const vec2 at = ToTarget(position.xy / position.w);
-            const bvec2 edge = movie ? bvec2(false) : greaterThanEqual(abs(at), vec2(EdgeReach));
+            const bvec2 reach = greaterThanEqual(abs(at), vec2(EdgeReach));
+            const bvec2 edge =
+                movie ? bvec2(false) : bvec2(reach.x && spans.x, reach.y && spans.y);
             position.xy = FromTarget(mix(at * fit_scale, at, edge)) * position.w;
         }
         gl_Position = position;
