@@ -31,6 +31,7 @@
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
 #include "graphics/gr2port/device_lost.h"
+#include "graphics/gr2port/settings.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -202,6 +203,18 @@ int main(int argc, char* argv[]) {
     if (!Gr2Port::GameCheck::HoldUserFolder()) {
         return 1;
     }
+
+    // --fullscreen sets the Setup screen's Fullscreen option, which the launcher then shows.
+    if (fullscreenStr) {
+        if (*fullscreenStr != "true" && *fullscreenStr != "false") {
+            LOG_ERROR(Debug, "Invalid argument for --fullscreen (use true|false)");
+            return 1;
+        }
+        const bool fullscreen = *fullscreenStr == "true";
+        Gr2Port::Settings::Update(
+            [&](Gr2Port::Settings::Values& values) { values.display.fullscreen = fullscreen; });
+    }
+
     // GR2port starts only Gravity Rush 2 v1.11 from its own folder, and checks the dump each time.
     const std::optional<Gr2Port::GameCheck::Game> game = Gr2Port::GameCheck::Find();
     if (!game) {
@@ -221,17 +234,6 @@ int main(int argc, char* argv[]) {
 
     if (ignoreGamePatch)
         Core::FileSys::MntPoints::ignore_game_patches = true;
-
-    if (fullscreenStr) {
-        if (*fullscreenStr == "true") {
-            EmulatorSettings.SetFullScreen(true);
-        } else if (*fullscreenStr == "false") {
-            EmulatorSettings.SetFullScreen(false);
-        } else {
-            LOG_ERROR(Debug, "Invalid argument for --fullscreen (use true|false)");
-            return 1;
-        }
-    }
 
     if (showFps)
         EmulatorSettings.SetShowFpsCounter(true);
