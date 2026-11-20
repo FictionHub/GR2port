@@ -8,9 +8,19 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <b>GR2port - a genuine native PC port for Gravity Rush 2</b>
 </h1>
 
-**No CPU emulation, no GPU emulation, no GPU command translation, no shader recompiler:** GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC. **The game's graphics were completely rewritten for PC** via a native Vulkan renderer (the game’s render passes have been rebuilt as its own Vulkan code: `glass.cpp, shadows.cpp, countours.cpp, deformers.cpp, enemies.cpp, world.cpp` etc.) in `src/graphics/gr2port` that runs **handwritten plus recompiled GLSL shaders** in `src/graphics/gr2port/shaders` that recreate visuals produced by the original GCN shaders. To reiterate, the game's render passes are NOT EMULATED OR STATICALLY RECOMPILED IN ANY SHAPE OR FORM - they were completely rewritten. As mentioned, some more complex shaders were recompiled to GLSL rather than handwritten. This however, only adds to slight GPU overhead rather than CPU overhead and are in the process of being replaced.
-Each frame, GR2port takes the game's scene at the start of its frame graph and draws it on its own render thread, so it never builds or translates per-draw PS4 GPU commands. **The CPU overhead of the native renderer was measured as only 0.8ms in frame time**. **As a disclaimer, this port does not rewrite the entire source code of the game. The original game logic is patched via a runtime memory patcher for enhancements. It does, however, port the graphics source code by reverse engineering each pass and rewriting each of them natively for Vulkan** (this is not static recompilation).  <b>
+**No CPU emulation, no GPU emulation, no GPU command translation, no shader recompiler:** GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC. **The game's graphics were completely rewritten for PC** via a native Vulkan renderer (the game’s render passes have been rebuilt as its own Vulkan code: `glass.cpp, shadows.cpp, countours.cpp, deformers.cpp, enemies.cpp, world.cpp` etc.) in `src/graphics/gr2port` that runs **handwritten plus recompiled GLSL shaders** in `src/graphics/gr2port/shaders` that recreate visuals produced by the original GCN shaders. 
+
 <b>
+  
+To reiterate, the game's render passes are **NOT EMULATED OR STATICALLY RECOMPILED IN ANY SHAPE OR FORM** - they were completely rewritten. As mentioned, some more complex shaders were recompiled to GLSL rather than handwritten. This, however, only adds slight GPU overhead rather than CPU overhead and is in the process of being replaced.
+Each frame, GR2port takes the game's scene at the start of its frame graph and draws it on its own render thread, so it never builds or translates per-draw PS4 GPU commands. **The CPU overhead of the native renderer was measured as only 0.8ms in frame time**. 
+
+<b>
+
+**As a disclaimer, this port does not rewrite the entire source code of the game (just the graphics source code). Since the game's executable already contains x86-64 code, a developmental shortcut was made to natively execute the code in the game's executable directly.  It does, however, port the graphics by reverse engineering each graphical pass and rewriting them natively for Vulkan** (this is not static recompilation). The original game logic is patched via a runtime memory patcher for PC enhancements and to prevent the game from wasting resources building PS4 GPU Commands (unused by the native renderer). Thus, this project is a fully native runtime that runs Gravity Rush 2 by natively executing original code and porting (rewriting not recompiling AOT/JIT) the game's graphics renderer.
+
+<b>
+  
 **All shader pipelines are precompiled** at boot and stored on disk so there is no shader stutter during gameplay. A runtime translates the firmware libraries the game calls on the PS4's operating system into native PC operating system solutions (little to no performance overhead like WINE).
 
 <img width="1904" height="1200" alt="ep03_5_12" src="https://github.com/user-attachments/assets/39858c3f-7500-4adb-ab9b-ecb0614aa6f8" /></b>
