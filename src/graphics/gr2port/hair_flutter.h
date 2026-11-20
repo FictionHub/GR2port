@@ -19,11 +19,17 @@ class CodeGenerator;
 // above 30 fps the air stays under it and the hair stops fluttering. One stub here scales the
 // limit by the game step's time in 30 fps frames, which is 1 at 30 fps. The excess then scales
 // with the frame's time as well, and so do the wave's push and its phase's advance.
-// The float's push along Kat's hair stays the same in every frame instead, so the air of a float
-// would grow with the frame rate. The other stub scales it the same way.
+// The float's push along Kat's hair and the swirl that Kat's update pushes it by in some states
+// stay the same in every frame instead, so their air would grow with the frame rate and keep the
+// hair above the limit. Two more stubs scale them the same way.
+// The wave's push is a speed the node keeps, less the node's drag in each step. A 30 fps step
+// follows a fast wave poorly, while smaller and more frequent steps follow it closely, so in a
+// strong wind the hair swings several times as far. A last stub scales the push down to the
+// swing a 30 fps step gives the wave.
 namespace Gr2Port::HairFlutter {
 
-/// Scales the hair's flutter limit and the float's push on the hair by the game step's time.
+/// Scales the hair's flutter limit and the float's and Kat's swirl's pushes on the hair by the
+/// game step's time, and the wave's push to the hair's swing at 30 fps.
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
 } // namespace Gr2Port::HairFlutter
