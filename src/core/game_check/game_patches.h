@@ -52,7 +52,7 @@ inline constexpr std::array Aspects{
     Aspect{"16:10", "Resolution/No upscaling/16:10", 16.0f / 10.0f, true},
     Aspect{"21:10", "Resolution/No upscaling/Ultrawide 21:10", 21.0f / 10.0f, true},
     Aspect{"21:9", "Resolution/No upscaling/Ultrawide 21:9", 7.0f / 3.0f, true},
-    Aspect{"2.39:1", "Resolution/No upscaling/Ultrawide 2.39:1", 2.39f, false},
+    Aspect{"2.39:1", "Resolution/No upscaling/Ultrawide 2.39:1", 2.39f, true},
     Aspect{"32:10", "Resolution/No upscaling/Super ultrawide 32:10", 32.0f / 10.0f, true},
     Aspect{"32:9", "Resolution/No upscaling/Super ultrawide 32:9", 32.0f / 9.0f, true},
 };
