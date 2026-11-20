@@ -7,6 +7,7 @@
 #include "common/logging/log.h"
 #include "core/libraries/libs.h"
 #include "core/libraries/system/commondialog.h"
+#include "graphics/gr2port/window.h"
 #include "savedatadialog.h"
 #include "savedatadialog_ui.h"
 
@@ -85,6 +86,8 @@ Error PS4_SYSV_ABI sceSaveDataDialogOpen(const OrbisSaveDataDialogParam* param) 
     g_state = SaveDialogState{*param};
     g_status = Status::RUNNING;
     g_save_dialog_ui = SaveDialogUi(&g_state, &g_status, &g_result);
+    // GR2port: the mouse picks the dialog's saves and buttons until it finishes.
+    Gr2Port::Window::FreeCursor(true);
     return Error::OK;
 }
 

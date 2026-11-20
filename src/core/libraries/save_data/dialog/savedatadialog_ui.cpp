@@ -12,6 +12,7 @@
 #include "core/file_format/psf.h"
 #include "core/file_sys/fs.h"
 #include "core/libraries/save_data/save_instance.h"
+#include "graphics/gr2port/window.h"
 #include "imgui/imgui_std.h"
 #include "savedatadialog_ui.h"
 
@@ -370,6 +371,10 @@ void SaveDialogUi::Finish(ButtonId buttonId, Result r) {
         }
     }
     if (status) {
+        // GR2port: the camera takes the mouse back from the dialog.
+        if (*status == Status::RUNNING) {
+            Gr2Port::Window::FreeCursor(false);
+        }
         *status = Status::FINISHED;
     }
     RemoveLayer(this);

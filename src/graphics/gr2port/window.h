@@ -43,4 +43,8 @@ void Apply();
 /// the monitor it is on.
 void ToggleFullscreen();
 
+/// Any thread: if free is true, shows the cursor and lets it move over the window, where a
+/// prompt's buttons take the mouse; otherwise hides and holds it again for the camera.
+void FreeCursor(bool free);
+
 } // namespace Gr2Port::Window

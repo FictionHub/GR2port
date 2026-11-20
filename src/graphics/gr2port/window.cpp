@@ -184,6 +184,21 @@ void SDLCALL ApplyOnMainThread(void*) {
     SDL_SetWindowSize(g_window, static_cast<int>(display.width), static_cast<int>(display.height));
 }
 
+// Main thread: the mouse's mode before a prompt freed the cursor, while the cursor is free.
+Input::MouseMode g_freed_mode = Input::MouseMode::Off;
+
+// While the cursor is free, the mouse turns neither the camera nor the stick.
+void SDLCALL FreeCursorOnMainThread(void*) {
+    g_freed_mode = Input::GetMouseMode();
+    Input::SetMouseMode(Input::MouseMode::Off);
+    SDL_SetWindowRelativeMouseMode(g_window, false);
+}
+
+void SDLCALL HoldCursorOnMainThread(void*) {
+    Input::SetMouseMode(g_freed_mode);
+    SDL_SetWindowRelativeMouseMode(g_window, !Input::IsTouchpadSwipeEnabled());
+}
+
 } // namespace
 
 SDL_Window* Open() {
@@ -265,6 +280,14 @@ void ToggleFullscreen() {
         }
     } else {
         EnterFullscreen(SDL_GetDisplayForWindow(g_window), Settings::Get().display);
+    }
+}
+
+void FreeCursor(bool free) {
+    if (!SDL_RunOnMainThread(free ? &FreeCursorOnMainThread : &HoldCursorOnMainThread, nullptr,
+                             false)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the main thread did not take the cursor: {}",
+                  SDL_GetError());
     }
 }
 
