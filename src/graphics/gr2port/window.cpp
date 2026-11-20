@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <atomic>
+#include <cmath>
+#include <mutex>
+#include <set>
+#include <utility>
+#include <vector>
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
@@ -29,6 +34,11 @@ SDL_Window* g_window = nullptr;
 std::atomic<SDL_WindowID> g_window_id{0};
 // The pixel size, width in the high 32 bits.
 std::atomic<u64> g_size{0};
+std::mutex g_sizes_mutex;
+// Under g_sizes_mutex.
+std::vector<Size> g_monitor_sizes;
+// Main thread: the settings' display as the window last took it.
+Settings::Display g_shown;
 
 void StoreSize(int width, int height) {
     g_size.store(static_cast<u64>(width) << 32 | static_cast<u32>(height),
@@ -59,6 +69,34 @@ void StoreRefreshRate() {
     Vblank::SetRefreshRate(rate);
 }
 
+// Keeps the sizes of the monitor's modes of at least 800 x 600 and of its current mode, as the
+// launcher lists them.
+void StoreMonitorSizes() {
+    const SDL_DisplayID monitor = SDL_GetDisplayForWindow(g_window);
+    std::set<std::pair<u32, u32>> found;
+    const auto add = [&found](const SDL_DisplayMode& mode) {
+        if (mode.w >= 800 && mode.h >= 600 && std::lround(mode.refresh_rate) > 1) {
+            found.emplace(static_cast<u32>(mode.w), static_cast<u32>(mode.h));
+        }
+    };
+    int count = 0;
+    if (SDL_DisplayMode** const modes = SDL_GetFullscreenDisplayModes(monitor, &count)) {
+        for (int i = 0; i < count; ++i) {
+            add(*modes[i]);
+        }
+        SDL_free(modes);
+    }
+    if (const SDL_DisplayMode* const current = SDL_GetCurrentDisplayMode(monitor)) {
+        add(*current);
+    }
+    std::vector<Size> sizes;
+    for (const auto& [width, height] : found) {
+        sizes.push_back({width, height});
+    }
+    std::scoped_lock lock{g_sizes_mutex};
+    g_monitor_sizes = std::move(sizes);
+}
+
 bool SDLCALL WatchEvents(void*, SDL_Event* event) {
     if (event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED &&
         event->window.windowID == g_window_id.load(std::memory_order_relaxed)) {
@@ -69,6 +107,7 @@ bool SDLCALL WatchEvents(void*, SDL_Event* event) {
         (event->type == SDL_EVENT_WINDOW_DISPLAY_CHANGED &&
          event->window.windowID == g_window_id.load(std::memory_order_relaxed))) {
         StoreRefreshRate();
+        StoreMonitorSizes();
     }
     // Shift + Print Screen + F2 stops the capture, and starts it again. The picture stands still
     // while it is stopped, so no key alone does it.
@@ -123,6 +162,26 @@ void SDLCALL ShowOnMainThread(void*) {
     SDL_GetWindowSizeInPixels(g_window, &width, &height);
     StoreSize(width, height);
     StoreRefreshRate();
+    StoreMonitorSizes();
+    g_shown = display;
+}
+
+void SDLCALL ApplyOnMainThread(void*) {
+    const Settings::Display display = Settings::Get().display;
+    if (display.fullscreen == g_shown.fullscreen && display.exclusive == g_shown.exclusive &&
+        display.width == g_shown.width && display.height == g_shown.height) {
+        return;
+    }
+    g_shown = display;
+    if (display.fullscreen) {
+        EnterFullscreen(SDL_GetDisplayForWindow(g_window), display);
+        return;
+    }
+    if ((SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) != 0 &&
+        !SDL_SetWindowFullscreen(g_window, false)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: no windowed mode: {}", SDL_GetError());
+    }
+    SDL_SetWindowSize(g_window, static_cast<int>(display.width), static_cast<int>(display.height));
 }
 
 } // namespace
@@ -143,6 +202,9 @@ SDL_Window* Open() {
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, initial_height);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_VULKAN_BOOLEAN, true);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
+    // The swapchain takes the screen's own pixels on a scaled desktop. The window's size stays in
+    // the desktop's units.
+    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
     // The renderer shows it with its first picture.
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, true);
     g_window = SDL_CreateWindowWithProperties(props);
@@ -179,6 +241,18 @@ Size PixelSize() {
 
 u32 Id() {
     return g_window_id.load(std::memory_order_relaxed);
+}
+
+std::vector<Size> MonitorSizes() {
+    std::scoped_lock lock{g_sizes_mutex};
+    return g_monitor_sizes;
+}
+
+void Apply() {
+    if (g_window != nullptr && !SDL_RunOnMainThread(&ApplyOnMainThread, nullptr, false)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the main thread did not take the display settings: {}",
+                  SDL_GetError());
+    }
 }
 
 void ToggleFullscreen() {

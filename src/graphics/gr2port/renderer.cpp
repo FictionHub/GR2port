@@ -308,6 +308,8 @@ private:
     vk::Format snapshot_format = vk::Format::eUndefined;
     bool snapshot_wanted = false;
     bool needs_swapchain = false;
+    // The window's pixel size the swapchain was made for: the surface does not report every resize.
+    Window::Size swapchain_size{};
     // With an HDR window, the display's peak in paper whites, at least 1; else 0.
     float hdr_peak = 0.0f;
     Stats stats;
@@ -505,6 +507,7 @@ bool Thread::Init() {
 
 bool Thread::Recreate() {
     const Window::Size size = Window::PixelSize();
+    swapchain_size = size;
     if (d.device.waitIdle(d.dispatch) != vk::Result::eSuccess) {
         return false;
     }
@@ -1476,6 +1479,11 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     if (g_settings_changed.exchange(false, std::memory_order_acquire)) {
         TakeSettings();
     }
+    const Window::Size size = Window::PixelSize();
+    if (size.width != 0 && size.height != 0 &&
+        (size.width != swapchain_size.width || size.height != swapchain_size.height)) {
+        needs_swapchain = true;
+    }
     if ((needs_swapchain && !Recreate()) || !SizeScene(header, packet.data)) {
         SceneRing::Release(packet.slot);
         return;
@@ -1859,6 +1867,11 @@ Settings::Values Live(const Settings::Values& started, const Settings::Values& w
     to.field_of_view = from.field_of_view;
     to.screen_shake = from.screen_shake;
     live.display.vsync = wanted.display.vsync;
+    // The window takes these at once; Window::Apply shows them.
+    live.display.fullscreen = wanted.display.fullscreen;
+    live.display.exclusive = wanted.display.exclusive;
+    live.display.width = wanted.display.width;
+    live.display.height = wanted.display.height;
     return live;
 }
 

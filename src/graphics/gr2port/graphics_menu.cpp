@@ -28,6 +28,7 @@
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/ui.h"
 #include "graphics/gr2port/ui_capture.h"
+#include "graphics/gr2port/window.h"
 
 namespace Gr2Port::GraphicsMenu {
 
@@ -356,12 +357,24 @@ std::string Gigabytes(u32 megabytes) {
     return text + " GB";
 }
 
+// The monitor's sizes, and the saved one when it is none of them.
+std::vector<Window::Size> Resolutions(const Values& values) {
+    std::vector<Window::Size> sizes = Window::MonitorSizes();
+    const auto saved = [&](const Window::Size& size) {
+        return size.width == values.display.width && size.height == values.display.height;
+    };
+    if (std::ranges::none_of(sizes, saved)) {
+        sizes.push_back({values.display.width, values.display.height});
+    }
+    return sizes;
+}
+
 constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::Medium,
                                                     Quality::Off};
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
 
-const std::array<Setting, 27> Table{{
+const std::array<Setting, 29> Table{{
     {"Preset",
      [](const Values&) {
          Names names;
@@ -560,6 +573,35 @@ const std::array<Setting, 27> Table{{
      },
      [](Values& values, int choice) {
          values.game.render_size = std::string(GamePatches::RenderSizes[choice].name);
+     }},
+    {"Display Mode",
+     [](const Values&) { return Choices({"Windowed", "Fullscreen", "Exclusive Fullscreen"}); },
+     [](const Values& values) {
+         return values.display.fullscreen ? (values.display.exclusive ? 2 : 1) : 0;
+     },
+     [](Values& values, int choice) {
+         values.display.fullscreen = choice != 0;
+         values.display.exclusive = choice == 2;
+     }},
+    {"Monitor Resolution",
+     [](const Values& values) {
+         Names names;
+         for (const Window::Size& size : Resolutions(values)) {
+             names.push_back(std::to_string(size.width) + " x " + std::to_string(size.height));
+         }
+         return names;
+     },
+     [](const Values& values) {
+         const std::vector<Window::Size> sizes = Resolutions(values);
+         const auto found = std::ranges::find_if(sizes, [&](const Window::Size& size) {
+             return size.width == values.display.width && size.height == values.display.height;
+         });
+         return static_cast<int>(found - sizes.begin());
+     },
+     [](Values& values, int choice) {
+         const Window::Size size = Resolutions(values)[choice];
+         values.display.width = size.width;
+         values.display.height = size.height;
      }},
     {"VSync", [](const Values&) { return Choices({"Off", "Double Buffered", "Triple Buffered"}); },
      [](const Values& values) { return static_cast<int>(values.display.vsync); },
@@ -1046,6 +1088,10 @@ void CopyPage(const Values& values, Values& stored) {
     stored.game.render_size = values.game.render_size;
     stored.game.frame_rate = values.game.frame_rate;
     stored.display.vsync = values.display.vsync;
+    stored.display.fullscreen = values.display.fullscreen;
+    stored.display.exclusive = values.display.exclusive;
+    stored.display.width = values.display.width;
+    stored.display.height = values.display.height;
     stored.graphics.preset = std::string(Settings::MatchPreset(stored.game, stored.graphics));
 }
 
@@ -1067,6 +1113,7 @@ void Save(const Values& values) {
         }
         FieldOfView::Set(values.graphics.field_of_view);
         ScreenShake::Set(values.graphics.screen_shake);
+        Window::Apply();
         Renderer::SettingsChanged();
     }).detach();
 }

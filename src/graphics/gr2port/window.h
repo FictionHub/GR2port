@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "common/types.h"
 
 struct SDL_Window;
@@ -28,6 +30,14 @@ Size PixelSize();
 
 /// The window's SDL id, or 0 before Open. Any thread.
 u32 Id();
+
+/// The sizes of the display modes of the window's monitor, from the smallest, as the launcher
+/// lists them, as of the window's show or its last change of monitor or mode. Any thread.
+std::vector<Size> MonitorSizes();
+
+/// Any thread: shows the window as the settings choose it now, on the monitor it is on, when
+/// their fullscreen or size differ from the ones it last took.
+void Apply();
 
 /// Main thread: switches the window between windowed and fullscreen as the settings choose it, on
 /// the monitor it is on.
