@@ -112,6 +112,7 @@ enum Control : int {
     IdHdrPeak,
     IdHdrWhiteLabel,
     IdHdrWhite,
+    IdCrashCatcher,
     IdDlc,
     IdHalloween,
     IdSignUp,
@@ -458,8 +459,9 @@ struct Row {
     int top;
 };
 
-// Rows RowStep pixels apart below the check boxes, then the volume and the HDR rows. The page
-// scrolls to the ones below the tenth row, down to DisplayPageBottom.
+// Rows RowStep pixels apart below the check boxes, then the volume, the HDR rows and the GPU
+// Crash Catcher check box, in line with a row. The page scrolls to the ones below the tenth row,
+// down to DisplayPageBottom.
 constexpr int RowStep = 28;
 constexpr std::array Rows{
     Row{IdMonitorLabel, IdMonitor, L"Monitor", 140},
@@ -479,7 +481,8 @@ constexpr std::array HdrRows{
     Row{IdHdrPeakLabel, IdHdrPeak, L"HDR Peak Brightness", 496},
     Row{IdHdrWhiteLabel, IdHdrWhite, L"HDR Paper White", 524},
 };
-constexpr int DisplayPageBottom = 562;
+constexpr int CrashCatcherTop = 554;
+constexpr int DisplayPageBottom = 587;
 
 // In the order of Settings::VSync.
 constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
@@ -1663,6 +1666,7 @@ void Show(Dialog& dialog, const Settings::Display& display) {
     Select(Item(dialog, IdHdrPeak), IndexOf(Settings::HdrPeakLevels, display.hdr_peak_nits, 3));
     Select(Item(dialog, IdHdrWhite),
            IndexOf(Settings::HdrPaperWhiteLevels, display.hdr_paper_white_nits, 4));
+    Check(dialog, IdCrashCatcher, display.gpu_crash_catcher);
     UpdateEnabled(dialog);
 }
 
@@ -1694,6 +1698,7 @@ Settings::Display Read(const Dialog& dialog) {
     ReadChoice(Item(dialog, IdHdrPeak), Settings::HdrPeakLevels, display.hdr_peak_nits);
     ReadChoice(Item(dialog, IdHdrWhite), Settings::HdrPaperWhiteLevels,
                display.hdr_paper_white_nits);
+    display.gpu_crash_catcher = Checked(dialog, IdCrashCatcher);
     return display;
 }
 
@@ -1873,6 +1878,10 @@ void Build(HWND window, Dialog& dialog) {
     for (const Row& row : HdrRows) {
         add_row(row);
     }
+    page_order.push_back(MakeControl(dialog, display_page, page_origin, WC_BUTTONW,
+                                     L"GPU Crash Catcher", BS_AUTOCHECKBOX | WS_TABSTOP,
+                                     IdCrashCatcher, CheckLeft, CrashCatcherTop, CheckWidth,
+                                     CheckHeight));
     KeepTabOrder(page_order);
     // Sets the page's scroll bar to scroll it down to bottom.
     const auto set_scroll = [&](HWND page, int bottom) {

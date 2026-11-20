@@ -320,6 +320,7 @@
     "Field of View": "視野",
     "Screen Shake": "畫面震動",
     "Hide UI": "隱藏介面",
-    "Hide UI (Photo Mode)": "隱藏介面（拍照模式）"
+    "Hide UI (Photo Mode)": "隱藏介面（拍照模式）",
+    "GPU Crash Catcher": "GPU 當機偵測"
   }
 }

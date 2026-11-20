@@ -320,6 +320,7 @@
     "Field of View": "Zorné pole",
     "Screen Shake": "Otřesy obrazu",
     "Hide UI": "Skrýt rozhraní",
-    "Hide UI (Photo Mode)": "Skrýt rozhraní (fotorežim)"
+    "Hide UI (Photo Mode)": "Skrýt rozhraní (fotorežim)",
+    "GPU Crash Catcher": "Zachytávání pádů GPU"
   }
 }

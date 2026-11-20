@@ -320,6 +320,7 @@
     "Field of View": "Näkökenttä",
     "Screen Shake": "Näytön tärinä",
     "Hide UI": "Piilota käyttöliittymä",
-    "Hide UI (Photo Mode)": "Piilota käyttöliittymä (valokuvatila)"
+    "Hide UI (Photo Mode)": "Piilota käyttöliittymä (valokuvatila)",
+    "GPU Crash Catcher": "GPU-kaatumisten sieppaus"
   }
 }

@@ -320,6 +320,7 @@
     "Field of View": "Champ de vision",
     "Screen Shake": "Secousses de l'écran",
     "Hide UI": "Masquer l'interface",
-    "Hide UI (Photo Mode)": "Masquer l'interface (mode photo)"
+    "Hide UI (Photo Mode)": "Masquer l'interface (mode photo)",
+    "GPU Crash Catcher": "Détecteur de plantages GPU"
   }
 }

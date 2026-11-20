@@ -320,6 +320,7 @@
     "Field of View": "Synsfelt",
     "Screen Shake": "Skjermristing",
     "Hide UI": "Skjul grensesnittet",
-    "Hide UI (Photo Mode)": "Skjul grensesnittet (fotomodus)"
+    "Hide UI (Photo Mode)": "Skjul grensesnittet (fotomodus)",
+    "GPU Crash Catcher": "GPU-krasjfanger"
   }
 }

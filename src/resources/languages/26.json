@@ -320,6 +320,7 @@
     "Field of View": "Câmp vizual",
     "Screen Shake": "Tremurul ecranului",
     "Hide UI": "Ascunde interfața",
-    "Hide UI (Photo Mode)": "Ascunde interfața (modul foto)"
+    "Hide UI (Photo Mode)": "Ascunde interfața (modul foto)",
+    "GPU Crash Catcher": "Detector de blocări GPU"
   }
 }

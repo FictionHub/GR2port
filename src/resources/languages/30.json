@@ -320,6 +320,7 @@
     "Field of View": "Поле зору",
     "Screen Shake": "Тремтіння екрана",
     "Hide UI": "Сховати інтерфейс",
-    "Hide UI (Photo Mode)": "Сховати інтерфейс (фоторежим)"
+    "Hide UI (Photo Mode)": "Сховати інтерфейс (фоторежим)",
+    "GPU Crash Catcher": "Перехоплення збоїв GPU"
   }
 }

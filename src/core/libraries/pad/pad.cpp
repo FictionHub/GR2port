@@ -9,6 +9,7 @@
 #include "core/libraries/libs.h"
 #include "core/libraries/pad/pad_errors.h"
 #include "core/user_settings.h"
+#include "graphics/gr2port/catcher_note.h"
 #include "graphics/gr2port/photo_ui.h"
 #include "imgui/renderer/imgui_core.h"
 #include "input/controller.h"
@@ -390,6 +391,9 @@ int ProcessStates(OrbisPadData* pData, const Input::State* states, s32 num) {
             continue;
         }
 
+        if (Gr2Port::Catcher::On) { // GR2port
+            Gr2Port::Catcher::NotePad(i, static_cast<u32>(states[i].buttonsState));
+        }
         pData[i].buttons = states[i].buttonsState;
         pData[i].leftStick.x = states[i].axes[static_cast<int>(Input::Axis::LeftX)];
         pData[i].leftStick.y = states[i].axes[static_cast<int>(Input::Axis::LeftY)];

@@ -225,6 +225,7 @@ Values FromJson(const json& root) {
     display.hdr_peak_nits = ReadU32(section, "hdr_peak_nits", display.hdr_peak_nits);
     display.hdr_paper_white_nits =
         ReadU32(section, "hdr_paper_white_nits", display.hdr_paper_white_nits);
+    display.gpu_crash_catcher = ReadBool(section, "gpu_crash_catcher", display.gpu_crash_catcher);
     return values;
 }
 
@@ -253,6 +254,7 @@ json ToJson(const Values& values) {
         {"hdr", display.hdr},
         {"hdr_peak_nits", display.hdr_peak_nits},
         {"hdr_paper_white_nits", display.hdr_paper_white_nits},
+        {"gpu_crash_catcher", display.gpu_crash_catcher},
         {"frame_rate", game.frame_rate},
         {"aspect", game.aspect},
         {"render_size", game.render_size},
@@ -388,6 +390,13 @@ Values Get() {
 bool Set(const Values& values) {
     std::scoped_lock lock{g_mutex};
     return Write(values);
+}
+
+std::string Describe() {
+    std::scoped_lock lock{g_mutex};
+    const json root = ReadConfig();
+    const auto section = root.find(Section);
+    return section != root.end() ? section->dump() : std::string{"none"};
 }
 
 bool Update(const std::function<void(Values&)>& change) {

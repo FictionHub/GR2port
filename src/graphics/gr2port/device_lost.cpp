@@ -20,6 +20,8 @@
 #include <immintrin.h>
 
 #include "common/logging/log.h"
+#include "common/path_util.h"
+#include "graphics/gr2port/catcher.h"
 #include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/scene.h"
@@ -374,6 +376,41 @@ void ReportPackets(u64 frame) {
     }
 }
 
+// The records of the frames in flight that the game's own programs draw from, as words: the
+// constants the game gave them are what a look at a stuck pass needs.
+void ReportRecords(u64 frame) {
+    for (u64 f = frame < g_frames_in_flight ? 1 : frame - g_frames_in_flight + 1; f <= frame; f++) {
+        const FrameNote& note = g_frames[f % KeptFrames];
+        if (note.frame != f || note.packet == nullptr || note.header.ui.only != 0) {
+            continue;
+        }
+        const Scene::Header& header = note.header;
+        const auto list = [&](std::string_view name, u64 offset, u32 count, u32 room, u64 stride,
+                              u32 most) {
+            const u32 listed = std::min({count, room, most});
+            std::vector<u32> words(stride / sizeof(u32));
+            for (u32 i = 0; i < listed; i++) {
+                std::memcpy(words.data(), note.packet + offset + i * stride,
+                            words.size() * sizeof(u32));
+                std::string text;
+                for (const u32 word : words) {
+                    text += fmt::format("{:x} ", word);
+                }
+                LOG_ERROR(Render_Vulkan,
+                          "GR2port: frame {} (game frame {}) {} {} of {} as words: {}", f,
+                          header.frame, name, i, count, text);
+            }
+        };
+        list("water draw", Scene::WaterDrawsOffset, header.effects.water_draws,
+             Scene::MaxWaterDraws, sizeof(Scene::WaterDraw), Scene::MaxWaterDraws);
+        list("water command", Scene::WaterCommandsOffset, header.effects.water_draws,
+             Scene::MaxWaterDraws, sizeof(Scene::Command), Scene::MaxWaterDraws);
+        list("effect draw", Scene::EffectDrawsOffset, header.effects.draws, Scene::MaxEffectDraws,
+             sizeof(Scene::EffectDraw), 6);
+        list("light", Scene::LightOffset, 1, 1, sizeof(Scene::Light) & ~u64{3}, 1);
+    }
+}
+
 void ReportMemory() {
     if (g_memory == nullptr) {
         return;
@@ -440,10 +477,12 @@ void ReportFault(const Device& d) {
         .pAddressInfos = addresses.data(),
         .pVendorInfos = vendors.data(),
     };
-    // The vendor's binary is not asked for, so a driver that has one answers incomplete and
-    // still fills in the rest.
+    // Without the fault's binary the vendor's is not asked for, so a driver that has one answers
+    // incomplete and still fills in the rest.
     const u64 binary_bytes = counts.vendorBinarySize;
-    counts.vendorBinarySize = 0;
+    std::vector<u8> binary(d.fault_binary ? binary_bytes : 0);
+    counts.vendorBinarySize = binary.size();
+    info.pVendorBinaryData = binary.empty() ? nullptr : binary.data();
     if (const VkResult result = dl.vkGetDeviceFaultInfoEXT(d.device, &counts, &info);
         result != VK_SUCCESS && result != VK_INCOMPLETE) {
         LOG_ERROR(Render_Vulkan, "GR2port: the fault's information failed: {}",
@@ -455,6 +494,19 @@ void ReportFault(const Device& d) {
     LOG_ERROR(Render_Vulkan,
               "GR2port: fault \"{}\", {} addresses, {} vendor records, a vendor binary of {} bytes",
               info.description, addresses.size(), vendors.size(), binary_bytes);
+    if (!binary.empty()) {
+        // The driver's own record of the fault, which the vendor's tools read.
+        const auto path =
+            Common::FS::GetUserPath(Common::FS::PathType::LogDir) / "device_lost_fault.bin";
+        std::ofstream file{path, std::ios::binary | std::ios::trunc};
+        const u64 bytes = std::min<u64>(binary.size(), counts.vendorBinarySize);
+        file.write(reinterpret_cast<const char*>(binary.data()),
+                   static_cast<std::streamsize>(bytes));
+        LOG_ERROR(Render_Vulkan,
+                  "GR2port: the driver's record of the fault, {} bytes, is in the file "
+                  "device_lost_fault.bin beside this log: send it with the log",
+                  bytes);
+    }
     {
         const std::scoped_lock lock{g_buffers_mutex};
         for (const VkDeviceFaultAddressInfoEXT& address : addresses) {
@@ -479,8 +531,9 @@ void ReportFault(const Device& d) {
 void ReportCrumbs(u64 frame) {
     if (!g_armed) {
         LOG_ERROR(Render_Vulkan,
-                  "GR2port: the GPU trace was off; the next start turns it on, and its log names "
-                  "the pass the GPU was in");
+                  "GR2port: the GPU trace was off; the next start turns it on, as GPU Crash "
+                  "Catcher on the Display tab does for each start, and its log names the pass "
+                  "the GPU was in");
         return;
     }
     std::array<u32, static_cast<u32>(Pass::Count)> crumbs{};
@@ -525,6 +578,22 @@ void ReportCrumbs(u64 frame) {
 void Arm(std::string_view reason) {
     g_armed = true;
     g_reason = reason;
+}
+
+const char* Name(Pass pass) {
+    return PassNames[static_cast<u32>(pass)];
+}
+
+u64 Frame() {
+    return g_frame.load(std::memory_order_relaxed);
+}
+
+bool Crumbs(std::array<u32, static_cast<u32>(Pass::Count)>& crumbs) {
+    if (!g_armed || g_crumbs.mapped == nullptr) {
+        return false;
+    }
+    std::memcpy(crumbs.data(), g_crumbs.mapped, sizeof(crumbs));
+    return true;
 }
 
 bool LastRunLost(const std::filesystem::path& path) {
@@ -647,6 +716,14 @@ void Submitted() {
     g_submitted_frame = g_frame.load(std::memory_order_relaxed);
 }
 
+void ReportStall() {
+    const u64 frame = Frame();
+    ReportPackets(frame);
+    ReportMemory();
+    ReportRecords(frame);
+    Common::Log::Flush();
+}
+
 void Check(const Device& device, vk::Result result, std::string_view call) {
     if (result != vk::Result::eErrorDeviceLost || g_reported) {
         return;
@@ -666,6 +743,9 @@ void Check(const Device& device, vk::Result result, std::string_view call) {
     ReportCheckpoints(device);
     ReportFault(device);
     ReportCrumbs(frame);
+    if (Catcher::On) {
+        Catcher::ReportLoss(device);
+    }
     // The packets are read last, from memory the lost device maps.
     Common::Log::Flush();
     ReportPackets(frame);

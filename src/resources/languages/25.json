@@ -320,6 +320,7 @@
     "Field of View": "Οπτικό πεδίο",
     "Screen Shake": "Κούνημα οθόνης",
     "Hide UI": "Απόκρυψη διεπαφής",
-    "Hide UI (Photo Mode)": "Απόκρυψη διεπαφής (φωτογραφία)"
+    "Hide UI (Photo Mode)": "Απόκρυψη διεπαφής (φωτογραφία)",
+    "GPU Crash Catcher": "Ανίχνευση σφαλμάτων GPU"
   }
 }

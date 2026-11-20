@@ -18,6 +18,8 @@ struct Device {
     vk::PhysicalDevice gpu;
     vk::Device device;
     vk::Queue queue;
+    /// A second queue of the same family for the catcher's probe, or none.
+    vk::Queue probe_queue;
     u32 queue_family = 0;
     /// Nanoseconds per timestamp tick, or 0 when the queue has no timestamps.
     double timestamp_period = 0.0;
@@ -31,6 +33,11 @@ struct Device {
     bool checkpoints = false;
     /// A lost device reports the fault (VK_EXT_device_fault).
     bool device_fault = false;
+    /// The fault comes with the driver's own record of it (deviceFaultVendorBinary).
+    bool fault_binary = false;
+    /// The driver tracks resources and marks its own checkpoints for that record
+    /// (VK_NV_device_diagnostics_config).
+    bool driver_diagnostics = false;
     /// A colour attachment's blend enable and equation can be dynamic state
     /// (VK_EXT_extended_dynamic_state3).
     bool dynamic_blend = false;

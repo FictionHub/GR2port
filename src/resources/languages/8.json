@@ -320,6 +320,7 @@
     "Field of View": "Поле зрения",
     "Screen Shake": "Тряска экрана",
     "Hide UI": "Убрать интерфейс",
-    "Hide UI (Photo Mode)": "Убрать интерфейс (фоторежим)"
+    "Hide UI (Photo Mode)": "Убрать интерфейс (фоторежим)",
+    "GPU Crash Catcher": "Отлов сбоев GPU"
   }
 }

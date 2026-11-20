@@ -320,6 +320,7 @@
     "Field of View": "Gezichtsveld",
     "Screen Shake": "Schermschudden",
     "Hide UI": "Interface verbergen",
-    "Hide UI (Photo Mode)": "Interface verbergen (fotomodus)"
+    "Hide UI (Photo Mode)": "Interface verbergen (fotomodus)",
+    "GPU Crash Catcher": "GPU-crashdetector"
   }
 }

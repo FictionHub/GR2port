@@ -1221,6 +1221,11 @@ if (WIN32)
         target_link_options(gr2port PRIVATE -Wl,--stack,2097152)
     endif()
 
+    # The catcher names the functions in its stacks from a table in the executable's file
+    if (MSVC)
+        target_link_options(gr2port PRIVATE /DEBUG:SYMTAB)
+    endif()
+
     # Change base image address
     if (MSVC)
         target_link_options(gr2port PRIVATE /BASE:0x700000000000)

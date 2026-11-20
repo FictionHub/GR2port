@@ -320,6 +320,7 @@
     "Field of View": "Bidang Pandang",
     "Screen Shake": "Guncangan Layar",
     "Hide UI": "Sembunyikan Antarmuka",
-    "Hide UI (Photo Mode)": "Sembunyikan UI (Mode Foto)"
+    "Hide UI (Photo Mode)": "Sembunyikan UI (Mode Foto)",
+    "GPU Crash Catcher": "Penangkap Crash GPU"
   }
 }

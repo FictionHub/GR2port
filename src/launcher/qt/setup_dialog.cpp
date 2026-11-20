@@ -272,8 +272,9 @@ struct Pad {
     std::string guid;
 };
 
-// The Display tab's rows, 28 pixels apart below the check boxes, then the volume and the HDR
-// rows. The page scrolls to the ones below the tenth row, down to DisplayPageBottom.
+// The Display tab's rows, 28 pixels apart below the check boxes, then the volume, the HDR rows and
+// the GPU Crash Catcher check box, in line with a row. The page scrolls to the ones below the
+// tenth row, down to DisplayPageBottom.
 constexpr int MonitorTop = 140;
 constexpr int ResolutionTop = 168;
 constexpr int RefreshTop = 196;
@@ -288,7 +289,8 @@ constexpr int VolumeTop = 420;
 constexpr int HdrTop = 468;
 constexpr int HdrPeakTop = 496;
 constexpr int HdrWhiteTop = 524;
-constexpr int DisplayPageBottom = 562;
+constexpr int CrashCatcherTop = 554;
+constexpr int DisplayPageBottom = 587;
 
 // In the order of Settings::VSync.
 constexpr std::array<std::string_view, 3> VSyncNames{"Off", "Double Buffered", "Triple Buffered"};
@@ -445,6 +447,7 @@ struct Dialog {
     QComboBox* hdr_peak = nullptr;
     QLabel* hdr_white_label = nullptr;
     QComboBox* hdr_white = nullptr;
+    QCheckBox* crash_catcher = nullptr;
     QComboBox* preset = nullptr;
     QComboBox* field_of_view = nullptr;
     QComboBox* shadows = nullptr;
@@ -1123,6 +1126,7 @@ void Show(Dialog& dialog, const Settings::Display& display) {
     dialog.hdr_peak->setCurrentIndex(IndexOf(Settings::HdrPeakLevels, display.hdr_peak_nits, 3));
     dialog.hdr_white->setCurrentIndex(
         IndexOf(Settings::HdrPaperWhiteLevels, display.hdr_paper_white_nits, 4));
+    dialog.crash_catcher->setChecked(display.gpu_crash_catcher);
     UpdateEnabled(dialog);
 }
 
@@ -1153,6 +1157,7 @@ Settings::Display Read(const Dialog& dialog) {
     display.hdr = dialog.hdr->currentIndex() == 0;
     ReadChoice(dialog.hdr_peak, Settings::HdrPeakLevels, display.hdr_peak_nits);
     ReadChoice(dialog.hdr_white, Settings::HdrPaperWhiteLevels, display.hdr_paper_white_nits);
+    display.gpu_crash_catcher = dialog.crash_catcher->isChecked();
     return display;
 }
 
@@ -1345,6 +1350,9 @@ void BuildDisplay(Dialog& dialog, QWidget* page) {
         MakeRow(dialog, page, "HDR Peak Brightness", HdrPeakTop, &dialog.hdr_peak_label);
     dialog.hdr_white =
         MakeRow(dialog, page, "HDR Paper White", HdrWhiteTop, &dialog.hdr_white_label);
+    dialog.crash_catcher =
+        MakeCheck(dialog, page, "GPU Crash Catcher",
+                  Place(page, CheckLeft, CrashCatcherTop, CheckWidth, CheckHeight));
 }
 
 // Tab order follows creation: the preset and the field of view, the left column's rows, then the

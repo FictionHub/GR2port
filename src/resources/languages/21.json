@@ -320,6 +320,7 @@
     "Field of View": "‫مجال الرؤية‬",
     "Screen Shake": "‫اهتزاز الشاشة‬",
     "Hide UI": "‫إخفاء الواجهة‬",
-    "Hide UI (Photo Mode)": "‫إخفاء الواجهة (وضع التصوير)‬"
+    "Hide UI (Photo Mode)": "‫إخفاء الواجهة (وضع التصوير)‬",
+    "GPU Crash Catcher": "‫رصد أعطال GPU‬"
   }
 }

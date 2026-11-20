@@ -320,6 +320,7 @@
     "Field of View": "시야각",
     "Screen Shake": "화면 흔들림",
     "Hide UI": "UI 숨기기",
-    "Hide UI (Photo Mode)": "UI 숨기기(사진 모드)"
+    "Hide UI (Photo Mode)": "UI 숨기기(사진 모드)",
+    "GPU Crash Catcher": "GPU 충돌 감지"
   }
 }

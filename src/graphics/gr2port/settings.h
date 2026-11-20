@@ -44,6 +44,9 @@ struct Display {
     bool hdr{false};
     u32 hdr_peak_nits{1000};
     u32 hdr_paper_white_nits{200};
+    /// The next start traces the GPU and watches it, the renderer and the game for a stop, for
+    /// the log (Gr2Port::Catcher).
+    bool gpu_crash_catcher{false};
 };
 
 struct Game {
@@ -329,5 +332,8 @@ bool Set(const Values& values);
 /// Any thread: changes the stored settings with change, under the lock that Get and Set take, and
 /// writes them to config.json.
 bool Update(const std::function<void(Values&)>& change);
+
+/// The settings as config.json holds them, on one line.
+std::string Describe();
 
 } // namespace Gr2Port::Settings

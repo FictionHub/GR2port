@@ -19,6 +19,8 @@
 #include "common/memory_patcher.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/capture_math.h"
+#include "graphics/gr2port/catcher_note.h"
+#include "graphics/gr2port/catcher_test.h"
 #include "graphics/gr2port/deformers.h"
 #include "graphics/gr2port/frame_stats.h"
 #include "graphics/gr2port/hooks.h"
@@ -3713,6 +3715,9 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     const auto start = std::chrono::steady_clock::now();
     const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
     g_frames.store(frame, std::memory_order_relaxed);
+    if (Catcher::On) {
+        Catcher::Test::Game(frame);
+    }
     const bool capturing = g_capturing.load(std::memory_order_relaxed);
     LogFrameRate(start, capturing);
     UpdateScreens(view);
@@ -3953,6 +3958,9 @@ void OnFrameEnd() {
         }
         const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
         g_frames.store(frame, std::memory_order_relaxed);
+        if (Catcher::On) {
+            Catcher::Test::Game(frame);
+        }
         g_pending = {.packet = packet, .frame = frame};
         g_pending.header.frame = frame;
         g_pending.header.ui.only = 1;

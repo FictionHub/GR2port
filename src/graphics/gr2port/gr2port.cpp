@@ -14,6 +14,8 @@
 #include "core/memory.h"
 #include "graphics/gr2port/camera_reach.h"
 #include "graphics/gr2port/capture.h"
+#include "graphics/gr2port/catcher_outside.h"
+#include "graphics/gr2port/catcher_stacks.h"
 #include "graphics/gr2port/comic_camera.h"
 #include "graphics/gr2port/exit_rows.h"
 #include "graphics/gr2port/field_of_view.h"
@@ -148,6 +150,8 @@ void Install(VAddr module_base) {
     GravitySlide::Install(module_base, c, StubAreaSize);
     ComicCamera::Install(module_base, c, StubAreaSize);
     ScriptTimers::Install(module_base, c, StubAreaSize);
+    Catcher::Stacks::SetGame(module_base);
+    Catcher::Outside::Set(Catcher::Outside::Crumb::GameBase, module_base);
     WaterSplashes::Install(module_base, c, StubAreaSize);
     SmokeAndDust::Install(module_base, c, StubAreaSize);
     FloatSpin::Install(module_base, c, StubAreaSize);

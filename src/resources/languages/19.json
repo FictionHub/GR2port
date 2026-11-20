@@ -320,6 +320,7 @@
     "Field of View": "Görüş Alanı",
     "Screen Shake": "Ekran Sarsıntısı",
     "Hide UI": "Arayüzü Gizle",
-    "Hide UI (Photo Mode)": "Arayüzü Gizle (Fotoğraf Modu)"
+    "Hide UI (Photo Mode)": "Arayüzü Gizle (Fotoğraf Modu)",
+    "GPU Crash Catcher": "GPU Çökme Yakalayıcı"
   }
 }

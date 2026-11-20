@@ -320,6 +320,7 @@
     "Field of View": "視野角",
     "Screen Shake": "画面の揺れ",
     "Hide UI": "UIを隠す",
-    "Hide UI (Photo Mode)": "UIを隠す(フォトモード)"
+    "Hide UI (Photo Mode)": "UIを隠す(フォトモード)",
+    "GPU Crash Catcher": "GPUクラッシュ検出"
   }
 }

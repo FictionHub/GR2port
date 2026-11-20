@@ -320,6 +320,7 @@
     "Field of View": "Sichtfeld",
     "Screen Shake": "Bildschirmwackeln",
     "Hide UI": "Oberfläche ausblenden",
-    "Hide UI (Photo Mode)": "UI ausblenden (Fotomodus)"
+    "Hide UI (Photo Mode)": "UI ausblenden (Fotomodus)",
+    "GPU Crash Catcher": "GPU-Absturzerkennung"
   }
 }

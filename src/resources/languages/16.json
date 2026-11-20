@@ -320,6 +320,7 @@
     "Field of View": "Pole widzenia",
     "Screen Shake": "Wstrząsy ekranu",
     "Hide UI": "Ukryj interfejs",
-    "Hide UI (Photo Mode)": "Ukryj interfejs (tryb zdjęć)"
+    "Hide UI (Photo Mode)": "Ukryj interfejs (tryb zdjęć)",
+    "GPU Crash Catcher": "Wykrywanie awarii GPU"
   }
 }

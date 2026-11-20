@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <source_location>
 #include <string_view>
@@ -61,6 +62,15 @@ enum class Pass : u32 {
 /// Before the renderer starts: turns the trace on for this run. The log names reason.
 void Arm(std::string_view reason);
 
+const char* Name(Pass pass);
+
+/// The number of the frame recorded last.
+u64 Frame();
+
+/// Any thread, with the trace on: the last frame that began each pass, by its low half. False
+/// without the trace.
+bool Crumbs(std::array<u32, static_cast<u32>(Pass::Count)>& crumbs);
+
 /// Whether the log at path, the last run's, reports a lost device.
 bool LastRunLost(const std::filesystem::path& path);
 
@@ -85,6 +95,11 @@ void Note(const Scene::Header& header, const u8* packet);
 
 /// Render thread: the frame went to the GPU.
 void Submitted();
+
+/// Any thread, while the render thread waits for the GPU: logs the frames in flight as a lost
+/// device's report does, their records' addresses checked, and the records the game's own
+/// programs draw from as words.
+void ReportStall();
 
 /// Given the result of call: when it says the device is lost, logs the report, once.
 void Check(const Device& device, vk::Result result, std::string_view call);

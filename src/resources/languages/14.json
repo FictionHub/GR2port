@@ -320,6 +320,7 @@
     "Field of View": "Synsfelt",
     "Screen Shake": "Skærmrystelser",
     "Hide UI": "Skjul brugerfladen",
-    "Hide UI (Photo Mode)": "Skjul brugerfladen (fototilstand)"
+    "Hide UI (Photo Mode)": "Skjul brugerfladen (fototilstand)",
+    "GPU Crash Catcher": "GPU-nedbrudsfanger"
   }
 }

@@ -14,6 +14,18 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/deformers.cpp
     ${CMAKE_CURRENT_LIST_DIR}/deformers.h
     ${CMAKE_CURRENT_LIST_DIR}/device.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/catcher.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/catcher.h
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_crash.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_crash.h
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_outside.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_outside.h
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_stacks.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_stacks.h
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_system.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_system.h
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_test.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_test.h
     ${CMAKE_CURRENT_LIST_DIR}/device_lost.cpp
     ${CMAKE_CURRENT_LIST_DIR}/device_lost.h
     ${CMAKE_CURRENT_LIST_DIR}/device.h

@@ -30,6 +30,9 @@
 #include "core/ipc/ipc.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
+#include "graphics/gr2port/catcher.h"
+#include "graphics/gr2port/catcher_crash.h"
+#include "graphics/gr2port/catcher_outside.h"
 #include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/settings.h"
 
@@ -43,6 +46,10 @@
 #endif
 
 int main(int argc, char* argv[]) {
+    // GR2port: the catcher's watcher outside the game is this executable, started by the game.
+    if (argc >= 3 && std::string(argv[1]) == Gr2Port::Catcher::Outside::Option) {
+        return Gr2Port::Catcher::Outside::Run(static_cast<u32>(std::strtoul(argv[2], nullptr, 10)));
+    }
 #ifdef _WIN32
     Gr2Port::Launcher::AttachTerminal();
     SetConsoleOutputCP(CP_UTF8);
@@ -227,6 +234,15 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 #endif
+
+    // GR2port: GPU Crash Catcher, which the launcher sets, traces the GPU and watches the GPU, the
+    // renderer and the game for a stop.
+    if (Gr2Port::Settings::Get().display.gpu_crash_catcher) {
+        Gr2Port::Catcher::On = true;
+        Gr2Port::DeviceLost::Arm("GPU Crash Catcher is on");
+        Gr2Port::Catcher::Crash::Install(Common::FS::GetUserPath(Common::FS::PathType::LogDir));
+        Gr2Port::Catcher::Outside::Start(Common::FS::GetUserPath(Common::FS::PathType::LogDir));
+    }
 
     // ---- Apply flags ----
     if (patchFile)

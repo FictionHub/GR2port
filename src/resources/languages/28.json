@@ -320,6 +320,7 @@
     "Field of View": "Góc nhìn",
     "Screen Shake": "Rung màn hình",
     "Hide UI": "Ẩn giao diện",
-    "Hide UI (Photo Mode)": "Ẩn giao diện (chế độ chụp ảnh)"
+    "Hide UI (Photo Mode)": "Ẩn giao diện (chế độ chụp ảnh)",
+    "GPU Crash Catcher": "Bắt lỗi GPU"
   }
 }

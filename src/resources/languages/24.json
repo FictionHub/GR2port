@@ -320,6 +320,7 @@
     "Field of View": "Látómező",
     "Screen Shake": "Képernyőrázkódás",
     "Hide UI": "Felület elrejtése",
-    "Hide UI (Photo Mode)": "Felület elrejtése (fotó mód)"
+    "Hide UI (Photo Mode)": "Felület elrejtése (fotó mód)",
+    "GPU Crash Catcher": "GPU-összeomlás-figyelő"
   }
 }

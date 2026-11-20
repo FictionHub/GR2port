@@ -320,6 +320,7 @@
     "Field of View": "Synfält",
     "Screen Shake": "Skärmskakning",
     "Hide UI": "Dölj gränssnittet",
-    "Hide UI (Photo Mode)": "Dölj gränssnittet (fotoläge)"
+    "Hide UI (Photo Mode)": "Dölj gränssnittet (fotoläge)",
+    "GPU Crash Catcher": "GPU-kraschfångare"
   }
 }

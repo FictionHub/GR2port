@@ -320,6 +320,7 @@
     "Field of View": "Campo visivo",
     "Screen Shake": "Scuotimento schermo",
     "Hide UI": "Nascondi interfaccia",
-    "Hide UI (Photo Mode)": "Nascondi UI (modalità foto)"
+    "Hide UI (Photo Mode)": "Nascondi UI (modalità foto)",
+    "GPU Crash Catcher": "Rilevatore di crash GPU"
   }
 }
