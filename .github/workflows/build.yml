@@ -93,6 +93,12 @@ jobs:
     - name: Print CPU Info
       run: bash -c "cat /proc/cpuinfo"
 
+    # The image's Visual Studio 2026 C++ library asks for Clang 22 or newer.
+    - name: Install LLVM 22
+      run: |
+        choco upgrade llvm --version=22.1.8 -y --no-progress
+        clang-cl --version
+
     - name: Configure CMake
       run: cmake --fresh -G Ninja -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE=ON -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
