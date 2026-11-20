@@ -1,0 +1,247 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_EXT_control_flow_attributes : require
+#extension GL_EXT_samplerless_texture_functions : require
+#extension GL_EXT_spirv_intrinsics : require
+
+// FSR 4 Lite's pass 9 for the 1080p size tier (fsr4_model_v07_fp8_no_scale_postpass of
+// fsr4_lite_main_1080_pass9.spv) for GPUs without 8-bit dot product instructions: each product of
+// signed bytes is one float multiply-add. Its results are identical to AMD's module's: every sum
+// is an integer below 2^24, which floats hold exactly, and the float work after the products is
+// AMD's operations in AMD's order. One thread per half-resolution pixel makes its four pixels.
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 3) uniform texture2D r_input_color;
+layout(set = 0, binding = 6) uniform texture2D r_input_exposure;
+layout(set = 0, binding = 9) uniform texture2D r_reprojected_color;
+layout(set = 0, binding = 21) readonly buffer InitializerBuffer {
+    float init_floats[];
+};
+layout(set = 0, binding = 129) uniform writeonly image2D rw_history_color;
+layout(set = 0, binding = 130) uniform writeonly image2D rw_mlsr_output_color;
+layout(set = 0, binding = 134, rgba8) uniform writeonly image2D rw_recurrent_0;
+layout(set = 0, binding = 137, r32f) uniform writeonly image2D rw_auto_exposure_texture;
+layout(set = 0, binding = 141) readonly buffer ScratchBuffer {
+    uint scratch_words[];
+};
+layout(set = 0, binding = 257, std140) uniform MLSR_Optimized_Constants {
+    vec2 inv_size;
+    vec2 scale;
+    vec2 inv_scale;
+    vec2 jitter;
+    vec2 mv_scale;
+    vec2 tex_size;
+    vec2 max_render_size;
+    vec2 motion_vector_jitter_cancellation;
+    uint width;
+    uint height;
+    uint reset;
+    uint width_lr;
+    uint height_lr;
+    float pre_exposure;
+    float previous_pre_exposure;
+    uint rcas_enabled;
+    float rcas_sharpness;
+    float pad;
+};
+
+// GLSL's max is FMax, whose result is undefined for NaN; AMD's module uses NMax.
+spirv_instruction(set = "GLSL.std.450", id = 80) vec3 NMax(vec3 x, vec3 y);
+
+// The tensor holds 16 one-byte channels and has a one-pixel border.
+const uint HalfRow = 15392u; // (960 + 2) * 16
+const uint InBase = 16684928u;
+
+// The weights as floats, which the upscaler appends to AMD's model data. Each layer's weights are
+// divided by the power of two its results are, and inputs read from the scratch buffer are
+// offset by 128, which the biases take back.
+const uint WeightsA = 27408u; // [tap][output][input], 9 x 16 x 16
+const uint BiasA = WeightsA + 2304u;
+const uint WeightsB = BiasA + 16u; // [output][input], 32 x 16
+const uint BiasB = WeightsB + 512u;
+const uint WeightsC = BiasB + 32u; // [output][input], 16 x 32
+const uint BiasC = WeightsC + 512u;
+const uint WeightsPixel = BiasC + 16u; // [output pixel][kernel, then blend][output][input]
+const uint BiasPixel = WeightsPixel + 512u; // [kernel, then blend][output]
+
+// The 4 bytes of word, each plus 128.
+vec4 Offset(uint word) {
+    const uint w = word ^ 0x80808080u;
+    return vec4(float(bitfieldExtract(w, 0, 8)), float(bitfieldExtract(w, 8, 8)),
+                float(bitfieldExtract(w, 16, 8)), float(bitfieldExtract(w, 24, 8)));
+}
+
+// A tap of the input colour: its log and its weight.
+vec3 Tap(uint x, uint y, float exposure, float weight) {
+    const ivec2 last = ivec2(uvec2(width_lr, height_lr) - 1u);
+    const vec3 rgb = texelFetch(r_input_color, clamp(ivec2(uvec2(x, y)), ivec2(0), last), 0).rgb;
+    return NMax(log(vec3(1.0) + (rgb * exposure) * 150.0) * 0.117399998, vec3(0.0)) * weight;
+}
+
+void main() {
+    const uint lid = gl_LocalInvocationID.x;
+    if (all(equal(gl_GlobalInvocationID.xy, uvec2(0u)))) {
+        const float exposure = texelFetch(r_input_exposure, ivec2(0), 0).x;
+        imageStore(rw_auto_exposure_texture, ivec2(1, 0), vec4(exposure == 0.0 ? 1.0 : exposure));
+    }
+    const uvec2 half_size = uvec2(ivec2(int(width), int(height)) / 2);
+    const uint quad = lid >> 2;
+    const uvec2 pos =
+        uvec2(((quad % 8u) << 1) | (lid & 1u), ((quad / 8u) << 1) | ((lid & 3u) >> 1)) +
+        gl_WorkGroupID.xy * 16u;
+    if (any(greaterThanEqual(pos, half_size))) {
+        return;
+    }
+
+    // A 3x3 convolution, 16 to 16 channels; taps outside the picture are zero.
+    float a[16];
+    [[unroll]] for (uint o = 0u; o < 16u; ++o) {
+        a[o] = init_floats[BiasA + o];
+    }
+    [[dont_unroll]] for (uint tap = 0u; tap < 9u; ++tap) {
+        const ivec2 t = ivec2(pos) - 1 + ivec2(tap % 3u, tap / 3u);
+        const bool inside =
+            all(greaterThanEqual(t, ivec2(0))) && all(lessThan(uvec2(t), half_size));
+        const uint base = (InBase + 16u * uint(t.x + 1) + HalfRow * uint(t.y + 1)) >> 2;
+        float x[16];
+        [[unroll]] for (uint w = 0u; w < 4u; ++w) {
+            const vec4 v = Offset(inside ? scratch_words[base + w] : 0u);
+            x[4u * w] = v.x;
+            x[4u * w + 1u] = v.y;
+            x[4u * w + 2u] = v.z;
+            x[4u * w + 3u] = v.w;
+        }
+        [[unroll]] for (uint o = 0u; o < 16u; ++o) {
+            [[unroll]] for (uint i = 0u; i < 16u; ++i) {
+                a[o] += x[i] * init_floats[WeightsA + 256u * tap + 16u * o + i];
+            }
+        }
+    }
+    float l1[16];
+    [[unroll]] for (uint o = 0u; o < 16u; ++o) {
+        l1[o] = clamp(roundEven(a[o]), -128.0, 127.0);
+    }
+
+    // A 1x1 convolution, 16 to 32 channels, with ReLU.
+    float h[32];
+    [[unroll]] for (uint o = 0u; o < 32u; ++o) {
+        float b = init_floats[BiasB + o];
+        [[unroll]] for (uint i = 0u; i < 16u; ++i) {
+            b += l1[i] * init_floats[WeightsB + 16u * o + i];
+        }
+        h[o] = clamp(roundEven(b), 0.0, 127.0);
+    }
+
+    // A 1x1 convolution, 32 to 16 channels, added to the input at half weight.
+    const uint center = (InBase + 16u * (pos.x + 1u) + HalfRow * (pos.y + 1u)) >> 2;
+    float r[16];
+    [[unroll]] for (uint w = 0u; w < 4u; ++w) {
+        vec4 c = vec4(init_floats[BiasC + 4u * w], init_floats[BiasC + 4u * w + 1u],
+                      init_floats[BiasC + 4u * w + 2u], init_floats[BiasC + 4u * w + 3u]);
+        [[unroll]] for (uint i = 0u; i < 32u; ++i) {
+            c += h[i] * vec4(init_floats[WeightsC + 32u * (4u * w) + i],
+                             init_floats[WeightsC + 32u * (4u * w + 1u) + i],
+                             init_floats[WeightsC + 32u * (4u * w + 2u) + i],
+                             init_floats[WeightsC + 32u * (4u * w + 3u) + i]);
+        }
+        const vec4 v = clamp(roundEven(Offset(scratch_words[center + w]) * 0.5 + c), -128.0, 127.0);
+        r[4u * w] = v.x;
+        r[4u * w + 1u] = v.y;
+        r[4u * w + 2u] = v.z;
+        r[4u * w + 3u] = v.w;
+    }
+
+    float exposure = texelFetch(r_input_exposure, ivec2(0), 0).x;
+    if (exposure == 0.0) {
+        exposure = 1.0;
+    }
+    exposure = exposure / pre_exposure;
+
+    // Each of the four pixels: a 1x1 convolution, 16 to 4 channels, for the shape of a 3x3 filter
+    // of the input colour and its blend with the reprojected colour, and another for the
+    // recurrent state.
+    [[unroll]] for (uint s = 0u; s < 4u; ++s) {
+        vec4 kernel = vec4(init_floats[BiasPixel], init_floats[BiasPixel + 1u],
+                           init_floats[BiasPixel + 2u], init_floats[BiasPixel + 3u]);
+        vec4 state = vec4(init_floats[BiasPixel + 4u], init_floats[BiasPixel + 5u],
+                          init_floats[BiasPixel + 6u], init_floats[BiasPixel + 7u]);
+        [[unroll]] for (uint i = 0u; i < 16u; ++i) {
+            const uint row = WeightsPixel + 128u * s + i;
+            kernel += r[i] * vec4(init_floats[row], init_floats[row + 16u],
+                                  init_floats[row + 32u], init_floats[row + 48u]);
+            state += r[i] * vec4(init_floats[row + 64u], init_floats[row + 80u],
+                                 init_floats[row + 96u], init_floats[row + 112u]);
+        }
+        const uvec2 o = 2u * pos + uvec2(s % 2u, s / 2u);
+        const vec4 recurrent = vec4(1.0) / (vec4(1.0) + exp(-state));
+
+        const float ex = exp(kernel.x);
+        const float enx = exp(-kernel.x);
+        const float tilt = (ex - enx) / (ex + enx);
+        const float sx = 2.0 / (1.0 + exp(-kernel.y));
+        const float sy = 2.0 / (1.0 + exp(-kernel.z));
+        const float sxx = sx * sx;
+        const float syy = sy * sy;
+        const float sxy = sx * sy;
+        const vec2 c = ((vec2(-0.5) + inv_scale * vec2(0.5)) + vec2(o) * inv_scale) + jitter;
+        const ivec2 nearest = ivec2(roundEven(c));
+        const uint cx = uint(nearest.x);
+        const uint cy = uint(nearest.y);
+        const float y0 = (float(cy - 1u) - c.y) * scale.y;
+        const float yy0 = y0 * y0;
+        const float x0 = (float(cx - 1u) - c.x) * scale.x;
+        const float xx0 = (x0 * x0) * sxx;
+        const float tilt2 = 2.0 * tilt;
+        const float yyw0 = yy0 * syy;
+        const float w0 = exp(-2.26346755 * ((xx0 + ((tilt2 * (x0 * y0)) * sxy)) + yyw0));
+        vec3 sum = Tap(cx - 1u, cy - 1u, exposure, w0);
+        const float x1 = (float(cx) - c.x) * scale.x;
+        const float xx1 = (x1 * x1) * sxx;
+        const float w1 = exp(-2.26346755 * ((xx1 + ((tilt2 * (x1 * y0)) * sxy)) + yyw0));
+        float weights = w0 + w1;
+        sum = sum + Tap(cx, cy - 1u, exposure, w1);
+        const float x2 = (float(cx + 1u) - c.x) * scale.x;
+        const float xx2 = (x2 * x2) * sxx;
+        const float w2 = exp(-2.26346755 * ((xx2 + ((tilt2 * (x2 * y0)) * sxy)) + yyw0));
+        weights = weights + w2;
+        sum = sum + Tap(cx + 1u, cy - 1u, exposure, w2);
+        const float y1 = (float(cy) - c.y) * scale.y;
+        const float yyw1 = (y1 * y1) * syy;
+        const float w3 = exp(-2.26346755 * ((xx0 + ((tilt2 * (x0 * y1)) * sxy)) + yyw1));
+        weights = weights + w3;
+        sum = sum + Tap(cx - 1u, cy, exposure, w3);
+        const float w4 = exp(-2.26346755 * ((xx1 + ((tilt2 * (x1 * y1)) * sxy)) + yyw1));
+        weights = weights + w4;
+        sum = sum + Tap(cx, cy, exposure, w4);
+        const float w5 = exp(-2.26346755 * ((xx2 + ((tilt2 * (x2 * y1)) * sxy)) + yyw1));
+        weights = weights + w5;
+        sum = sum + Tap(cx + 1u, cy, exposure, w5);
+        const float y2 = (float(cy + 1u) - c.y) * scale.y;
+        const float yyw2 = (y2 * y2) * syy;
+        const float w6 = exp(-2.26346755 * ((xx0 + ((tilt2 * (x0 * y2)) * sxy)) + yyw2));
+        weights = weights + w6;
+        sum = sum + Tap(cx - 1u, cy + 1u, exposure, w6);
+        const float w7 = exp(-2.26346755 * ((xx1 + ((tilt2 * (x1 * y2)) * sxy)) + yyw2));
+        weights = weights + w7;
+        sum = sum + Tap(cx, cy + 1u, exposure, w7);
+        const float w8 = exp(-2.26346755 * ((xx2 + ((tilt2 * (x2 * y2)) * sxy)) + yyw2));
+        weights = weights + w8;
+        sum = sum + Tap(cx + 1u, cy + 1u, exposure, w8);
+        const vec3 filtered = sum / vec3(weights);
+        const float blend = 1.0 / (1.0 + exp(-kernel.w));
+        const vec3 history = filtered * (1.0 - blend) +
+                             texelFetch(r_reprojected_color, ivec2(o), 0).rgb * blend;
+        vec3 color = history;
+        if (rcas_enabled == 0u) {
+            color = NMax((exp(history * 8.51788044) - vec3(1.0)) * vec3(0.00666666683), vec3(0.0)) /
+                    vec3(exposure);
+        }
+        imageStore(rw_recurrent_0, ivec2(o), recurrent);
+        imageStore(rw_history_color, ivec2(o), vec4(history, 0.0));
+        imageStore(rw_mlsr_output_color, ivec2(o),
+                   vec4(clamp(color, vec3(0.0), vec3(64000.0)), 0.0));
+    }
+}

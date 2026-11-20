@@ -170,6 +170,7 @@ struct FfxFsr4VkContext {
     VkBool32  int8Supported;
     VkBool32  dotProductSupported;
     VkBool32  computeDerivativesSupported;
+    VkBool32  subgroup32Supported;
 };
 
 static FfxErrorCode restoreExternalImages(FfxFsr4VkContext* c,
@@ -446,11 +447,13 @@ static VkResult queryRequiredFeatures(FfxFsr4VkContext* c)
     c->computeDerivativesSupported = hasDerivatives &&
         derivatives.computeDerivativeGroupLinear;
 
-    /* Every pass asks for 32-wide subgroups. */
+    /* Every pass asks for 32-wide subgroups where the device allows it, and otherwise runs at the
+     * device's width with the same results: the only subgroup operations are the pre-pass's quad
+     * swaps, whose quads are four consecutive invocations at any width. */
+    c->subgroup32Supported = features13.subgroupSizeControl &&
+        properties13.minSubgroupSize <= 32u && properties13.maxSubgroupSize >= 32u &&
+        (properties13.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0;
     if (!c->fp16Supported || !c->dotProductSupported || !c->computeDerivativesSupported ||
-        !features13.subgroupSizeControl || properties13.minSubgroupSize > 32u ||
-        properties13.maxSubgroupSize < 32u ||
-        !(properties13.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT) ||
         !features2.features.shaderStorageImageExtendedFormats ||
         !features2.features.shaderStorageImageWriteWithoutFormat)
         return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -702,7 +705,8 @@ static VkResult mkPipeline(FfxFsr4VkContext* c, uint32_t passIdx, VkPipe* out)
     memset(&subgroup, 0, sizeof(subgroup));
     subgroup.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO;
     subgroup.requiredSubgroupSize = 32u;
-    cpci.stage.pNext = &subgroup;
+    if (c->subgroup32Supported)
+        cpci.stage.pNext = &subgroup;
 
     r = vkCreateComputePipelines(c->dev, VK_NULL_HANDLE, 1, &cpci, c->alloc, &out->pipeline);
     vkDestroyShaderModule(c->dev, sm, c->alloc);

@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <fmt/format.h>
+#include <openssl/evp.h>
 
 #include "common/logging/log.h"
 #include "common/path_util.h"
@@ -24,6 +25,13 @@
 #include "graphics/gr2_fsr3/fsr4_assets.h"
 #include "graphics/gr2_fsr3/fsr4_lite_bridge.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_inputs_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass2_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass2_fma_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass5_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass5_fma_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass7_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass7_fma_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass9_fma_comp.h"
 #include "graphics/gr2_fsr3/vk_trampolines.h"
 #include "graphics/gr2_fsr3/xess_vulkan.h"
 #include "graphics/gr2port/memory.h"
@@ -55,6 +63,28 @@ constexpr auto ResetGap = std::chrono::milliseconds{100};
 constexpr float MaxFrameMs = 200.0f;
 constexpr float FirstFrameMs = 33.3f;
 constexpr u32 InputGroupPixels = 8;
+// The SHA-256 of AMD's FSR 4 modules whose results the FSR4_MAIN_1080 modules reproduce, and of
+// fsr4_lite_main_initializer.bin, which holds the weights that passes 2, 5 and 9 have compiled in.
+constexpr std::array<u8, 32> MainPass2Sha256{
+    0xde, 0x1b, 0x1b, 0x63, 0x5c, 0x54, 0xb8, 0xb2, 0xe3, 0x79, 0x43, 0x18, 0x98, 0xd2, 0x16, 0xf4,
+    0xb0, 0xf4, 0xa5, 0xdd, 0x3a, 0xee, 0xbf, 0x61, 0x9a, 0x48, 0x6d, 0x93, 0x03, 0x14, 0x05, 0x9c,
+};
+constexpr std::array<u8, 32> MainPass5Sha256{
+    0x8f, 0x36, 0xeb, 0xe7, 0xc1, 0x45, 0x54, 0xa1, 0xe3, 0x89, 0x06, 0xba, 0x84, 0xe6, 0xf8, 0x1b,
+    0xda, 0xed, 0xe6, 0xa1, 0x99, 0xcf, 0xfb, 0xff, 0xbe, 0xb1, 0xa8, 0xee, 0x05, 0xad, 0x18, 0x18,
+};
+constexpr std::array<u8, 32> MainPass7Sha256{
+    0xc3, 0x07, 0x1c, 0x31, 0x30, 0x16, 0x41, 0xcd, 0x57, 0x8d, 0xb5, 0x4d, 0xd6, 0xbb, 0x73, 0x9c,
+    0x05, 0x6f, 0x95, 0xe4, 0x13, 0xb8, 0x06, 0x7c, 0x65, 0x24, 0xdf, 0x10, 0x8b, 0xd4, 0xc4, 0x49,
+};
+constexpr std::array<u8, 32> MainPass9Sha256{
+    0xed, 0x47, 0xf0, 0x18, 0x77, 0xa9, 0x5c, 0x55, 0x69, 0x73, 0x70, 0xae, 0x84, 0x85, 0xd3, 0xa1,
+    0xdf, 0x60, 0x8d, 0x3e, 0x52, 0x6e, 0xae, 0x85, 0xe4, 0x7d, 0x21, 0xb6, 0x01, 0x25, 0x5c, 0x56,
+};
+constexpr std::array<u8, 32> MainInitializerSha256{
+    0x4b, 0x98, 0x98, 0xda, 0x71, 0x9d, 0xc2, 0xdc, 0xa5, 0xdc, 0x45, 0xfd, 0x71, 0xde, 0xc5, 0xf8,
+    0x0b, 0xdb, 0x98, 0x86, 0xa5, 0x80, 0xfe, 0x30, 0x38, 0xaf, 0x59, 0xef, 0xe6, 0x37, 0xd5, 0x5e,
+};
 // DLSS's convolutional model, preset E, in every mode; NGX's default picks the transformer model.
 constexpr Gr2Fsr3::DlssPreset DlssModel = Gr2Fsr3::DlssPreset::E;
 // A camera that moves or turns further than this between frames, or changes its field of view by
@@ -131,8 +161,11 @@ Image g_input_depth;
 
 // FSR 4: the features the device was made with, the context and its unretired dispatches.
 vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR g_derivatives{};
+vk::PhysicalDeviceCooperativeVectorFeaturesNV g_cooperative_vector{};
 std::vector<const char*> g_device_extensions;
 Gr2Fsr3::Fsr4DeviceFeatures g_fsr4_features{};
+// Whether the device runs cooperative vectors of signed bytes, as the FSR4_MAIN_1080 modules do.
+bool g_fsr4_cooperative_vectors = false;
 Gr2Fsr4Context* g_fsr4 = nullptr;
 std::deque<Fsr4Frame> g_fsr4_frames;
 
@@ -338,10 +371,133 @@ bool CreateInputs(vk::Extent2D render) {
     return true;
 }
 
+bool HasSha256(const void* data, std::size_t size, const std::array<u8, 32>& expected) {
+    std::array<u8, EVP_MAX_MD_SIZE> digest{};
+    return EVP_Digest(data, size, digest.data(), nullptr, EVP_sha256(), nullptr) == 1 &&
+           std::equal(expected.begin(), expected.end(), digest.begin());
+}
+
+// Row-major copies of the weights that the cooperative vector modules read after AMD's model data,
+// per output channel the 16 input channel bytes of each tap in turn: pass 2's 3x3 and stride-2
+// weights, then the 3x3 weights of passes 5 and 7.
+std::vector<u8> VectorMatrices(const std::vector<u8>& model) {
+    std::vector<u8> matrices;
+    const auto add = [&](std::size_t base, u32 outputs, u32 taps, std::size_t tap_bytes) {
+        for (u32 output = 0; output < outputs; ++output) {
+            for (u32 tap = 0; tap < taps; ++tap) {
+                const auto row = model.begin() + base + tap_bytes * tap + 16 * output;
+                matrices.insert(matrices.end(), row, row + 16);
+            }
+        }
+    };
+    add(1152, 16, 9, 256);
+    add(4864, 32, 4, 512);
+    add(7040, 16, 9, 256);
+    add(13952, 16, 9, 256);
+    return matrices;
+}
+
+// The weights that the float modules read after AMD's model data, a region per pass in the order
+// 5, 7, 2, 9. Each layer's weights and biases are divided by the power of two its results keep,
+// and its biases take back the 128 the modules add to the bytes they read from the scratch buffer.
+std::vector<float> FloatWeights(const std::vector<u8>& model) {
+    std::vector<float> floats;
+    const auto weight = [&model](std::size_t offset) {
+        return static_cast<double>(static_cast<s8>(model[offset]));
+    };
+    const auto bias = [&model](std::size_t offset) {
+        s32 value;
+        std::memcpy(&value, model.data() + offset, sizeof(value));
+        return static_cast<double>(value);
+    };
+    const auto add = [&floats](double value) { floats.push_back(static_cast<float>(value)); };
+    // Channels 0-15 are a tensor's first plane and 16-31 its second.
+    const auto planes = [](double first, double second) {
+        return [=](u32 channel) { return channel < 16 ? first : second; };
+    };
+    // A 3x3 layer, 16 to 16 channels, [tap][output][input] at base + 256 tap + 16 output + input.
+    const auto three_by_three = [&](std::size_t base, std::size_t biases, double divisor) {
+        for (u32 tap = 0; tap < 9; ++tap) {
+            for (u32 output = 0; output < 16; ++output) {
+                for (u32 input = 0; input < 16; ++input) {
+                    add(weight(base + 256 * tap + 16 * output + input) / divisor);
+                }
+            }
+        }
+        for (u32 output = 0; output < 16; ++output) {
+            double sum = 0.0;
+            for (u32 tap = 0; tap < 9; ++tap) {
+                for (u32 input = 0; input < 16; ++input) {
+                    sum += weight(base + 256 * tap + 16 * output + input);
+                }
+            }
+            add((bias(biases + 4 * output) - 128.0 * sum) / divisor);
+        }
+    };
+    // A 1x1 layer, [output][input] at base + inputs * output + input. The inputs from scratch on
+    // come from the scratch buffer, and residual(output) is what the input added to the output's
+    // results gains from the modules' offset.
+    const auto one_by_one = [&](std::size_t base, u32 outputs, u32 inputs, std::size_t biases,
+                                u32 scratch, const auto& divisor, const auto& residual) {
+        for (u32 output = 0; output < outputs; ++output) {
+            for (u32 input = 0; input < inputs; ++input) {
+                add(weight(base + inputs * output + input) / divisor(output));
+            }
+        }
+        for (u32 output = 0; output < outputs; ++output) {
+            double sum = 0.0;
+            for (u32 input = scratch; input < inputs; ++input) {
+                sum += weight(base + inputs * output + input);
+            }
+            add((bias(biases + 4 * output) - 128.0 * sum) / divisor(output) - residual(output));
+        }
+    };
+    three_by_three(7040, 9344, 256.0);
+    one_by_one(9472, 64, 32, 11520, 16, planes(256.0, 256.0), planes(0.0, 0.0));
+    one_by_one(11776, 32, 64, 13824, 64, planes(64.0, 128.0), planes(64.0, 64.0));
+
+    three_by_three(13952, 16256, 256.0);
+    one_by_one(16384, 64, 32, 18432, 16, planes(128.0, 128.0), planes(0.0, 0.0));
+    one_by_one(18688, 32, 64, 20736, 64, planes(64.0, 64.0), planes(128.0, 256.0));
+    for (u32 index = 0; index < 64 * 32; ++index) {
+        add(weight(20864 + index) / 256.0);
+    }
+    for (u32 output = 0; output < 16; ++output) {
+        add(bias(22912 + 4 * output) / 256.0 - 128.0);
+    }
+
+    three_by_three(1152, 3456, 128.0);
+    one_by_one(3584, 32, 16, 4096, 16, planes(512.0, 512.0), planes(0.0, 0.0));
+    one_by_one(4224, 16, 32, 4736, 32, planes(64.0, 64.0), planes(64.0, 64.0));
+    // The stride-2 layer, [output][block pixel][input] at 4864 + 512 pixel + 16 output + input.
+    const auto stride_divisor = planes(64.0, 128.0);
+    for (u32 output = 0; output < 32; ++output) {
+        for (u32 index = 0; index < 64; ++index) {
+            add(weight(4864 + 512 * (index / 16) + 16 * output + index % 16) /
+                stride_divisor(output));
+        }
+    }
+    for (u32 output = 0; output < 32; ++output) {
+        add(bias(6912 + 4 * output) / stride_divisor(output));
+    }
+
+    three_by_three(23040, 25344, 256.0);
+    one_by_one(25472, 32, 16, 25984, 16, planes(256.0, 256.0), planes(0.0, 0.0));
+    one_by_one(26112, 16, 32, 26624, 32, planes(64.0, 64.0), planes(64.0, 64.0));
+    for (u32 index = 0; index < 512; ++index) {
+        add(weight(26752 + index) / 1024.0);
+    }
+    for (u32 index = 0; index < 8; ++index) {
+        add(bias(27264 + 4 * index) / 1024.0);
+    }
+    return floats;
+}
+
 bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
     const auto properties =
         g_device->gpu
-            .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceVulkan11Properties>(
+            .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceVulkan11Properties,
+                            vk::PhysicalDeviceShaderIntegerDotProductProperties>(
                 g_device->dispatch);
     const auto& vk11 = properties.get<vk::PhysicalDeviceVulkan11Properties>();
     const bool compute_subgroups =
@@ -363,11 +519,44 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
         return false;
     }
     const Gr2Fsr3::Fsr4Assets& assets = *loaded.assets;
+    // Passes 2, 5 and 7 have the same results on cooperative vectors, which run on NVIDIA's
+    // tensor cores.
+    const auto matches = [&assets](std::size_t pass, const std::array<u8, 32>& sha256) {
+        const std::vector<u32>& words = assets.shaders[pass];
+        return HasSha256(words.data(), words.size() * sizeof(u32), sha256);
+    };
+    const bool main_weights =
+        HasSha256(assets.initializer.data(), assets.initializer.size(), MainInitializerSha256);
+    const bool vector_pass2 =
+        g_fsr4_cooperative_vectors && main_weights && matches(2, MainPass2Sha256);
+    const bool vector_pass5 =
+        g_fsr4_cooperative_vectors && main_weights && matches(5, MainPass5Sha256);
+    const bool vector_pass7 = g_fsr4_cooperative_vectors && matches(7, MainPass7Sha256);
+    // Passes 2, 5, 7 and 9 also have the same results from float multiply-adds of weights made
+    // from this initializer, which GPUs without 8-bit dot product instructions run faster.
+    const bool float_products =
+        !g_fsr4_cooperative_vectors && main_weights &&
+        !properties.get<vk::PhysicalDeviceShaderIntegerDotProductProperties>()
+             .integerDotProduct4x8BitPackedSignedAccelerated;
+    const bool float_pass2 = float_products && matches(2, MainPass2Sha256);
+    const bool float_pass5 = float_products && matches(5, MainPass5Sha256);
+    const bool float_pass7 = float_products && matches(7, MainPass7Sha256);
+    const bool float_pass9 = float_products && matches(9, MainPass9Sha256);
+    std::vector<u8> initializer = assets.initializer;
+    if (vector_pass2 || vector_pass5 || vector_pass7) {
+        const std::vector<u8> matrices = VectorMatrices(assets.initializer);
+        initializer.insert(initializer.end(), matrices.begin(), matrices.end());
+    }
+    if (float_pass2 || float_pass5 || float_pass7 || float_pass9) {
+        const std::vector<float> floats = FloatWeights(assets.initializer);
+        const auto* bytes = reinterpret_cast<const u8*>(floats.data());
+        initializer.insert(initializer.end(), bytes, bytes + floats.size() * sizeof(float));
+    }
     Gr2Fsr4CreateInfo info{
         .device = static_cast<VkDevice>(g_device->device),
         .physical_device = static_cast<VkPhysicalDevice>(g_device->gpu),
-        .initializer = assets.initializer.data(),
-        .initializer_size = assets.initializer.size(),
+        .initializer = initializer.data(),
+        .initializer_size = initializer.size(),
         .max_render_width = render.width,
         .max_render_height = render.height,
         .max_output_width = output.width,
@@ -379,6 +568,37 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
             .size_bytes = assets.shaders[pass].size() * sizeof(u32),
             .entry_point = assets.entry_points[pass].c_str(),
         };
+    }
+    std::string replaced_passes;
+    const auto replace = [&](std::size_t pass, const u32* words, std::size_t size_bytes) {
+        info.shaders[pass] =
+            Gr2Fsr4Shader{.words = words, .size_bytes = size_bytes, .entry_point = "main"};
+        replaced_passes += fmt::format(" {}", pass);
+    };
+    if (vector_pass2) {
+        replace(2, FSR4_MAIN_1080_PASS2_COMP, sizeof(FSR4_MAIN_1080_PASS2_COMP));
+    }
+    if (vector_pass5) {
+        replace(5, FSR4_MAIN_1080_PASS5_COMP, sizeof(FSR4_MAIN_1080_PASS5_COMP));
+    }
+    if (vector_pass7) {
+        replace(7, FSR4_MAIN_1080_PASS7_COMP, sizeof(FSR4_MAIN_1080_PASS7_COMP));
+    }
+    if (float_pass2) {
+        replace(2, FSR4_MAIN_1080_PASS2_FMA_COMP, sizeof(FSR4_MAIN_1080_PASS2_FMA_COMP));
+    }
+    if (float_pass5) {
+        replace(5, FSR4_MAIN_1080_PASS5_FMA_COMP, sizeof(FSR4_MAIN_1080_PASS5_FMA_COMP));
+    }
+    if (float_pass7) {
+        replace(7, FSR4_MAIN_1080_PASS7_FMA_COMP, sizeof(FSR4_MAIN_1080_PASS7_FMA_COMP));
+    }
+    if (float_pass9) {
+        replace(9, FSR4_MAIN_1080_PASS9_FMA_COMP, sizeof(FSR4_MAIN_1080_PASS9_FMA_COMP));
+    }
+    if (!replaced_passes.empty()) {
+        LOG_INFO(Render_Vulkan, "GR2port upscaler: FSR 4 passes{} run on {}", replaced_passes,
+                 g_fsr4_cooperative_vectors ? "cooperative vectors" : "float multiply-adds");
     }
     const Gr2Fsr4Status status = Gr2Fsr4Create(&info, &g_fsr4);
     if (status.stage != GR2_FSR4_STAGE_NONE) {
@@ -716,6 +936,15 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
             return std::string_view{extension.extensionName.data()} ==
                    VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME;
         });
+    const bool has_cooperative_vectors =
+        result == vk::Result::eSuccess &&
+        std::ranges::any_of(extensions, [](const vk::ExtensionProperties& extension) {
+            return std::string_view{extension.extensionName.data()} ==
+                   VK_NV_COOPERATIVE_VECTOR_EXTENSION_NAME;
+        });
+    // The create info points at these until the device is made.
+    g_device_extensions.assign(info.ppEnabledExtensionNames,
+                               info.ppEnabledExtensionNames + info.enabledExtensionCount);
     bool derivatives = false;
     if (has_derivatives) {
         const auto queried =
@@ -724,20 +953,45 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
                 .get<vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR>();
         derivatives = queried.computeDerivativeGroupLinear == VK_TRUE;
         if (derivatives) {
-            // The create info points at these until the device is made.
             g_derivatives = vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR{
                 .pNext = features.pNext,
                 .computeDerivativeGroupQuads = queried.computeDerivativeGroupQuads,
                 .computeDerivativeGroupLinear = VK_TRUE,
             };
             features.pNext = &g_derivatives;
-            g_device_extensions.assign(info.ppEnabledExtensionNames,
-                                       info.ppEnabledExtensionNames + info.enabledExtensionCount);
             g_device_extensions.push_back(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME);
-            info.enabledExtensionCount = static_cast<u32>(g_device_extensions.size());
-            info.ppEnabledExtensionNames = g_device_extensions.data();
         }
     }
+    // Cooperative vector modules use the Vulkan memory model.
+    g_fsr4_cooperative_vectors = false;
+    if (has_cooperative_vectors && supported12.vulkanMemoryModel == VK_TRUE) {
+        const auto queried =
+            gpu.getFeatures2<vk::PhysicalDeviceFeatures2,
+                             vk::PhysicalDeviceCooperativeVectorFeaturesNV>(dispatch)
+                .get<vk::PhysicalDeviceCooperativeVectorFeaturesNV>();
+        const auto [properties_result, combinations] =
+            gpu.getCooperativeVectorPropertiesNV(dispatch);
+        g_fsr4_cooperative_vectors =
+            queried.cooperativeVector == VK_TRUE && properties_result == vk::Result::eSuccess &&
+            std::ranges::any_of(combinations, [](const vk::CooperativeVectorPropertiesNV& types) {
+                return types.inputType == vk::ComponentTypeKHR::eUint32 &&
+                       types.inputInterpretation == vk::ComponentTypeKHR::eSint8PackedNV &&
+                       types.matrixInterpretation == vk::ComponentTypeKHR::eSint8 &&
+                       types.biasInterpretation == vk::ComponentTypeKHR::eSint32 &&
+                       types.resultType == vk::ComponentTypeKHR::eSint32;
+            });
+    }
+    if (g_fsr4_cooperative_vectors) {
+        g_cooperative_vector = vk::PhysicalDeviceCooperativeVectorFeaturesNV{
+            .pNext = features.pNext,
+            .cooperativeVector = VK_TRUE,
+        };
+        features.pNext = &g_cooperative_vector;
+        vk12.vulkanMemoryModel = VK_TRUE;
+        g_device_extensions.push_back(VK_NV_COOPERATIVE_VECTOR_EXTENSION_NAME);
+    }
+    info.enabledExtensionCount = static_cast<u32>(g_device_extensions.size());
+    info.ppEnabledExtensionNames = g_device_extensions.data();
     const vk::PhysicalDeviceFeatures& enabled = features.features;
     g_fsr4_features = Gr2Fsr3::Fsr4DeviceFeatures{
         .shader_float16 = vk12.shaderFloat16 == VK_TRUE,

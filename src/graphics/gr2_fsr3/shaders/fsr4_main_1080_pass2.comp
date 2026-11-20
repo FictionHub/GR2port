@@ -1,0 +1,147 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_NV_cooperative_vector : require
+#extension GL_EXT_shader_explicit_arithmetic_types : require
+
+// FSR 4 Lite's pass 2 for the 1080p size tier (fsr4_model_v07_fp8_no_scale_pass1 of
+// fsr4_lite_main_1080_pass2.spv) with its matrix products on cooperative vectors, which NVIDIA
+// GPUs run on their tensor cores. It reads and writes the bytes AMD's module does and its results
+// are identical: the products are integer sums. One thread per half-resolution pixel; each 2x2
+// block of them makes one quarter-resolution pixel.
+
+layout(local_size_x = 64, local_size_y = 2, local_size_z = 1) in;
+
+layout(set = 0, binding = 21) readonly buffer InitializerBuffer {
+    uint init_words[];
+};
+layout(set = 0, binding = 141) buffer ScratchBuffer {
+    uint scratch_words[];
+};
+
+// The tensors hold 16 one-byte channels per plane and have a one-pixel border.
+const uint HalfRow = 15392u;        // (960 + 2) * 16
+const uint QuarterRow = 7712u;      // (480 + 2) * 16
+const uint QuarterPlane = 2097664u; // 482 * 272 * 16
+const uint SkipOut = 8342464u;
+const uint QuarterOut = 16684928u;
+
+// Row-major copies of the 3x3 weights (16 rows of 144 bytes) and the stride-2 weights (32 rows of
+// 64 bytes), which the upscaler appends to AMD's 27392 bytes of model data.
+const uint MatrixA = 27392u;
+const uint MatrixD = 29696u;
+
+const int RowMajor = gl_CooperativeVectorMatrixLayoutRowMajorNV;
+const int Packed = gl_ComponentTypeSignedInt8PackedNV;
+const int Int8 = gl_ComponentTypeSignedInt8NV;
+const int Int32 = gl_ComponentTypeSignedInt32NV;
+
+// The skip results of each 2x2 block, by group row, block, x and y.
+shared uvec4 block_outputs[2][16][2][2];
+
+// Rounds acc / 2^shift half to even and saturates it to a signed byte.
+int Requant(int acc, int shift) {
+    return clamp((acc + ((1 << (shift - 1)) - 1) + ((acc >> shift) & 1)) >> shift, -128, 127);
+}
+
+uint Pack(ivec4 v) {
+    return (uint(v.x) & 255u) | ((uint(v.y) & 255u) << 8) | ((uint(v.z) & 255u) << 16) |
+           ((uint(v.w) & 255u) << 24);
+}
+
+ivec4 Unpack(uint w) {
+    return ivec4(bitfieldExtract(int(w), 0, 8), bitfieldExtract(int(w), 8, 8),
+                 bitfieldExtract(int(w), 16, 8), bitfieldExtract(int(w), 24, 8));
+}
+
+void main() {
+    const uvec3 lid = gl_LocalInvocationID;
+    const uint sx = lid.x % 2u;
+    const uint sy = (lid.x % 4u) / 2u;
+    const uint blk = lid.x / 4u;
+    const ivec2 pos =
+        ivec2(gl_WorkGroupID.xy * uvec2(32u, 4u) + uvec2(2u * blk + sx, 2u * lid.y + sy));
+
+    // A 3x3 convolution, 16 to 16 channels, as one product; taps outside the tensor are zero.
+    uvec4 taps[9];
+    for (uint ky = 0u; ky < 3u; ++ky) {
+        for (uint kx = 0u; kx < 3u; ++kx) {
+            const ivec2 tap = pos - 1 + ivec2(kx, ky);
+            const bool inside =
+                all(greaterThanEqual(tap, ivec2(0))) && all(lessThan(tap, ivec2(960, 540)));
+            const uint base = (16u * uint(tap.x + 1) + HalfRow * uint(tap.y + 1)) >> 2;
+            taps[3u * ky + kx] = inside ? uvec4(scratch_words[base], scratch_words[base + 1u],
+                                                scratch_words[base + 2u], scratch_words[base + 3u])
+                                        : uvec4(0u);
+        }
+    }
+    const coopvecNV<uint32_t, 36> a_in = coopvecNV<uint32_t, 36>(
+        taps[0], taps[1], taps[2], taps[3], taps[4], taps[5], taps[6], taps[7], taps[8]);
+    coopvecNV<int32_t, 16> a;
+    coopVecMatMulAddNV(a, a_in, Packed, init_words, MatrixA, Int8, init_words, 3456u, Int32, 16,
+                       144, RowMajor, false, 144u);
+    uvec4 l1;
+    for (uint i = 0u; i < 4u; ++i) {
+        l1[i] = Pack(ivec4(Requant(a[4u * i], 7), Requant(a[4u * i + 1u], 7),
+                           Requant(a[4u * i + 2u], 7), Requant(a[4u * i + 3u], 7)));
+    }
+
+    // A 1x1 convolution, 16 to 32 channels, with ReLU.
+    coopvecNV<int32_t, 32> b;
+    coopVecMatMulAddNV(b, coopvecNV<uint32_t, 4>(l1), Packed, init_words, 3584u, Int8, init_words,
+                       4096u, Int32, 32, 16, RowMajor, false, 16u);
+    uint h[8];
+    for (uint i = 0u; i < 8u; ++i) {
+        h[i] = Pack(ivec4(Requant(max(b[4u * i], 0), 9), Requant(max(b[4u * i + 1u], 0), 9),
+                          Requant(max(b[4u * i + 2u], 0), 9), Requant(max(b[4u * i + 3u], 0), 9)));
+    }
+
+    // A 1x1 convolution, 32 to 16 channels, added to the input at half weight.
+    const coopvecNV<uint32_t, 8> c_in = coopvecNV<uint32_t, 8>(uvec4(h[0], h[1], h[2], h[3]),
+                                                               uvec4(h[4], h[5], h[6], h[7]));
+    coopvecNV<int32_t, 16> c;
+    coopVecMatMulAddNV(c, c_in, Packed, init_words, 4224u, Int8, init_words, 4736u, Int32, 16, 32,
+                       RowMajor, false, 32u);
+    const uint center = (16u * uint(pos.x + 1) + HalfRow * uint(pos.y + 1)) >> 2;
+    uvec4 skip;
+    for (uint i = 0u; i < 4u; ++i) {
+        const ivec4 acc = ivec4(c[4u * i], c[4u * i + 1u], c[4u * i + 2u], c[4u * i + 3u]);
+        const vec4 f =
+            vec4(Unpack(scratch_words[center + i])) * 0.015625 + vec4(acc) * (1.0 / 2048.0);
+        skip[i] = Pack(clamp(ivec4(roundEven(f * 32.0)), ivec4(-128), ivec4(127)));
+    }
+    if (all(lessThan(pos, ivec2(960, 540)))) {
+        for (uint i = 0u; i < 4u; ++i) {
+            scratch_words[center + (SkipOut >> 2) + i] = skip[i];
+        }
+    }
+    block_outputs[lid.y][blk][sx][sy] = skip;
+    barrier();
+
+    // A 2x2 convolution with stride 2, 64 to 32 channels. The four threads of a block have the
+    // same input, so one thread of the first warp makes all 32 outputs of a block.
+    const uint thread = lid.x + 64u * lid.y;
+    if (thread >= 32u) {
+        return;
+    }
+    const uint by = thread / 16u;
+    const uint bx = thread % 16u;
+    const coopvecNV<uint32_t, 16> d_in =
+        coopvecNV<uint32_t, 16>(block_outputs[by][bx][0][0], block_outputs[by][bx][1][0],
+                                block_outputs[by][bx][0][1], block_outputs[by][bx][1][1]);
+    coopvecNV<int32_t, 32> d;
+    coopVecMatMulAddNV(d, d_in, Packed, init_words, MatrixD, Int8, init_words, 6912u, Int32, 32,
+                       64, RowMajor, false, 64u);
+    const uvec2 q = gl_WorkGroupID.xy * uvec2(16u, 2u) + uvec2(bx, by);
+    if (any(greaterThanEqual(q, uvec2(480u, 270u)))) {
+        return;
+    }
+    const uint pixel = (16u * (q.x + 1u) + QuarterRow * (q.y + 1u) + QuarterOut) >> 2;
+    for (uint i = 0u; i < 8u; ++i) {
+        const ivec4 acc = ivec4(d[4u * i], d[4u * i + 1u], d[4u * i + 2u], d[4u * i + 3u]);
+        const float scale = i < 4u ? 0.015625 : 0.0078125;
+        scratch_words[pixel + (QuarterPlane >> 2) * (i / 4u) + i % 4u] =
+            Pack(clamp(ivec4(roundEven(vec4(acc) * scale)), ivec4(-128), ivec4(127)));
+    }
+}

@@ -1,0 +1,164 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_EXT_control_flow_attributes : require
+
+// FSR 4 Lite's pass 2 for the 1080p size tier (fsr4_model_v07_fp8_no_scale_pass1 of
+// fsr4_lite_main_1080_pass2.spv) for GPUs without 8-bit dot product instructions: each product of
+// signed bytes is one float multiply-add. It reads and writes the bytes AMD's module does and its
+// results are identical: every sum is an integer below 2^24, which floats hold exactly. One thread
+// per half-resolution pixel; each 2x2 block of them makes one quarter-resolution pixel.
+
+layout(local_size_x = 64, local_size_y = 2, local_size_z = 1) in;
+
+layout(set = 0, binding = 21) readonly buffer InitializerBuffer {
+    float init_floats[];
+};
+layout(set = 0, binding = 141) buffer ScratchBuffer {
+    uint scratch_words[];
+};
+
+// The tensors hold 16 one-byte channels per plane and have a one-pixel border.
+const uint HalfRow = 15392u;        // (960 + 2) * 16
+const uint QuarterRow = 7712u;      // (480 + 2) * 16
+const uint QuarterPlane = 2097664u; // 482 * 272 * 16
+const uint SkipOut = 8342464u;
+const uint QuarterOut = 16684928u;
+
+// The weights as floats, which the upscaler appends to AMD's model data. Each layer's weights are
+// divided by the power of two its results are, and inputs read from the scratch buffer are
+// offset by 128, which the biases take back.
+const uint WeightsA = 21936u; // [tap][output][input], 9 x 16 x 16
+const uint BiasA = WeightsA + 2304u;
+const uint WeightsB = BiasA + 16u; // [output][input], 32 x 16
+const uint BiasB = WeightsB + 512u;
+const uint WeightsC = BiasB + 32u; // [output][input], 16 x 32
+const uint BiasC = WeightsC + 512u;
+const uint WeightsD = BiasC + 16u; // [output][block pixel][input], 32 x 4 x 16
+const uint BiasD = WeightsD + 2048u;
+
+// The skip results of each 2x2 block, by group row, block, pixel in the block and channel.
+shared float block_outputs[2][16][4][16];
+
+// The 4 bytes of word, each plus 128.
+vec4 Offset(uint word) {
+    const uint w = word ^ 0x80808080u;
+    return vec4(float(bitfieldExtract(w, 0, 8)), float(bitfieldExtract(w, 8, 8)),
+                float(bitfieldExtract(w, 16, 8)), float(bitfieldExtract(w, 24, 8)));
+}
+
+uint Pack(vec4 v) {
+    const ivec4 i = ivec4(v);
+    return (uint(i.x) & 255u) | ((uint(i.y) & 255u) << 8) | ((uint(i.z) & 255u) << 16) |
+           (uint(i.w) << 24);
+}
+
+void main() {
+    const uvec3 lid = gl_LocalInvocationID;
+    const uint sx = lid.x % 2u;
+    const uint sy = (lid.x % 4u) / 2u;
+    const uint blk = lid.x / 4u;
+    const ivec2 pos =
+        ivec2(gl_WorkGroupID.xy * uvec2(32u, 4u) + uvec2(2u * blk + sx, 2u * lid.y + sy));
+
+    // A 3x3 convolution, 16 to 16 channels; taps outside the tensor are zero.
+    float a[16];
+    [[unroll]] for (uint o = 0u; o < 16u; ++o) {
+        a[o] = init_floats[BiasA + o];
+    }
+    [[dont_unroll]] for (uint tap = 0u; tap < 9u; ++tap) {
+        const ivec2 t = pos - 1 + ivec2(tap % 3u, tap / 3u);
+        const bool inside = all(greaterThanEqual(t, ivec2(0))) && all(lessThan(t, ivec2(960, 540)));
+        const uint base = (16u * uint(t.x + 1) + HalfRow * uint(t.y + 1)) >> 2;
+        float x[16];
+        [[unroll]] for (uint w = 0u; w < 4u; ++w) {
+            const vec4 v = Offset(inside ? scratch_words[base + w] : 0u);
+            x[4u * w] = v.x;
+            x[4u * w + 1u] = v.y;
+            x[4u * w + 2u] = v.z;
+            x[4u * w + 3u] = v.w;
+        }
+        [[unroll]] for (uint o = 0u; o < 16u; ++o) {
+            [[unroll]] for (uint i = 0u; i < 16u; ++i) {
+                a[o] += x[i] * init_floats[WeightsA + 256u * tap + 16u * o + i];
+            }
+        }
+    }
+    float l1[16];
+    [[unroll]] for (uint o = 0u; o < 16u; ++o) {
+        l1[o] = clamp(roundEven(a[o]), -128.0, 127.0);
+    }
+
+    // A 1x1 convolution, 16 to 32 channels, with ReLU.
+    float h[32];
+    [[unroll]] for (uint o = 0u; o < 32u; ++o) {
+        float b = init_floats[BiasB + o];
+        [[unroll]] for (uint i = 0u; i < 16u; ++i) {
+            b += l1[i] * init_floats[WeightsB + 16u * o + i];
+        }
+        h[o] = clamp(roundEven(b), 0.0, 127.0);
+    }
+
+    // A 1x1 convolution, 32 to 16 channels, added to the input at half weight.
+    const uint center = (16u * uint(pos.x + 1) + HalfRow * uint(pos.y + 1)) >> 2;
+    float skip[16];
+    [[unroll]] for (uint w = 0u; w < 4u; ++w) {
+        vec4 c = vec4(init_floats[BiasC + 4u * w], init_floats[BiasC + 4u * w + 1u],
+                      init_floats[BiasC + 4u * w + 2u], init_floats[BiasC + 4u * w + 3u]);
+        [[unroll]] for (uint i = 0u; i < 32u; ++i) {
+            c += h[i] * vec4(init_floats[WeightsC + 32u * (4u * w) + i],
+                             init_floats[WeightsC + 32u * (4u * w + 1u) + i],
+                             init_floats[WeightsC + 32u * (4u * w + 2u) + i],
+                             init_floats[WeightsC + 32u * (4u * w + 3u) + i]);
+        }
+        const vec4 v = clamp(roundEven(Offset(scratch_words[center + w]) * 0.5 + c), -128.0, 127.0);
+        if (all(lessThan(pos, ivec2(960, 540)))) {
+            scratch_words[center + (SkipOut >> 2) + w] = Pack(v);
+        }
+        skip[4u * w] = v.x;
+        skip[4u * w + 1u] = v.y;
+        skip[4u * w + 2u] = v.z;
+        skip[4u * w + 3u] = v.w;
+    }
+    const uint corner = sx + 2u * sy;
+    [[unroll]] for (uint i = 0u; i < 16u; ++i) {
+        block_outputs[lid.y][blk][corner][i] = skip[i];
+    }
+    barrier();
+
+    // A 2x2 convolution with stride 2, 64 to 32 channels. The weights are the same for every
+    // thread of a group of 32 that makes the same channels, so a thread of each group row makes
+    // the 16 channels of one plane for a block of the group.
+    if (lid.x >= 32u) {
+        return;
+    }
+    const uint plane = lid.y;
+    const uint by = lid.x / 16u;
+    const uint bx = lid.x % 16u;
+    const uvec2 q = gl_WorkGroupID.xy * uvec2(16u, 2u) + uvec2(bx, by);
+    if (any(greaterThanEqual(q, uvec2(480u, 270u)))) {
+        return;
+    }
+    float d[16];
+    [[unroll]] for (uint o = 0u; o < 16u; ++o) {
+        d[o] = init_floats[BiasD + 16u * plane + o];
+    }
+    [[dont_unroll]] for (uint pixel = 0u; pixel < 4u; ++pixel) {
+        float x[16];
+        [[unroll]] for (uint i = 0u; i < 16u; ++i) {
+            x[i] = block_outputs[by][bx][pixel][i];
+        }
+        [[unroll]] for (uint o = 0u; o < 16u; ++o) {
+            [[unroll]] for (uint i = 0u; i < 16u; ++i) {
+                d[o] += x[i] * init_floats[WeightsD + 64u * (16u * plane + o) + 16u * pixel + i];
+            }
+        }
+    }
+    const uint out_pixel = (16u * (q.x + 1u) + QuarterRow * (q.y + 1u) + QuarterOut) >> 2;
+    [[unroll]] for (uint w = 0u; w < 4u; ++w) {
+        const vec4 v = vec4(d[4u * w], d[4u * w + 1u], d[4u * w + 2u], d[4u * w + 3u]);
+        scratch_words[out_pixel + (QuarterPlane >> 2) * plane + w] =
+            Pack(clamp(roundEven(v), -128.0, 127.0));
+    }
+}
