@@ -321,6 +321,9 @@
     "Screen Shake": "Guncangan Layar",
     "Hide UI": "Sembunyikan Antarmuka",
     "Hide UI (Photo Mode)": "Sembunyikan UI (Mode Foto)",
-    "GPU Crash Catcher": "Penangkap Crash GPU"
+    "GPU Crash Catcher": "Penangkap Crash GPU",
+    "Audio Device": "Perangkat Audio",
+    "DS4 Speaker Device": "Speaker DS4",
+    "Default Device": "Perangkat Bawaan"
   }
 }

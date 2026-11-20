@@ -321,6 +321,9 @@
     "Screen Shake": "画面震动",
     "Hide UI": "隐藏界面",
     "Hide UI (Photo Mode)": "隐藏界面（照片模式）",
-    "GPU Crash Catcher": "GPU 崩溃捕获"
+    "GPU Crash Catcher": "GPU 崩溃捕获",
+    "Audio Device": "音频设备",
+    "DS4 Speaker Device": "DS4 扬声器设备",
+    "Default Device": "默认设备"
   }
 }

@@ -321,6 +321,9 @@
     "Screen Shake": "Bildschirmwackeln",
     "Hide UI": "Oberfläche ausblenden",
     "Hide UI (Photo Mode)": "UI ausblenden (Fotomodus)",
-    "GPU Crash Catcher": "GPU-Absturzerkennung"
+    "GPU Crash Catcher": "GPU-Absturzerkennung",
+    "Audio Device": "Audiogerät",
+    "DS4 Speaker Device": "DS4-Lautsprecher",
+    "Default Device": "Standardgerät"
   }
 }

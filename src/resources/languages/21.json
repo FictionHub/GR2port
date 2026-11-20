@@ -321,6 +321,9 @@
     "Screen Shake": "‫اهتزاز الشاشة‬",
     "Hide UI": "‫إخفاء الواجهة‬",
     "Hide UI (Photo Mode)": "‫إخفاء الواجهة (وضع التصوير)‬",
-    "GPU Crash Catcher": "‫رصد أعطال GPU‬"
+    "GPU Crash Catcher": "‫رصد أعطال GPU‬",
+    "Audio Device": "‫جهاز الصوت‬",
+    "DS4 Speaker Device": "‫سماعة DS4‬",
+    "Default Device": "‫الجهاز الافتراضي‬"
   }
 }

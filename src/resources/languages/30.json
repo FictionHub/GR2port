@@ -321,6 +321,9 @@
     "Screen Shake": "Тремтіння екрана",
     "Hide UI": "Сховати інтерфейс",
     "Hide UI (Photo Mode)": "Сховати інтерфейс (фоторежим)",
-    "GPU Crash Catcher": "Перехоплення збоїв GPU"
+    "GPU Crash Catcher": "Перехоплення збоїв GPU",
+    "Audio Device": "Аудіопристрій",
+    "DS4 Speaker Device": "Динамік DS4",
+    "Default Device": "Типовий пристрій"
   }
 }

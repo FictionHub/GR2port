@@ -321,6 +321,9 @@
     "Screen Shake": "畫面震動",
     "Hide UI": "隱藏介面",
     "Hide UI (Photo Mode)": "隱藏介面（拍照模式）",
-    "GPU Crash Catcher": "GPU 當機偵測"
+    "GPU Crash Catcher": "GPU 當機偵測",
+    "Audio Device": "音訊裝置",
+    "DS4 Speaker Device": "DS4 揚聲器裝置",
+    "Default Device": "預設裝置"
   }
 }

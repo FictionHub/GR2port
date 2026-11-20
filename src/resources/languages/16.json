@@ -321,6 +321,9 @@
     "Screen Shake": "Wstrząsy ekranu",
     "Hide UI": "Ukryj interfejs",
     "Hide UI (Photo Mode)": "Ukryj interfejs (tryb zdjęć)",
-    "GPU Crash Catcher": "Wykrywanie awarii GPU"
+    "GPU Crash Catcher": "Wykrywanie awarii GPU",
+    "Audio Device": "Urządzenie audio",
+    "DS4 Speaker Device": "Głośnik DS4",
+    "Default Device": "Urządzenie domyślne"
   }
 }

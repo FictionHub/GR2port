@@ -321,6 +321,9 @@
     "Screen Shake": "Тряска экрана",
     "Hide UI": "Убрать интерфейс",
     "Hide UI (Photo Mode)": "Убрать интерфейс (фоторежим)",
-    "GPU Crash Catcher": "Отлов сбоев GPU"
+    "GPU Crash Catcher": "Отлов сбоев GPU",
+    "Audio Device": "Аудиоустройство",
+    "DS4 Speaker Device": "Динамик DS4",
+    "Default Device": "Устройство по умолчанию"
   }
 }

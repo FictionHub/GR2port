@@ -321,6 +321,9 @@
     "Screen Shake": "Schermschudden",
     "Hide UI": "Interface verbergen",
     "Hide UI (Photo Mode)": "Interface verbergen (fotomodus)",
-    "GPU Crash Catcher": "GPU-crashdetector"
+    "GPU Crash Catcher": "GPU-crashdetector",
+    "Audio Device": "Audioapparaat",
+    "DS4 Speaker Device": "DS4-luidspreker",
+    "Default Device": "Standaardapparaat"
   }
 }

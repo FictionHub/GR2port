@@ -321,6 +321,9 @@
     "Screen Shake": "Tremor da tela",
     "Hide UI": "Ocultar interface",
     "Hide UI (Photo Mode)": "Ocultar interface (Modo de Foto)",
-    "GPU Crash Catcher": "Detector de falhas da GPU"
+    "GPU Crash Catcher": "Detector de falhas da GPU",
+    "Audio Device": "Dispositivo de áudio",
+    "DS4 Speaker Device": "Alto-falante do DS4",
+    "Default Device": "Dispositivo padrão"
   }
 }

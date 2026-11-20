@@ -321,6 +321,9 @@
     "Screen Shake": "Otřesy obrazu",
     "Hide UI": "Skrýt rozhraní",
     "Hide UI (Photo Mode)": "Skrýt rozhraní (fotorežim)",
-    "GPU Crash Catcher": "Zachytávání pádů GPU"
+    "GPU Crash Catcher": "Zachytávání pádů GPU",
+    "Audio Device": "Zvukové zařízení",
+    "DS4 Speaker Device": "Reproduktor DS4",
+    "Default Device": "Výchozí zařízení"
   }
 }

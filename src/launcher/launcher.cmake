@@ -5,6 +5,8 @@ if (WIN32)
     target_sources(gr2port PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/art.cpp
         ${CMAKE_CURRENT_LIST_DIR}/art.h
+        ${CMAKE_CURRENT_LIST_DIR}/audio_devices.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/audio_devices.h
         ${CMAKE_CURRENT_LIST_DIR}/avatar.cpp
         ${CMAKE_CURRENT_LIST_DIR}/avatar.h
         ${CMAKE_CURRENT_LIST_DIR}/driver_notice.cpp
@@ -45,6 +47,8 @@ elseif (UNIX AND NOT APPLE)
     # The same launcher with Qt's widgets. Its classes need no moc.
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
     target_sources(gr2port PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/audio_devices.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/audio_devices.h
         ${CMAKE_CURRENT_LIST_DIR}/input_config.cpp
         ${CMAKE_CURRENT_LIST_DIR}/input_config.h
         ${CMAKE_CURRENT_LIST_DIR}/launcher.h

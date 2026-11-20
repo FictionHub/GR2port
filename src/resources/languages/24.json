@@ -321,6 +321,9 @@
     "Screen Shake": "Képernyőrázkódás",
     "Hide UI": "Felület elrejtése",
     "Hide UI (Photo Mode)": "Felület elrejtése (fotó mód)",
-    "GPU Crash Catcher": "GPU-összeomlás-figyelő"
+    "GPU Crash Catcher": "GPU-összeomlás-figyelő",
+    "Audio Device": "Hangeszköz",
+    "DS4 Speaker Device": "DS4 hangszóró",
+    "Default Device": "Alapértelmezett eszköz"
   }
 }

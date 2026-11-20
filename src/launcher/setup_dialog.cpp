@@ -41,6 +41,7 @@
 #include "input/input_handler.h"
 #include "input/selected_pad.h"
 #include "launcher/art.h"
+#include "launcher/audio_devices.h"
 #include "launcher/avatar.h"
 #include "launcher/folder_picker.h"
 #include "launcher/input_config.h"
@@ -113,6 +114,10 @@ enum Control : int {
     IdHdrWhiteLabel,
     IdHdrWhite,
     IdCrashCatcher,
+    IdAudioDeviceLabel,
+    IdAudioDevice,
+    IdPadSpeakerDeviceLabel,
+    IdPadSpeakerDevice,
     IdDlc,
     IdHalloween,
     IdSignUp,
@@ -459,9 +464,9 @@ struct Row {
     int top;
 };
 
-// Rows RowStep pixels apart below the check boxes, then the volume, the HDR rows and the GPU
-// Crash Catcher check box, in line with a row. The page scrolls to the ones below the tenth row,
-// down to DisplayPageBottom.
+// Rows RowStep pixels apart below the check boxes, then the volume, the HDR rows, the GPU Crash
+// Catcher check box in line with a row and the audio device rows. The page scrolls to the ones
+// below the tenth row, down to DisplayPageBottom.
 constexpr int RowStep = 28;
 constexpr std::array Rows{
     Row{IdMonitorLabel, IdMonitor, L"Monitor", 140},
@@ -482,7 +487,11 @@ constexpr std::array HdrRows{
     Row{IdHdrWhiteLabel, IdHdrWhite, L"HDR Paper White", 524},
 };
 constexpr int CrashCatcherTop = 554;
-constexpr int DisplayPageBottom = 587;
+constexpr std::array AudioRows{
+    Row{IdAudioDeviceLabel, IdAudioDevice, L"Audio Device", 580},
+    Row{IdPadSpeakerDeviceLabel, IdPadSpeakerDevice, L"DS4 Speaker Device", 608},
+};
+constexpr int DisplayPageBottom = 646;
 
 // In the order of Settings::VSync.
 constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
@@ -617,6 +626,8 @@ struct Dialog {
     Settings::Values values;
     std::vector<Monitor> monitors;
     Modes modes;
+    // The audio device rows' choices, by the names the audio backend opens them by.
+    std::vector<std::string> audio_devices;
     UINT dpi = USER_DEFAULT_SCREEN_DPI;
     HFONT font = nullptr;
     HBITMAP banner = nullptr;
@@ -1055,6 +1066,15 @@ void ShowGyroDeadzone(const Dialog& dialog, int value) {
 void ShowVolume(const Dialog& dialog, int value) {
     SendMessageW(Item(dialog, IdVolume), TBM_SETPOS, TRUE, value);
     SetWindowTextW(Item(dialog, IdVolumeValue), Percent(value).c_str());
+}
+
+void ShowAudioDevices(const Dialog& dialog, const AudioDevices::Chosen& chosen) {
+    const auto index = [&](const std::string& name) {
+        return static_cast<int>(std::ranges::find(dialog.audio_devices, name) -
+                                dialog.audio_devices.begin());
+    };
+    Select(Item(dialog, IdAudioDevice), index(chosen.main));
+    Select(Item(dialog, IdPadSpeakerDevice), index(chosen.pad_speaker));
 }
 
 // The number beside a slider follows it.
@@ -1882,6 +1902,9 @@ void Build(HWND window, Dialog& dialog) {
                                      L"GPU Crash Catcher", BS_AUTOCHECKBOX | WS_TABSTOP,
                                      IdCrashCatcher, CheckLeft, CrashCatcherTop, CheckWidth,
                                      CheckHeight));
+    for (const Row& row : AudioRows) {
+        add_row(row);
+    }
     KeepTabOrder(page_order);
     // Sets the page's scroll bar to scroll it down to bottom.
     const auto set_scroll = [&](HWND page, int bottom) {
@@ -2278,6 +2301,16 @@ void Build(HWND window, Dialog& dialog) {
     for (const u32 nits : Settings::HdrPaperWhiteLevels) {
         AddText(Item(dialog, IdHdrWhite), std::to_wstring(nits) + L" nits");
     }
+    // A device is named as the system names it.
+    const AudioDevices::Chosen chosen_devices = AudioDevices::Get();
+    dialog.audio_devices = AudioDevices::List(chosen_devices);
+    for (const std::string& name : dialog.audio_devices) {
+        for (const int combo : {IdAudioDevice, IdPadSpeakerDevice}) {
+            AddText(Item(dialog, combo), name == AudioDevices::Default
+                                             ? Phrase{L"Default Device"}
+                                             : Phrase{L"{0}", {Wide(name)}});
+        }
+    }
     for (const GamePatches::FrameRate& rate : GamePatches::FrameRates) {
         AddText(Item(dialog, IdFrameRate), std::to_wstring(rate.fps) + L" FPS");
     }
@@ -2300,6 +2333,7 @@ void Build(HWND window, Dialog& dialog) {
     ShowLanguage(dialog, Language::Current());
     Show(dialog, dialog.values.display);
     ShowVolume(dialog, EmulatorSettings.GetVolumeSlider());
+    ShowAudioDevices(dialog, chosen_devices);
     ShowGame(dialog, dialog.values.game);
     ShowGraphics(dialog, dialog.values.graphics);
     ShowUpscaler(dialog, dialog.values.graphics);
@@ -2385,6 +2419,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         if (code == BN_CLICKED) {
             Show(dialog, Settings::Display{});
             ShowVolume(dialog, GeneralSettings{}.volume_slider.value);
+            ShowAudioDevices(dialog, {});
             ShowGame(dialog, Settings::Game{});
             ShowGraphics(dialog, Settings::Graphics{});
             ShowUpscaler(dialog, Settings::Graphics{});
@@ -2516,10 +2551,12 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         dialog.values.mouse = ReadMouse(dialog);
         Settings::Set(dialog.values);
         // The game starts in the language the launcher shows; SaveController saves it, the
-        // volume and the trophy pop-ups' switch.
+        // volume, the audio devices and the trophy pop-ups' switch.
         EmulatorSettings.SetConsoleLanguage(Language::Current());
         EmulatorSettings.SetVolumeSlider(
             static_cast<int>(SendMessageW(Item(dialog, IdVolume), TBM_GETPOS, 0, 0)));
+        AudioDevices::Set({dialog.audio_devices[Selected(Item(dialog, IdAudioDevice))],
+                           dialog.audio_devices[Selected(Item(dialog, IdPadSpeakerDevice))]});
         EmulatorSettings.SetTrophyPopupDisabled(!Checked(dialog, IdTrophyPopups));
         dialog.restart = SavePaths(dialog);
         SaveOnline(window, dialog);

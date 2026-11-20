@@ -321,6 +321,9 @@
     "Screen Shake": "Rung màn hình",
     "Hide UI": "Ẩn giao diện",
     "Hide UI (Photo Mode)": "Ẩn giao diện (chế độ chụp ảnh)",
-    "GPU Crash Catcher": "Bắt lỗi GPU"
+    "GPU Crash Catcher": "Bắt lỗi GPU",
+    "Audio Device": "Thiết bị âm thanh",
+    "DS4 Speaker Device": "Loa DS4",
+    "Default Device": "Thiết bị mặc định"
   }
 }

@@ -321,6 +321,9 @@
     "Screen Shake": "Skjermristing",
     "Hide UI": "Skjul grensesnittet",
     "Hide UI (Photo Mode)": "Skjul grensesnittet (fotomodus)",
-    "GPU Crash Catcher": "GPU-krasjfanger"
+    "GPU Crash Catcher": "GPU-krasjfanger",
+    "Audio Device": "Lydenhet",
+    "DS4 Speaker Device": "DS4-høyttaler",
+    "Default Device": "Standardenhet"
   }
 }

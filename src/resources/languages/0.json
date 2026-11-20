@@ -321,6 +321,9 @@
     "Screen Shake": "画面の揺れ",
     "Hide UI": "UIを隠す",
     "Hide UI (Photo Mode)": "UIを隠す(フォトモード)",
-    "GPU Crash Catcher": "GPUクラッシュ検出"
+    "GPU Crash Catcher": "GPUクラッシュ検出",
+    "Audio Device": "音声出力デバイス",
+    "DS4 Speaker Device": "DS4スピーカー出力デバイス",
+    "Default Device": "既定のデバイス"
   }
 }

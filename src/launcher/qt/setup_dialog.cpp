@@ -47,6 +47,7 @@
 #include "core/user_settings.h"
 #include "input/input_handler.h"
 #include "input/selected_pad.h"
+#include "launcher/audio_devices.h"
 #include "launcher/input_config.h"
 #include "launcher/qt/art.h"
 #include "launcher/qt/avatar.h"
@@ -272,9 +273,9 @@ struct Pad {
     std::string guid;
 };
 
-// The Display tab's rows, 28 pixels apart below the check boxes, then the volume, the HDR rows and
-// the GPU Crash Catcher check box, in line with a row. The page scrolls to the ones below the
-// tenth row, down to DisplayPageBottom.
+// The Display tab's rows, 28 pixels apart below the check boxes, then the volume, the HDR rows, the
+// GPU Crash Catcher check box in line with a row and the audio device rows. The page scrolls to the
+// ones below the tenth row, down to DisplayPageBottom.
 constexpr int MonitorTop = 140;
 constexpr int ResolutionTop = 168;
 constexpr int RefreshTop = 196;
@@ -290,7 +291,9 @@ constexpr int HdrTop = 468;
 constexpr int HdrPeakTop = 496;
 constexpr int HdrWhiteTop = 524;
 constexpr int CrashCatcherTop = 554;
-constexpr int DisplayPageBottom = 587;
+constexpr int AudioDeviceTop = 580;
+constexpr int PadSpeakerDeviceTop = 608;
+constexpr int DisplayPageBottom = 646;
 
 // In the order of Settings::VSync.
 constexpr std::array<std::string_view, 3> VSyncNames{"Off", "Double Buffered", "Triple Buffered"};
@@ -392,6 +395,8 @@ struct Dialog {
     Settings::Values values;
     std::vector<Monitor> monitors;
     Modes modes;
+    // The audio device rows' choices, by the names the audio backend opens them by.
+    std::vector<std::string> audio_devices;
     QTabBar* tab = nullptr;
     std::array<QWidget*, PageCount> pages{};
     std::vector<GamePatches::Extra> extras;
@@ -448,6 +453,8 @@ struct Dialog {
     QLabel* hdr_white_label = nullptr;
     QComboBox* hdr_white = nullptr;
     QCheckBox* crash_catcher = nullptr;
+    QComboBox* audio_device = nullptr;
+    QComboBox* pad_speaker_device = nullptr;
     QComboBox* preset = nullptr;
     QComboBox* field_of_view = nullptr;
     QComboBox* shadows = nullptr;
@@ -1130,6 +1137,15 @@ void Show(Dialog& dialog, const Settings::Display& display) {
     UpdateEnabled(dialog);
 }
 
+void ShowAudioDevices(Dialog& dialog, const AudioDevices::Chosen& chosen) {
+    const auto index = [&](const std::string& name) {
+        return static_cast<int>(std::ranges::find(dialog.audio_devices, name) -
+                                dialog.audio_devices.begin());
+    };
+    dialog.audio_device->setCurrentIndex(index(chosen.main));
+    dialog.pad_speaker_device->setCurrentIndex(index(chosen.pad_speaker));
+}
+
 // The primary monitor is stored as none, so it follows the primary monitor when that changes.
 Settings::Display Read(const Dialog& dialog) {
     Settings::Display display = dialog.values.display;
@@ -1353,6 +1369,8 @@ void BuildDisplay(Dialog& dialog, QWidget* page) {
     dialog.crash_catcher =
         MakeCheck(dialog, page, "GPU Crash Catcher",
                   Place(page, CheckLeft, CrashCatcherTop, CheckWidth, CheckHeight));
+    dialog.audio_device = MakeRow(dialog, page, "Audio Device", AudioDeviceTop);
+    dialog.pad_speaker_device = MakeRow(dialog, page, "DS4 Speaker Device", PadSpeakerDeviceTop);
 }
 
 // Tab order follows creation: the preset and the field of view, the left column's rows, then the
@@ -1819,10 +1837,12 @@ void Save(Dialog& dialog) {
     dialog.values.graphics = ReadGraphics(dialog);
     dialog.values.mouse = ReadMouse(dialog);
     Settings::Set(dialog.values);
-    // The game starts in the language the launcher shows; SaveController saves it, the volume and
-    // the trophy pop-ups' switch.
+    // The game starts in the language the launcher shows; SaveController saves it, the volume, the
+    // audio devices and the trophy pop-ups' switch.
     EmulatorSettings.SetConsoleLanguage(Language::Current());
     EmulatorSettings.SetVolumeSlider(dialog.volume->value());
+    AudioDevices::Set({dialog.audio_devices[dialog.audio_device->currentIndex()],
+                       dialog.audio_devices[dialog.pad_speaker_device->currentIndex()]});
     EmulatorSettings.SetTrophyPopupDisabled(!dialog.trophy_popups->isChecked());
     dialog.restart = SavePaths(dialog);
     SaveOnline(dialog);
@@ -1842,6 +1862,7 @@ void Save(Dialog& dialog) {
 void SetDefaults(Dialog& dialog) {
     Show(dialog, Settings::Display{});
     dialog.volume->setValue(GeneralSettings{}.volume_slider.value);
+    ShowAudioDevices(dialog, {});
     ShowGame(dialog, Settings::Game{});
     ShowGraphics(dialog, Settings::Graphics{});
     ShowUpscaler(dialog, Settings::Graphics{});
@@ -1941,6 +1962,16 @@ void Build(Dialog& dialog) {
     for (const u32 nits : Settings::HdrPaperWhiteLevels) {
         AddText(dialog, dialog.hdr_white, std::to_string(nits) + " nits");
     }
+    // A device is named as the system names it.
+    const AudioDevices::Chosen chosen_devices = AudioDevices::Get();
+    dialog.audio_devices = AudioDevices::List(chosen_devices);
+    for (const std::string& name : dialog.audio_devices) {
+        for (QComboBox* const combo : {dialog.audio_device, dialog.pad_speaker_device}) {
+            AddText(dialog, combo,
+                    name == AudioDevices::Default ? Phrase{"Default Device"}
+                                                  : Phrase{"{0}", {name}});
+        }
+    }
     for (const GamePatches::FrameRate& rate : GamePatches::FrameRates) {
         AddText(dialog, dialog.frame_rate, std::to_string(rate.fps) + " FPS");
     }
@@ -1963,6 +1994,7 @@ void Build(Dialog& dialog) {
     ShowLanguage(dialog, Language::Current());
     Show(dialog, dialog.values.display);
     dialog.volume->setValue(EmulatorSettings.GetVolumeSlider());
+    ShowAudioDevices(dialog, chosen_devices);
     ShowGame(dialog, dialog.values.game);
     ShowGraphics(dialog, dialog.values.graphics);
     ShowUpscaler(dialog, dialog.values.graphics);

@@ -321,6 +321,9 @@
     "Screen Shake": "Scuotimento schermo",
     "Hide UI": "Nascondi interfaccia",
     "Hide UI (Photo Mode)": "Nascondi UI (modalità foto)",
-    "GPU Crash Catcher": "Rilevatore di crash GPU"
+    "GPU Crash Catcher": "Rilevatore di crash GPU",
+    "Audio Device": "Dispositivo audio",
+    "DS4 Speaker Device": "Altoparlante DS4",
+    "Default Device": "Dispositivo predefinito"
   }
 }
