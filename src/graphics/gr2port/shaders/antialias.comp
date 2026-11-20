@@ -1,0 +1,252 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's antialias program (CS 0x1c23378): FXAA on the luma that the toned colour keeps in
+// alpha, then, where the scene's alpha marks world or sky, a blend with the last frame's output
+// clamped to the four neighbours, and the sRGB encode. Each float step follows the program's own.
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform texture2D color_texture;
+layout(set = 0, binding = 1) uniform sampler color_sampler;
+layout(set = 0, binding = 2, rgba8) uniform writeonly image2D output_image;
+layout(set = 0, binding = 3) uniform texture2D history_texture;
+layout(set = 0, binding = 4) uniform texture2D velocity_texture;
+layout(set = 0, binding = 5) uniform texture2D scene_texture;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Constants {
+    vec2 size;
+    vec2 inverse_size;
+    vec2 source_scale;
+    float low_frequency;
+    float high_frequency;
+};
+layout(push_constant) uniform Push {
+    Constants constants;
+};
+
+#define COLOR sampler2D(color_texture, color_sampler)
+
+float Luma(vec2 position) {
+    return textureLod(COLOR, position, 0.0).a;
+}
+
+// FXAA's search moves both ends one step along the edge unless that end has found it.
+void Step(inout vec2 end_n, inout vec2 end_p, inout float luma_n, inout float luma_p,
+          inout bool done_n, inout bool done_p, vec2 offset, float scale, float luma_half,
+          float gradient) {
+    if (!done_n) {
+        luma_n = Luma(end_n);
+    }
+    if (!done_p) {
+        luma_p = Luma(end_p);
+    }
+    luma_n = done_n ? luma_n : luma_n - luma_half;
+    luma_p = done_p ? luma_p : luma_p - luma_half;
+    done_n = abs(luma_n) >= gradient;
+    done_p = abs(luma_p) >= gradient;
+    end_p.y = done_p ? end_p.y : scale * offset.y + end_p.y;
+    end_p.x = done_p ? end_p.x : scale * offset.x + end_p.x;
+    end_n.y = done_n ? end_n.y : -scale * offset.y + end_n.y;
+    end_n.x = done_n ? end_n.x : -scale * offset.x + end_n.x;
+}
+
+void main() {
+    const vec2 size = constants.size;
+    const vec2 inverse_size = constants.inverse_size;
+    const uvec2 pixel = gl_WorkGroupID.xy * 8u + gl_LocalInvocationID.xy;
+    const ivec2 limit = ivec2(size);
+    if (int(pixel.y) >= limit.y || int(pixel.x) >= limit.x) {
+        return;
+    }
+
+    // Lumas of the 3x3 neighbourhood: the gathers return (W, M, N, NW) and (S, SE, E, M).
+    const vec2 centre = vec2(ivec2(pixel)) + 0.5;
+    const vec2 position = inverse_size * centre;
+    const vec2 texel = vec2(textureSize(COLOR, 0));
+    const vec4 upper = textureGather(COLOR, position + vec2(-1.0) / texel, 3);
+    const vec4 lower = textureGather(COLOR, position, 3);
+    const vec4 middle = textureLod(COLOR, position, 0.0);
+    const float luma_w = upper.x;
+    const float luma_n = upper.z;
+    const float luma_nw = upper.w;
+    const float luma_s = lower.x;
+    const float luma_se = lower.y;
+    const float luma_e = lower.z;
+    const float luma_m = middle.a;
+    float range_max = max(max(luma_e, luma_s), luma_w);
+    float range_min = min(min(luma_e, luma_s), luma_w);
+    range_max = max(max(luma_m, range_max), luma_n);
+    range_min = min(min(luma_m, range_min), luma_n);
+    const float threshold = max(0.0625, 0.125 * range_max);
+    const float range = range_max - range_min;
+
+    vec3 color = middle.rgb;
+    if (!(range < threshold)) {
+        const float luma_ne = Luma(position + vec2(1.0, -1.0) / texel);
+        const float luma_sw = Luma(position + vec2(-1.0, 1.0) / texel);
+        const float luma_ns = luma_s + luma_n;
+        const float luma_we = luma_w + luma_e;
+        const float edge_horz1 = -2.0 * luma_m + luma_ns;
+        const float edge_vert1 = -2.0 * luma_m + luma_we;
+        const float luma_east = luma_se + luma_ne;
+        const float luma_west = luma_sw + luma_nw;
+        const float edge_vert3 = -2.0 * luma_s + (luma_sw + luma_se);
+        const float edge_horz2 = -2.0 * luma_e + luma_east;
+        const float edge_vert2 = -2.0 * luma_n + (luma_nw + luma_ne);
+        float edge_vert = abs(edge_vert2) + abs(edge_vert3);
+        const float edge_horz3 = -2.0 * luma_w + luma_west;
+        float edge_horz = abs(edge_horz2) + abs(edge_horz3);
+        edge_horz = 2.0 * abs(edge_horz1) + edge_horz;
+        edge_vert = 2.0 * abs(edge_vert1) + edge_vert;
+        const bool horizontal = edge_horz >= edge_vert;
+
+        // The side of the edge with the larger gradient, and the start half a pixel towards it.
+        const float luma_side_n = horizontal ? luma_n : luma_w;
+        const float luma_side_s = horizontal ? luma_s : luma_e;
+        const float gradient_n = luma_side_n - luma_m;
+        const float gradient_s = luma_side_s - luma_m;
+        const bool pair_n = abs(gradient_n) >= abs(gradient_s);
+        const float luma_pair = pair_n ? luma_side_n : luma_side_s;
+        const float gradient = max(abs(gradient_n), abs(gradient_s));
+        const vec2 offset = horizontal ? vec2(inverse_size.x, 0.0) : vec2(0.0, inverse_size.y);
+        const float luma_nn = luma_m + luma_pair;
+        float length_sign = horizontal ? inverse_size.y : inverse_size.x;
+        length_sign = pair_n ? -length_sign : length_sign;
+        const float shifted_y = 0.5 * length_sign + position.y;
+        const float shifted_x = 0.5 * length_sign + position.x;
+        const float gradient_scaled = 0.25 * gradient;
+        const vec2 start = vec2(horizontal ? position.x : shifted_x,
+                                horizontal ? shifted_y : position.y);
+
+        // The search: 1, then 1.5, 2, 4 and 12 pixels along the edge each way.
+        vec2 end_n = start - offset;
+        vec2 end_p = start + offset;
+        float luma_end_n = Luma(end_n);
+        float luma_end_p = Luma(end_p);
+        const vec2 next_n = vec2(1.5 * -offset.x + end_n.x, 1.5 * -offset.y + end_n.y);
+        const vec2 next_p = vec2(offset.x * 1.5 + end_p.x, offset.y * 1.5 + end_p.y);
+        const float luma_half = 0.5 * luma_nn;
+        luma_end_n = -0.5 * luma_nn + luma_end_n;
+        luma_end_p = -0.5 * luma_nn + luma_end_p;
+        bool done_n = abs(luma_end_n) >= gradient_scaled;
+        bool done_p = abs(luma_end_p) >= gradient_scaled;
+        end_n = done_n ? end_n : next_n;
+        end_p = done_p ? end_p : next_p;
+        if (!(done_n && done_p)) {
+            Step(end_n, end_p, luma_end_n, luma_end_p, done_n, done_p, offset, 2.0, luma_half,
+                 gradient_scaled);
+            if (!(done_n && done_p)) {
+                Step(end_n, end_p, luma_end_n, luma_end_p, done_n, done_p, offset, 4.0, luma_half,
+                     gradient_scaled);
+                if (!(done_n && done_p)) {
+                    if (!done_n) {
+                        luma_end_n = Luma(end_n);
+                    }
+                    if (!done_p) {
+                        luma_end_p = Luma(end_p);
+                    }
+                    luma_end_n = done_n ? luma_end_n : luma_end_n - luma_half;
+                    const bool last_n = abs(luma_end_n) >= gradient_scaled;
+                    const vec2 far_n = vec2(12.0 * -offset.x + end_n.x,
+                                            12.0 * -offset.y + end_n.y);
+                    const float far_p = offset.x * 12.0 + end_p.x;
+                    end_n = last_n ? end_n : far_n;
+                    luma_end_p = done_p ? luma_end_p : luma_end_p - luma_half;
+                    const bool last_p = abs(luma_end_p) >= gradient_scaled;
+                    end_p.x = last_p ? end_p.x : far_p;
+                    const float far_step = 12.0 * offset.y;
+                    if (!last_p) {
+                        end_p.y = end_p.y + far_step;
+                    }
+                }
+            }
+        }
+
+        // The pixel's offset across the edge: from the nearer end, or the sub-pixel blend.
+        const float luma_nswe = luma_ns + luma_we;
+        const float luma_corners = luma_east + luma_west;
+        const bool below = luma_m < luma_half;
+        const float subpixel_sum = 2.0 * luma_nswe + luma_corners;
+        const float range_inverse = 1.0 / range;
+        const float distance_n_y = position.y - end_n.y;
+        const float distance_n_x = position.x - end_n.x;
+        const float subpixel_a = uintBitsToFloat(0x3daaaaabu) * subpixel_sum + -luma_m;
+        const float distance_p_y = end_p.y - position.y;
+        const float distance_p_x = end_p.x - position.x;
+        const float subpixel_b = clamp(abs(subpixel_a) * range_inverse, 0.0, 1.0);
+        const float distance_n = horizontal ? distance_n_x : distance_n_y;
+        const float distance_p = horizontal ? distance_p_x : distance_p_y;
+        const float subpixel_c = -2.0 * subpixel_b + 3.0;
+        const float subpixel_d = subpixel_b * subpixel_b;
+        const float span = distance_n + distance_p;
+        const bool direction_n = distance_n < distance_p;
+        const bool good_n = (0.0 > luma_end_n) != below;
+        const bool good_p = (0.0 > luma_end_p) != below;
+        const float subpixel_e = subpixel_d * subpixel_c;
+        const float span_inverse = 1.0 / -span;
+        const float nearer = min(distance_n, distance_p);
+        const float subpixel_f = subpixel_e * subpixel_e;
+        const float pixel_offset = span_inverse * nearer + 0.5;
+        const bool good = (good_p && !direction_n) || (good_n && direction_n);
+        const float subpixel_h = 0.75 * subpixel_f;
+        const float offset_good = good ? pixel_offset : 0.0;
+        const float final_offset = max(offset_good, subpixel_h);
+        const float moved_y = length_sign * final_offset + position.y;
+        const float moved_x = length_sign * final_offset + position.x;
+        color = textureLod(COLOR,
+                           vec2(horizontal ? position.x : moved_x,
+                                horizontal ? moved_y : position.y),
+                           0.0)
+                    .rgb;
+    }
+
+    // World and sky: blend with the last frame's output where it lies on screen within 16 pixels.
+    const ivec2 source = ivec2(constants.source_scale * vec2(pixel));
+    if (texelFetch(sampler2D(scene_texture, color_sampler), source, 0).a != 0.0) {
+        const vec2 velocity = texelFetch(sampler2D(velocity_texture, color_sampler), source, 0).xy;
+        vec3 history = color;
+        const float motion_x = size.x * velocity.x;
+        const float motion_y = size.y * velocity.y;
+        const float half_x = 0.5 * motion_x;
+        const vec2 previous = vec2(0.5 * motion_x + centre.x, -0.5 * motion_y + centre.y);
+        const bool inside_y = size.y >= previous.y;
+        const bool inside_x = size.x >= previous.x;
+        const float lowest = min(previous.x, previous.y);
+        const float half_y = -0.5 * motion_y;
+        const bool inside = 0.0 <= lowest;
+        const float moved = half_y * half_y + half_x * half_x;
+        if (inside_x && inside_y && inside && 256.0 >= moved) {
+            history = textureLod(sampler2D(history_texture, color_sampler),
+                                 inverse_size * previous, 0.0)
+                          .rgb;
+        }
+        const ivec2 at = ivec2(pixel);
+        const int below_y = max(0, min(limit.y, at.y + 1));
+        const int left_x = max(0, min(limit.x, at.x - 1));
+        const int right_x = max(0, min(limit.x, at.x + 1));
+        const int above_y = max(0, min(limit.y, at.y - 1));
+        const int middle_y = max(0, min(at.y, limit.y));
+        const int middle_x = max(0, min(limit.x, at.x));
+        const vec3 down = texelFetch(COLOR, ivec2(middle_x, below_y), 0).rgb;
+        const vec3 right = texelFetch(COLOR, ivec2(right_x, middle_y), 0).rgb;
+        const vec3 left = texelFetch(COLOR, ivec2(left_x, middle_y), 0).rgb;
+        const vec3 up = texelFetch(COLOR, ivec2(middle_x, above_y), 0).rgb;
+        const float low = constants.low_frequency;
+        const float spread = constants.high_frequency - low;
+        const vec3 sum = right + left + down + up;
+        const vec3 most = max(max(up, max(right, left)), down);
+        const vec3 least = min(min(up, min(right, left)), down);
+        const vec3 clamped = max(least, min(history, most));
+        const vec3 weight = clamp(1.0 / (abs(0.25 * sum + -color) * spread + low), 0.0, 1.0);
+        color = weight * (clamped - color) + color;
+    }
+
+    const vec3 power = exp2(uintBitsToFloat(0x3ed55555u) * log2(max(vec3(0.0), color)));
+    const vec3 curve = uintBitsToFloat(0x3f870a3du) * power + uintBitsToFloat(0xbd6147aeu);
+    const vec3 line = uintBitsToFloat(0x414eb852u) * color;
+    const bvec3 dark = lessThan(color, vec3(uintBitsToFloat(0x3b4d2e1cu)));
+    imageStore(output_image, ivec2(pixel), vec4(mix(curve, line, dark), luma_m));
+}
