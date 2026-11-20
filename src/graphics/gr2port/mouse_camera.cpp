@@ -26,9 +26,11 @@ constexpr VAddr ShiftCameraStart = 0x1562700;
 constexpr VAddr ShiftCameraEnd = 0x1562700 + 15806;
 
 // void FUN_01567bd0(camera, ...): the camera on foot turns its orientation at camera + 0xc0 by the
-// stick itself, about the world's Y axis.
+// stick itself, about the Y axis of the quaternion at FollowFrame, which follows Kat's gravity: on
+// a wall its Y axis is the wall's normal.
 constexpr Hooks::Entry Follow{0x1567bd0, 6, Hooks::FramePrologue};
 constexpr u64 FollowOrientation = 0xc0;
+constexpr VAddr FollowFrame = 0x1f2f340;
 
 // The game's camera options: yaw and pitch inverted (bytes), and the camera sensitivity, slider
 // value / 50, 1 by default.
@@ -60,8 +62,6 @@ struct Quaternion {
     float z;
     float w;
 };
-
-constexpr Quaternion Identity{0.0f, 0.0f, 0.0f, 1.0f};
 
 using TurnFunction = bool PS4_SYSV_ABI (*)(float weight, u64 state, u64 orientation, u64 frame,
                                            u64 up, u64 out);
@@ -175,7 +175,7 @@ bool PS4_SYSV_ABI OnTurn(float weight, u64 state, u64 orientation, u64 frame, u6
 
 void PS4_SYSV_ABI OnFollow(u32, const Hooks::Registers* registers, u64) {
     const bool takes = static_cast<u32>(Read<u64>(CameraMode)) != 1 && StickTurnsCamera();
-    TurnByMouse(registers->rdi + FollowOrientation, Identity, g_foot, takes);
+    TurnByMouse(registers->rdi + FollowOrientation, Read<Quaternion>(FollowFrame), g_foot, takes);
 }
 
 } // namespace
