@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <thread>
@@ -225,7 +227,9 @@ private:
 
         const s64 time_diff = static_cast<s64>(current_time - next_output_time);
 
-        if (time_diff > static_cast<s64>(TIMING_RESYNC_THRESHOLD_US)) [[unlikely]] {
+        // GR2port: a time far ahead of the schedule is a clock that went back, as when the thread
+        // moves to a CPU whose counter lags the others; a sleep for it is a gap in the sound.
+        if (std::abs(time_diff) > static_cast<s64>(TIMING_RESYNC_THRESHOLD_US)) [[unlikely]] {
             // We're far behind - resync
             next_output_time = current_time + period_us;
         } else if (time_diff < 0) {
