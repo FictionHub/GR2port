@@ -49,6 +49,7 @@
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/scene.h"
 #include "graphics/gr2port/scene_ring.h"
+#include "graphics/gr2port/screenshot.h"
 #include "graphics/gr2port/self_translucent.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/shaders/character_depth_frag.h"
@@ -1344,6 +1345,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Ui);
     Ui::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset);
     Photo::Record(*memory, cmd, header, slot_index);
+    Screenshot::Record(*memory, cmd, header, slot_index);
     ImGuiRelay::Update(cmd, frame, frame - FramesInFlight);
     PassTimes::Mark(cmd, PassTimes::Pass::Ui);
 
@@ -1497,6 +1499,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     ReadTimes(slot_index);
     PassTimes::Collect(slot_index);
     Photo::Collect(slot_index);
+    Screenshot::Collect(slot_index);
     if (slot.snapshot) {
         slot.snapshot = false;
         SaveSnapshot();

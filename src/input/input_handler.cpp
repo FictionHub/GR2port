@@ -29,6 +29,7 @@
 #include "core/emulator_settings.h"
 #include "core/emulator_state.h"
 #include "core/prompt_packs/prompt_packs.h"
+#include "graphics/gr2port/screenshot.h"
 #include "imgui/trophy_list_layer.h"
 #include "input/controller.h"
 #include "input/game_functions.h"
@@ -196,6 +197,7 @@ std::filesystem::path GetInputConfigFile(const std::string& game_id) {
             {"hotkey_show_fps", "f10"},
             {"hotkey_pause", "f9"},
             {"hotkey_reload_inputs", "f8"},
+            {"hotkey_capture_frame", "f12"},
             {"hotkey_toggle_mouse_to_touchpad_swipe", "unmapped"},
             {"hotkey_quit", "lctrl, lshift, end"},
             {"hotkey_volume_up", "kpplus"},
@@ -682,7 +684,7 @@ void ParseInputConfig(const std::string game_id = "") {
                     {"rightjoystick", rightjoystick_deadzone},
                     {"l2", lefttrigger_deadzone},
                     {"r2", righttrigger_deadzone},
-            };
+                };
             output_gamepad_id = output_gamepad_id == -1 ? 1 : output_gamepad_id;
 
             if (auto it = deadzone_map.find(device); it != deadzone_map.end()) {
@@ -1047,6 +1049,11 @@ void ControllerOutput::FinalizeUpdate(u8 gamepad_index) {
         case HOTKEY_RELOAD_INPUTS:
             if (new_button_state) {
                 ParseInputConfig(std::string(Common::ElfInfo::Instance().GameSerial()));
+            }
+            break;
+        case HOTKEY_SCREENSHOT:
+            if (new_button_state) {
+                Gr2Port::Screenshot::Request();
             }
             break;
         case HOTKEY_FULLSCREEN:

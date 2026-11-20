@@ -105,6 +105,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.h
     ${CMAKE_CURRENT_LIST_DIR}/screen_shake.cpp
     ${CMAKE_CURRENT_LIST_DIR}/screen_shake.h
+    ${CMAKE_CURRENT_LIST_DIR}/screenshot.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/screenshot.h
     ${CMAKE_CURRENT_LIST_DIR}/script_timers.cpp
     ${CMAKE_CURRENT_LIST_DIR}/script_timers.h
     ${CMAKE_CURRENT_LIST_DIR}/self_translucent.cpp

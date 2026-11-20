@@ -74,6 +74,7 @@
 #define HOTKEY_SIMPLE_FPS 0xf0000003
 #define HOTKEY_QUIT 0xf0000004
 #define HOTKEY_RELOAD_INPUTS 0xf0000005
+#define HOTKEY_SCREENSHOT 0xf0000009
 #define HOTKEY_VOLUME_UP 0xf000000a
 #define HOTKEY_VOLUME_DOWN 0xf000000b
 #define HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD_SWIPE 0xf0000011
@@ -192,6 +193,7 @@ const std::map<std::string, u32> string_to_hotkey_map = {
     {"hotkey_show_fps", HOTKEY_SIMPLE_FPS},
     {"hotkey_quit", HOTKEY_QUIT},
     {"hotkey_reload_inputs", HOTKEY_RELOAD_INPUTS},
+    {"hotkey_capture_frame", HOTKEY_SCREENSHOT},
     {"hotkey_toggle_mouse_to_touchpad_swipe", HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD_SWIPE},
     {"hotkey_volume_up", HOTKEY_VOLUME_UP},
     {"hotkey_volume_down", HOTKEY_VOLUME_DOWN},
@@ -572,7 +574,7 @@ public:
 
 class ControllerAllOutputs {
 public:
-    static constexpr u64 output_count = 51;
+    static constexpr u64 output_count = 52;
     std::array<ControllerOutput, output_count> data = {
         // Important: these have to be the first, or else they will update in the wrong order
         ControllerOutput(LEFTJOYSTICK_HALFMODE),
@@ -634,6 +636,7 @@ public:
         ControllerOutput(HOTKEY_SIMPLE_FPS),
         ControllerOutput(HOTKEY_QUIT),
         ControllerOutput(HOTKEY_RELOAD_INPUTS),
+        ControllerOutput(HOTKEY_SCREENSHOT),
         ControllerOutput(HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD_SWIPE),
         ControllerOutput(HOTKEY_VOLUME_UP),
         ControllerOutput(HOTKEY_VOLUME_DOWN),
