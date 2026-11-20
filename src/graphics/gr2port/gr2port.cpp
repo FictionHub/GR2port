@@ -32,6 +32,7 @@
 #include "graphics/gr2port/mouse_camera.h"
 #include "graphics/gr2port/movies.h"
 #include "graphics/gr2port/particle_capture.h"
+#include "graphics/gr2port/photo_ui.h"
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/player_control.h"
 #include "graphics/gr2port/renderer.h"
@@ -131,6 +132,7 @@ void Install(VAddr module_base) {
         return;
     }
     UiCapture::Install(module_base);
+    PhotoUi::Install(module_base);
     MouseCamera::Install(module_base, c, StubAreaSize);
     StickTilt::Install(module_base, c, StubAreaSize);
     CameraReach::Install(module_base, c, StubAreaSize);
@@ -138,6 +140,7 @@ void Install(VAddr module_base) {
     PlayerControl::Install(module_base, c, StubAreaSize);
     if (ExitRows::Install(module_base, c, StubAreaSize)) {
         GraphicsMenu::Install(module_base, c, StubAreaSize);
+        PhotoUi::AddRow(module_base, c, StubAreaSize);
     }
     MobFloat::Install(module_base, c, StubAreaSize);
     HairFlutter::Install(module_base, c, StubAreaSize);

@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "다음 기능에 사용할 키를 최대 세 개까지 함께 누르고 계세요.\n{0}\n\n{1}초 후 변경 없이 닫힙니다.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "다음 기능에 사용할 컨트롤러 버튼을 최대 세 개까지 함께 누르고 계세요.\n{0}\n\n{1}초 후 변경 없이 닫힙니다.",
     "Field of View": "시야각",
-    "Screen Shake": "화면 흔들림"
+    "Screen Shake": "화면 흔들림",
+    "Hide UI": "UI 숨기기",
+    "Hide UI (Photo Mode)": "UI 숨기기(사진 모드)"
   }
 }

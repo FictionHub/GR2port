@@ -661,7 +661,8 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
     const std::array sets{Textures::Set(), g_sampler_set};
     for (u32 i = 0; i < count; i++) {
         const Scene::UiRun& run = runs[i];
-        if (!HasImage(header, run.target)) {
+        if (!HasImage(header, run.target) ||
+            (header.ui.hidden != 0 && run.target == header.ui.picture)) {
             continue;
         }
         if (run.vertex >= VertexPrograms || run.pixel >= PixelPrograms ||

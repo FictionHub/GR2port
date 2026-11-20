@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Podržte současně až tři klávesy pro funkci\n{0}\n\nZrušení za {1} s.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Podržte současně až tři tlačítka na ovladači pro funkci\n{0}\n\nZrušení za {1} s.",
     "Field of View": "Zorné pole",
-    "Screen Shake": "Otřesy obrazu"
+    "Screen Shake": "Otřesy obrazu",
+    "Hide UI": "Skrýt rozhraní",
+    "Hide UI (Photo Mode)": "Skrýt rozhraní (fotorežim)"
   }
 }

@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Hold op til tre taster nede samtidig for\n{0}\n\nAnnulleres uden ændringer om {1} s.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Hold op til tre knapper på controlleren nede samtidig for\n{0}\n\nAnnulleres uden ændringer om {1} s.",
     "Field of View": "Synsfelt",
-    "Screen Shake": "Skærmrystelser"
+    "Screen Shake": "Skærmrystelser",
+    "Hide UI": "Skjul brugerfladen",
+    "Hide UI (Photo Mode)": "Skjul brugerfladen (fototilstand)"
   }
 }

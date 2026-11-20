@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "‫اضغط مع الاستمرار على ما يصل إلى ثلاثة مفاتيح معًا من أجل‬\n{0}\n\n‫لن يتغير شيء خلال {1} ث.‬",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "‫اضغط مع الاستمرار على ما يصل إلى ثلاثة أزرار في يد التحكم معًا من أجل‬\n{0}\n\n‫لن يتغير شيء خلال {1} ث.‬",
     "Field of View": "‫مجال الرؤية‬",
-    "Screen Shake": "‫اهتزاز الشاشة‬"
+    "Screen Shake": "‫اهتزاز الشاشة‬",
+    "Hide UI": "‫إخفاء الواجهة‬",
+    "Hide UI (Photo Mode)": "‫إخفاء الواجهة (وضع التصوير)‬"
   }
 }

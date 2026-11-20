@@ -18,6 +18,7 @@
 #include "common/logging/log.h"
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/hooks.h"
+#include "graphics/gr2port/photo_ui.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/ui.h"
 #include "graphics/gr2port/ui_capture.h"
@@ -1050,6 +1051,7 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     }
     writer.Finish();
     ui.photo = PhotoTarget(ui);
+    ui.hidden = PhotoUi::Hidden() ? 1 : 0;
     MarkTargets(header);
 
     g_draws += ui.draws;

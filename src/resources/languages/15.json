@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Hold inne opptil tre taster samtidig for\n{0}\n\nIngenting endres om {1} s.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Hold inne opptil tre knapper på kontrolleren samtidig for\n{0}\n\nIngenting endres om {1} s.",
     "Field of View": "Synsfelt",
-    "Screen Shake": "Skjermristing"
+    "Screen Shake": "Skjermristing",
+    "Hide UI": "Skjul grensesnittet",
+    "Hide UI (Photo Mode)": "Skjul grensesnittet (fotomodus)"
   }
 }

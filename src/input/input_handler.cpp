@@ -11,6 +11,7 @@
 #include <list>
 #include <map>
 #include <ranges>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -92,6 +93,7 @@ gr2_first_person = 4
 gr2_pause = escape
 
 gr2_zoom_in = unmapped
+gr2_hide_ui = h
 gr2_flick_up = unmapped
 gr2_flick_down = unmapped
 gr2_flick_left = z
@@ -227,6 +229,26 @@ std::filesystem::path GetInputConfigFile(const std::string& game_id) {
     // If game-specific config doesn't exist, create it from the default config
     if (!std::filesystem::exists(config_file)) {
         std::filesystem::copy(default_config_file, config_file);
+    }
+    // GR2port: a game function that a config made before it has no line for gets its default key.
+    if (game_id != "global") {
+        std::set<std::string> outputs;
+        std::ifstream in(config_file);
+        for (std::string line; std::getline(in, line);) {
+            line = line.substr(0, line.find('#'));
+            std::erase_if(line, [](unsigned char c) { return std::isspace(c) != 0; });
+            if (const auto equal = line.find('='); equal != std::string::npos) {
+                outputs.insert(line.substr(0, equal));
+            }
+        }
+        in.close();
+        std::ofstream out(config_file, std::ios::app);
+        for (const GameFunctions::Function& function : GameFunctions::Functions()) {
+            if (!outputs.contains(std::string(function.name))) {
+                out << function.name << " = "
+                    << (function.key.empty() ? std::string_view{"unmapped"} : function.key) << "\n";
+            }
+        }
     }
     return config_file;
 }

@@ -362,6 +362,8 @@ struct UiHeader {
     /// A bit per target other than a back buffer that the frame writes after a while without
     /// writes, which later frames read as it is.
     u32 fresh_targets;
+    /// 1 when the screen drawing over the picture is hidden, by photo mode's R3.
+    u32 hidden;
 };
 
 struct EffectHeader {

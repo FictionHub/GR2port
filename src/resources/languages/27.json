@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "กดปุ่มคีย์บอร์ดค้างไว้พร้อมกันได้สูงสุดสามปุ่มสำหรับ\n{0}\n\nจะไม่มีอะไรเปลี่ยนใน {1} วินาที",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "กดปุ่มบนคอนโทรลเลอร์ค้างไว้พร้อมกันได้สูงสุดสามปุ่มสำหรับ\n{0}\n\nจะไม่มีอะไรเปลี่ยนใน {1} วินาที",
     "Field of View": "ขอบเขตการมองเห็น",
-    "Screen Shake": "การสั่นของหน้าจอ"
+    "Screen Shake": "การสั่นของหน้าจอ",
+    "Hide UI": "ซ่อนอินเทอร์เฟซ",
+    "Hide UI (Photo Mode)": "ซ่อนอินเทอร์เฟซ (โหมดถ่ายภาพ)"
   }
 }

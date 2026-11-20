@@ -76,6 +76,7 @@ constexpr Function Table[]{
     {"gr2_first_person", "First-person View", Same("D-pad left"), "pad_left", "4"},
     {"gr2_pause", "Pause", Same("OPTIONS"), "options", "escape"},
     {"gr2_zoom_in", "Zoom In (Photo Mode)", Same("R2"), "r2", ""},
+    {"gr2_hide_ui", "Hide UI (Photo Mode)", Same("R3"), "r3", "h"},
     {"gr2_flick_up", "Flick Up (Touch Pad)", Same("Flick the touch pad up"), "touchpad_swipe_up",
      ""},
     {"gr2_flick_down", "Flick Down (Touch Pad)", Same("Flick the touch pad down"),

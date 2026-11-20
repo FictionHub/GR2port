@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Houd maximaal drie toetsen tegelijk ingedrukt voor\n{0}\n\nOver {1} s wordt er niets gewijzigd.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Houd maximaal drie knoppen op de controller tegelijk ingedrukt voor\n{0}\n\nOver {1} s wordt er niets gewijzigd.",
     "Field of View": "Gezichtsveld",
-    "Screen Shake": "Schermschudden"
+    "Screen Shake": "Schermschudden",
+    "Hide UI": "Interface verbergen",
+    "Hide UI (Photo Mode)": "Interface verbergen (fotomodus)"
   }
 }

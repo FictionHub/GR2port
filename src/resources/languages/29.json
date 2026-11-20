@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Tahan hingga tiga tombol keyboard bersamaan untuk\n{0}\n\nTidak ada yang berubah dalam {1} dtk.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Tahan hingga tiga tombol pada kontroler bersamaan untuk\n{0}\n\nTidak ada yang berubah dalam {1} dtk.",
     "Field of View": "Bidang Pandang",
-    "Screen Shake": "Guncangan Layar"
+    "Screen Shake": "Guncangan Layar",
+    "Hide UI": "Sembunyikan Antarmuka",
+    "Hide UI (Photo Mode)": "Sembunyikan UI (Mode Foto)"
   }
 }

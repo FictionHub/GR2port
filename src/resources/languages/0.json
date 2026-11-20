@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "次の操作に割り当てるキーを最大3つ同時に押し続けてください:\n{0}\n\nあと{1}秒で変更せずに戻ります。",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "次の操作に割り当てるボタンを最大3つ同時に押し続けてください:\n{0}\n\nあと{1}秒で変更せずに戻ります。",
     "Field of View": "視野角",
-    "Screen Shake": "画面の揺れ"
+    "Screen Shake": "画面の揺れ",
+    "Hide UI": "UIを隠す",
+    "Hide UI (Photo Mode)": "UIを隠す(フォトモード)"
   }
 }

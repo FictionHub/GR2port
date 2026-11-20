@@ -9,6 +9,7 @@
 #include "core/libraries/libs.h"
 #include "core/libraries/pad/pad_errors.h"
 #include "core/user_settings.h"
+#include "graphics/gr2port/photo_ui.h"
 #include "imgui/renderer/imgui_core.h"
 #include "input/controller.h"
 #include "pad.h"
@@ -442,7 +443,12 @@ int PS4_SYSV_ABI scePadRead(s32 handle, OrbisPadData* pData, s32 num) {
     auto& controller = *it->second;
     std::array<Input::State, ORBIS_PAD_MAX_DATA_NUM> states;
     const int ret_num = controller.ReadStates(states.data(), num);
-    return ProcessStates(pData, states.data(), ret_num);
+    const int read = ProcessStates(pData, states.data(), ret_num);
+    // GR2port: R3 hides the photo mode's screen drawing.
+    for (int i = 0; i < read; i++) {
+        Gr2Port::PhotoUi::OnButtons(handle, static_cast<u32>(pData[i].buttons));
+    }
+    return read;
 }
 
 int PS4_SYSV_ABI scePadReadBlasterForTracker() {

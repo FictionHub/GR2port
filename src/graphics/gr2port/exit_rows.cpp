@@ -18,6 +18,7 @@
 #include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/menu_kit.h"
+#include "graphics/gr2port/photo_ui.h"
 
 namespace Gr2Port::ExitRows {
 
@@ -240,6 +241,10 @@ u64 PS4_SYSV_ABI OnFindText(u64 texts, const char* key) {
     if (key != nullptr &&
         std::strncmp(key, GraphicsMenu::KeyPrefix, sizeof(GraphicsMenu::KeyPrefix) - 1) == 0) {
         return GraphicsMenu::FindText(texts, key, g_find_text);
+    }
+    if (key != nullptr &&
+        std::strncmp(key, PhotoUi::KeyPrefix, sizeof(PhotoUi::KeyPrefix) - 1) == 0) {
+        return PhotoUi::FindText(texts, key, g_find_text);
     }
     if (key == nullptr || std::strncmp(key, KeyPrefix, sizeof(KeyPrefix) - 1) != 0) {
         return g_find_text(texts, key);

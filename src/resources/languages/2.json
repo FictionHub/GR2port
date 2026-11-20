@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Maintenez jusqu'à trois touches ensemble pour\n{0}\n\nRien ne change dans {1} s.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Maintenez jusqu'à trois boutons de la manette ensemble pour\n{0}\n\nRien ne change dans {1} s.",
     "Field of View": "Champ de vision",
-    "Screen Shake": "Secousses de l'écran"
+    "Screen Shake": "Secousses de l'écran",
+    "Hide UI": "Masquer l'interface",
+    "Hide UI (Photo Mode)": "Masquer l'interface (mode photo)"
   }
 }

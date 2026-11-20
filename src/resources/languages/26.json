@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Ține apăsate împreună până la trei taste pentru\n{0}\n\nNimic nu se schimbă în {1} s.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Ține apăsate împreună până la trei butoane de pe controler pentru\n{0}\n\nNimic nu se schimbă în {1} s.",
     "Field of View": "Câmp vizual",
-    "Screen Shake": "Tremurul ecranului"
+    "Screen Shake": "Tremurul ecranului",
+    "Hide UI": "Ascunde interfața",
+    "Hide UI (Photo Mode)": "Ascunde interfața (modul foto)"
   }
 }

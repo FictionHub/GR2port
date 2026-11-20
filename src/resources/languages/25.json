@@ -318,6 +318,8 @@
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Κρατήστε πατημένα έως τρία πλήκτρα μαζί για\n{0}\n\nΚαμία αλλαγή σε {1} δ.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Κρατήστε πατημένα έως τρία κουμπιά του χειριστηρίου μαζί για\n{0}\n\nΚαμία αλλαγή σε {1} δ.",
     "Field of View": "Οπτικό πεδίο",
-    "Screen Shake": "Κούνημα οθόνης"
+    "Screen Shake": "Κούνημα οθόνης",
+    "Hide UI": "Απόκρυψη διεπαφής",
+    "Hide UI (Photo Mode)": "Απόκρυψη διεπαφής (φωτογραφία)"
   }
 }
