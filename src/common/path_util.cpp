@@ -281,10 +281,8 @@ static auto UserPaths = [] {
 
     create_path(PathType::UserDir, user_dir);
     create_path(PathType::LogDir, user_dir / LOG_DIR);
-    create_path(PathType::ScreenshotsDir, user_dir / SCREENSHOTS_DIR);
     create_path(PathType::ShaderDir, user_dir / SHADER_DIR);
     create_path(PathType::GameDataDir, user_dir / GAMEDATA_DIR);
-    create_path(PathType::CapturesDir, user_dir / CAPTURES_DIR);
     create_path(PathType::CacheDir, user_dir / CACHE_DIR);
     create_path(PathType::TrophyDir, user_dir / TROPHY_DIR);
     create_path(PathType::SaveDataDir, user_dir / SAVEDATA_DIR);

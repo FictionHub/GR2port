@@ -17,13 +17,8 @@ path = [
     "src/dist/gr2port.desktop",
     "src/dist/gr2port.rc",
     "src/resources/icons/controller.png",
-    "src/resources/icons/experimental.png",
-    "src/resources/icons/folder.png",
-    "src/resources/icons/graphics.png",
-    "src/resources/icons/log.png",
     "src/resources/icons/profiles.png",
     "src/resources/icons/settings.png",
-    "src/resources/icons/trophy.png",
     "src/resources/bronze.png",
     "src/resources/gold.png",
     "src/resources/platinum.png",
@@ -40,12 +35,6 @@ path = "externals/cmake-modules/**"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2009-2010 Iowa State University"
 SPDX-License-Identifier = "BSL-1.0"
-
-[[annotations]]
-path = "externals/renderdoc/**"
-precedence = "aggregate"
-SPDX-FileCopyrightText = "2019-2024 Baldur Karlsson"
-SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = "externals/stb/**"

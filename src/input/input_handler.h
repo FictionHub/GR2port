@@ -45,19 +45,10 @@
 
 #define SDL_EVENT_TOGGLE_FULLSCREEN SDL_EVENT_USER + 1
 #define SDL_EVENT_TOGGLE_PAUSE SDL_EVENT_USER + 2
-#define SDL_EVENT_CHANGE_CONTROLLER SDL_EVENT_USER + 3
 #define SDL_EVENT_TOGGLE_SIMPLE_FPS SDL_EVENT_USER + 4
 #define SDL_EVENT_RELOAD_INPUTS SDL_EVENT_USER + 5
-#define SDL_EVENT_MOUSE_TO_JOYSTICK SDL_EVENT_USER + 6
-#define SDL_EVENT_MOUSE_TO_GYRO SDL_EVENT_USER + 7
-#define SDL_EVENT_MOUSE_TO_TOUCHPAD SDL_EVENT_USER + 8
 #define SDL_EVENT_QUIT_DIALOG SDL_EVENT_USER + 9
 #define SDL_EVENT_MOUSE_WHEEL_OFF SDL_EVENT_USER + 10
-#define SDL_EVENT_ADD_VIRTUAL_USER SDL_EVENT_USER + 11
-#define SDL_EVENT_REMOVE_VIRTUAL_USER SDL_EVENT_USER + 12
-#define SDL_EVENT_RDOC_CAPTURE SDL_EVENT_USER + 13
-#define SDL_EVENT_SCREENSHOT_WITH_OVERLAYS SDL_EVENT_USER + 14
-#define SDL_EVENT_TOGGLE_FRIENDS SDL_EVENT_USER + 15
 #define SDL_EVENT_MOUSE_TO_TOUCHPAD_SWIPE SDL_EVENT_USER + 16
 #define SDL_EVENT_BAD_DUMP SDL_EVENT_USER + 17
 
@@ -83,17 +74,8 @@
 #define HOTKEY_SIMPLE_FPS 0xf0000003
 #define HOTKEY_QUIT 0xf0000004
 #define HOTKEY_RELOAD_INPUTS 0xf0000005
-#define HOTKEY_TOGGLE_MOUSE_TO_JOYSTICK 0xf0000006
-#define HOTKEY_TOGGLE_MOUSE_TO_GYRO 0xf0000007
-#define HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD 0xf0000008
-#define HOTKEY_RENDERDOC 0xf0000009
 #define HOTKEY_VOLUME_UP 0xf000000a
 #define HOTKEY_VOLUME_DOWN 0xf000000b
-#define HOTKEY_ADD_VIRTUAL_USER 0xf000000c
-#define HOTKEY_REMOVE_VIRTUAL_USER 0xf000000d
-#define HOTKEY_SCREENSHOT_WITH_OVERLAYS 0xf000000e
-#define HOTKEY_OPEN_EMULATOR_SETTINGS 0xf000000f
-#define HOTKEY_TOGGLE_FRIENDS 0xf0000010
 #define HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD_SWIPE 0xf0000011
 #define HOTKEY_TROPHY_LIST 0xf0000012
 
@@ -210,19 +192,9 @@ const std::map<std::string, u32> string_to_hotkey_map = {
     {"hotkey_show_fps", HOTKEY_SIMPLE_FPS},
     {"hotkey_quit", HOTKEY_QUIT},
     {"hotkey_reload_inputs", HOTKEY_RELOAD_INPUTS},
-    {"hotkey_toggle_mouse_to_joystick", HOTKEY_TOGGLE_MOUSE_TO_JOYSTICK},
-    {"hotkey_toggle_mouse_to_gyro", HOTKEY_TOGGLE_MOUSE_TO_GYRO},
-    {"hotkey_toggle_mouse_to_touchpad", HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD},
     {"hotkey_toggle_mouse_to_touchpad_swipe", HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD_SWIPE},
-    {"hotkey_capture_frame", HOTKEY_RENDERDOC},
-    {"hotkey_screenshot_with_overlays", HOTKEY_SCREENSHOT_WITH_OVERLAYS},
-    {"hotkey_renderdoc_capture", HOTKEY_RENDERDOC},
-    {"hotkey_add_virtual_user", HOTKEY_ADD_VIRTUAL_USER},
-    {"hotkey_remove_virtual_user", HOTKEY_REMOVE_VIRTUAL_USER},
     {"hotkey_volume_up", HOTKEY_VOLUME_UP},
     {"hotkey_volume_down", HOTKEY_VOLUME_DOWN},
-    {"hotkey_emulator_settings", HOTKEY_OPEN_EMULATOR_SETTINGS},
-    {"hotkey_toggle_friends", HOTKEY_TOGGLE_FRIENDS},
     {"hotkey_trophy_list", HOTKEY_TROPHY_LIST},
     {"hotkey_trophy_list_pad", HOTKEY_TROPHY_LIST},
 };
@@ -600,7 +572,7 @@ public:
 
 class ControllerAllOutputs {
 public:
-    static constexpr u64 output_count = 60;
+    static constexpr u64 output_count = 51;
     std::array<ControllerOutput, output_count> data = {
         // Important: these have to be the first, or else they will update in the wrong order
         ControllerOutput(LEFTJOYSTICK_HALFMODE),
@@ -662,18 +634,9 @@ public:
         ControllerOutput(HOTKEY_SIMPLE_FPS),
         ControllerOutput(HOTKEY_QUIT),
         ControllerOutput(HOTKEY_RELOAD_INPUTS),
-        ControllerOutput(HOTKEY_TOGGLE_MOUSE_TO_JOYSTICK),
-        ControllerOutput(HOTKEY_TOGGLE_MOUSE_TO_GYRO),
-        ControllerOutput(HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD),
         ControllerOutput(HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD_SWIPE),
-        ControllerOutput(HOTKEY_RENDERDOC),
-        ControllerOutput(HOTKEY_SCREENSHOT_WITH_OVERLAYS),
-        ControllerOutput(HOTKEY_ADD_VIRTUAL_USER),
-        ControllerOutput(HOTKEY_REMOVE_VIRTUAL_USER),
         ControllerOutput(HOTKEY_VOLUME_UP),
         ControllerOutput(HOTKEY_VOLUME_DOWN),
-        ControllerOutput(HOTKEY_OPEN_EMULATOR_SETTINGS),
-        ControllerOutput(HOTKEY_TOGGLE_FRIENDS),
         ControllerOutput(HOTKEY_TROPHY_LIST),
 
         ControllerOutput(SDL_GAMEPAD_BUTTON_INVALID, SDL_GAMEPAD_AXIS_INVALID),

@@ -75,8 +75,8 @@ std::string NewId() {
 
 void Setup() {
     std::scoped_lock lk{mutex};
-    // Not ScreenshotsDir: the Gravity Rush 2 fork this port comes from keeps its album in this
-    // folder, so an album made there carries over.
+    // The Gravity Rush 2 fork this port comes from keeps its album in this folder, so an album
+    // made there carries over.
     host_dir = Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "Capture Gallery" /
                "Gravity Rush 2";
     std::error_code ec;

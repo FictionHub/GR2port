@@ -247,7 +247,6 @@ if (ENABLE_SYSTEM_LIBRARIES)
     find_package(PNG 1.6 MODULE)
     find_package(OpenAL CONFIG)
     find_package(LibreSSL 4.3.1 MODULE)
-    find_package(RenderDoc 1.6.0 MODULE)
     find_package(SDL3 3.1.2 CONFIG)
     find_package(stb MODULE)
     find_package(toml11 4.2.0 CONFIG)
@@ -1028,8 +1027,6 @@ set(GRAPHICS src/graphics/amdgpu/pixel_format.cpp
              src/graphics/renderer_vulkan/liverpool_to_vk.h
              src/graphics/renderer_vulkan/vk_common.cpp
              src/graphics/renderer_vulkan/vk_common.h
-             src/graphics/renderdoc.cpp
-             src/graphics/renderdoc.h
 )
 
 set(IMGUI src/imgui/imgui_config.h
@@ -1042,10 +1039,6 @@ set(IMGUI src/imgui/imgui_config.h
           src/imgui/shadnet_notifications_layer.h
           src/imgui/notifications_layer.cpp
           src/imgui/notifications_layer.h
-          src/imgui/settings_dialog_imgui.cpp
-          src/imgui/settings_dialog_imgui.h
-          src/imgui/settings_dialog_layer.cpp
-          src/imgui/settings_dialog_layer.h
           src/imgui/trophy_list_layer.cpp
           src/imgui/trophy_list_layer.h
           src/imgui/renderer/imgui_core.cpp
@@ -1127,7 +1120,7 @@ add_executable(gr2port
 create_target_directory_groups(gr2port)
 
 target_link_libraries(gr2port PRIVATE spdlog::spdlog)
-target_link_libraries(gr2port PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog half::half ZLIB::ZLIB PNG::PNG minimp3 dr_flac)
+target_link_libraries(gr2port PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient FFmpeg::ffmpeg Dear_ImGui half::half ZLIB::ZLIB PNG::PNG minimp3 dr_flac)
 target_link_libraries(gr2port PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 SPIRV-Headers::SPIRV-Headers Vulkan::Headers Zydis::Zydis SDL3::SDL3 pugixml::pugixml)
 target_link_libraries(gr2port PRIVATE stb::headers lfreist-hwinfo::hwinfo nlohmann_json::nlohmann_json miniz::miniz fdk-aac CLI11::CLI11 OpenAL::OpenAL Cpp_Httplib miniupnpc::miniupnpc)
 target_link_libraries(gr2port PRIVATE Freetype::Freetype)
@@ -1276,13 +1269,8 @@ cmrc_add_resource_library(embedded-resources
         ALIAS res::embedded
         NAMESPACE res
         src/resources/icons/controller.png
-        src/resources/icons/experimental.png
-        src/resources/icons/folder.png
-        src/resources/icons/graphics.png
-        src/resources/icons/log.png
         src/resources/icons/profiles.png
         src/resources/icons/settings.png
-        src/resources/icons/trophy.png
         src/resources/bronze.png
         src/resources/gold.png
         src/resources/platinum.png

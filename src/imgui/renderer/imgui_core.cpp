@@ -103,13 +103,6 @@ void Initialize(const Frontend::WindowSDL& window) {
                                              imgui_font_proggyvector_regular_compressed_size,
                                              32.0f);
 
-    // Avoid exploding atlas size on Metal/MoltenVK when CJK fallback is enabled.
-    FontStack::AddPrimaryUiFont(io.Fonts, 128.0f, console_language, font_cfg, false);
-
-    // Settings window
-    FontStack::AddPrimaryUiFont(ImGui::GetIO().Fonts, 64.0f, EmulatorSettings.GetConsoleLanguage(),
-                                font_cfg, true);
-
     io.Fonts->TexMaxWidth = AtlasMaxSize;
     io.Fonts->TexMaxHeight = AtlasMaxSize;
 

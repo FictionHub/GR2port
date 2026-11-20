@@ -11,15 +11,13 @@
 namespace Common::FS {
 
 enum class PathType {
-    UserDir,        // Where GR2port stores its data: userdata beside the executable.
-    LogDir,         // Where log files are stored.
-    ScreenshotsDir, // Where screenshots are stored.
-    ShaderDir,      // Where shaders are stored.
-    GameDataDir,    // Where game data is stored.
-    CapturesDir,    // Where rdoc captures are stored.
-    CacheDir,       // Where pipeline and shader cache is stored.
-    TrophyDir,      // Where trophy metadata and the player's trophy progress are stored.
-    SaveDataDir,    // Where the game's saves are stored.
+    UserDir,     // Where GR2port stores its data: userdata beside the executable.
+    LogDir,      // Where log files are stored.
+    ShaderDir,   // Where shaders are stored.
+    GameDataDir, // Where game data is stored.
+    CacheDir,    // Where pipeline and shader cache is stored.
+    TrophyDir,   // Where trophy metadata and the player's trophy progress are stored.
+    SaveDataDir, // Where the game's saves are stored.
 };
 
 constexpr auto PORTABLE_DIR = "userdata";
@@ -48,10 +46,8 @@ enum class UserFolderSwitch {
 
 // Sub-directories contained within a user data directory
 constexpr auto LOG_DIR = "log";
-constexpr auto SCREENSHOTS_DIR = "screenshots";
 constexpr auto SHADER_DIR = "shader";
 constexpr auto GAMEDATA_DIR = "data";
-constexpr auto CAPTURES_DIR = "captures";
 constexpr auto CACHE_DIR = "cache";
 constexpr auto TROPHY_DIR = "trophy";
 constexpr auto SAVEDATA_DIR = "savedata";

@@ -48,7 +48,6 @@
 #include "core/memory.h"
 #include "core/user_settings.h"
 #include "graphics/gr2_fsr3/dlss_ngx.h"
-#include "graphics/renderdoc.h"
 
 #ifdef _WIN32
 #include <WinSock2.h>
@@ -525,9 +524,6 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
     controllers = Common::Singleton<Input::GameControllers>::Instance();
     linker = Common::Singleton<Core::Linker>::Instance();
 
-    // Load renderdoc module
-    VideoCore::LoadRenderDoc();
-
     // Initialize patcher
     if (!id.empty()) {
         MemoryPatcher::g_game_serial = id;
@@ -554,12 +550,6 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
     std::error_code ec_usb;
     std::filesystem::create_directories(mount_usb_dir, ec_usb);
     mnt->Mount(mount_usb_dir, "/mnt/usb0");
-
-    const auto& mount_captures_dir = Common::FS::GetUserPath(Common::FS::PathType::CapturesDir);
-    if (!std::filesystem::exists(mount_captures_dir)) {
-        std::filesystem::create_directory(mount_captures_dir);
-    }
-    VideoCore::SetOutputDir(mount_captures_dir, id);
 
     for (auto const& mount_pair : mounts) {
         LOG_INFO(Loader, "Mounting {} to {}", mount_pair.first.string(), mount_pair.second);

@@ -522,15 +522,9 @@ bool EmulatorSettingsImpl::TransferSettings() {
         const toml::value& gpu = og_data.at("GPU");
         auto& s = m_gpu;
 
-        setFromToml(s.window_width, gpu, "screenWidth");
-        setFromToml(s.window_height, gpu, "screenHeight");
         setFromToml(s.internal_screen_width, gpu, "internalScreenWidth");
         setFromToml(s.internal_screen_height, gpu, "internalScreenHeight");
         setFromToml(s.vblank_frequency, gpu, "vblankFrequency");
-        setFromToml(s.full_screen, gpu, "Fullscreen");
-        setFromToml(s.full_screen_mode, gpu, "FullscreenMode");
-        setFromToml(s.present_mode, gpu, "presentMode");
-        setFromToml(s.hdr_allowed, gpu, "allowHDR");
     }
 
     if (og_data.contains("Vulkan")) {
@@ -544,7 +538,6 @@ bool EmulatorSettingsImpl::TransferSettings() {
         setFromToml(s.vkvalidation_gpu_enabled, vk, "validation_gpu");
         setFromToml(s.vkcrash_diagnostic_enabled, vk, "crashDiagnostic");
         setFromToml(s.vkhost_markers, vk, "hostMarkers");
-        setFromToml(s.renderdoc_enabled, vk, "rdocEnable");
     }
 
     if (og_data.contains("Debug")) {

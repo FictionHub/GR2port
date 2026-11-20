@@ -95,13 +95,6 @@ if (NOT TARGET GPUOpen::VulkanMemoryAllocator)
     add_subdirectory(vma)
 endif()
 
-# RenderDoc
-if (NOT TARGET RenderDoc::API)
-    add_library(renderdoc INTERFACE)
-    target_include_directories(renderdoc INTERFACE ./renderdoc)
-    add_library(RenderDoc::API ALIAS renderdoc)
-endif()
-
 # glslang
 if (NOT TARGET glslang::glslang)
     set(SKIP_GLSLANG_INSTALL ON CACHE BOOL "")
@@ -297,12 +290,6 @@ target_include_directories(minimp3 INTERFACE minimp3)
 # dr_flac
 add_library(dr_flac INTERFACE)
 target_include_directories(dr_flac INTERFACE dr_flac)
-
-# ImGuiFileDialog
-add_library(ImGuiFileDialog ImGuiFileDialog/ImGuiFileDialog.cpp)
-target_compile_definitions(ImGuiFileDialog PRIVATE USE_STD_FILESYSTEM)
-target_include_directories(ImGuiFileDialog INTERFACE ImGuiFileDialog/)
-target_link_libraries(ImGuiFileDialog PRIVATE Dear_ImGui)
 
 #openal
 if (NOT TARGET OpenAL::OpenAL)

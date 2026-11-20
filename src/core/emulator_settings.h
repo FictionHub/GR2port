@@ -197,7 +197,6 @@ struct GeneralSettings {
     Setting<bool> show_splash{false};
     Setting<bool> show_fps_counter{false};
     Setting<int> console_language{1};
-    Setting<int> settings_window_scale{1000};
     Setting<bool> redzone_patches{false};
     Setting<bool> legacy_cpu_patches{false};
     // The launcher tells a player with an NVIDIA RTX GPU to update a driver too old for DLSS.
@@ -229,8 +228,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GeneralSettings, install_dirs, addon_install_
                                    extra_dmem_in_mbytes, extra_fmem_in_mbytes,
                                    trophy_popup_disabled, trophy_notification_duration, show_splash,
                                    trophy_notification_side, show_fps_counter, console_language,
-                                   settings_window_scale, redzone_patches, legacy_cpu_patches,
-                                   nvidia_driver_notice)
+                                   redzone_patches, legacy_cpu_patches, nvidia_driver_notice)
 
 // -------------------------------
 // Network settings
@@ -434,8 +432,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(AudioSettings, audio_backend, sdl_mic_device,
 // GPU settings
 // -------------------------------
 struct GPUSettings {
-    Setting<u32> window_width{1280};
-    Setting<u32> window_height{720};
     Setting<u32> internal_screen_width{1280};
     Setting<u32> internal_screen_height{720};
     // Record the draw scheduler's Vulkan commands and issue its queue submits on a dedicated
@@ -463,20 +459,10 @@ struct GPUSettings {
     // Pools are never reset in this mode.
     Setting<bool> desc_heap_recycle{true};
     Setting<u32> vblank_frequency{60};
-    Setting<bool> full_screen{false};
-    Setting<std::string> full_screen_mode{"Windowed"};
-    Setting<std::string> present_mode{"Mailbox"};
-    Setting<bool> hdr_allowed{false};
 
 #define GPU_OVERRIDE(field) make_override<GPUSettings>(#field, &GPUSettings::field)
     std::vector<OverrideItem> GetOverrideableFields() const {
         return std::vector<OverrideItem>{
-            make_override<GPUSettings>("full_screen", &GPUSettings::full_screen),
-            make_override<GPUSettings>("full_screen_mode", &GPUSettings::full_screen_mode),
-            make_override<GPUSettings>("present_mode", &GPUSettings::present_mode),
-            make_override<GPUSettings>("window_height", &GPUSettings::window_height),
-            make_override<GPUSettings>("window_width", &GPUSettings::window_width),
-            make_override<GPUSettings>("hdr_allowed", &GPUSettings::hdr_allowed),
             GPU_OVERRIDE(vk_record_thread),
             GPU_OVERRIDE(readback_offload),
             GPU_OVERRIDE(pending_pop_throttle),
@@ -492,9 +478,8 @@ struct GPUSettings {
 // serialized in two groups; new settings go at the end of the second.
 // clang-format off
 #define GPU_SETTINGS_JSON_FIELDS_A \
-    window_width, window_height, internal_screen_width, \
-    internal_screen_height, vblank_frequency, full_screen, full_screen_mode, \
-    present_mode, hdr_allowed, backing_write_memo
+    internal_screen_width, internal_screen_height, vblank_frequency, \
+    backing_write_memo
 #define GPU_SETTINGS_JSON_FIELDS_B \
     static_color_write_mask, desc_heap_recycle, pending_pop_throttle, \
     readback_offload, vk_record_thread
@@ -519,7 +504,6 @@ void from_json(const BasicJsonType& nlohmann_json_j, GPUSettings& nlohmann_json_
 // -------------------------------
 struct VulkanSettings {
     Setting<s32> gpu_id{-1};
-    Setting<bool> renderdoc_enabled{false};
     Setting<bool> vkvalidation_enabled{false};
     Setting<bool> vkvalidation_core_enabled{true};
     Setting<bool> vkvalidation_sync_enabled{false};
@@ -530,7 +514,6 @@ struct VulkanSettings {
     std::vector<OverrideItem> GetOverrideableFields() const {
         return std::vector<OverrideItem>{
             make_override<VulkanSettings>("gpu_id", &VulkanSettings::gpu_id),
-            make_override<VulkanSettings>("renderdoc_enabled", &VulkanSettings::renderdoc_enabled),
             make_override<VulkanSettings>("vkvalidation_enabled",
                                           &VulkanSettings::vkvalidation_enabled),
             make_override<VulkanSettings>("vkvalidation_core_enabled",
@@ -545,7 +528,7 @@ struct VulkanSettings {
         };
     }
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(VulkanSettings, gpu_id, renderdoc_enabled, vkvalidation_enabled,
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(VulkanSettings, gpu_id, vkvalidation_enabled,
                                    vkvalidation_core_enabled, vkvalidation_sync_enabled,
                                    vkvalidation_gpu_enabled, vkcrash_diagnostic_enabled,
                                    vkhost_markers)
@@ -773,7 +756,6 @@ public:
     SETTING_FORWARD_BOOL(m_general, ShowSplash, show_splash)
     SETTING_FORWARD_BOOL(m_general, ShowFpsCounter, show_fps_counter)
     SETTING_FORWARD(m_general, ConsoleLanguage, console_language)
-    SETTING_FORWARD(m_general, SettingsWindowScale, settings_window_scale)
     SETTING_FORWARD_BOOL(m_general, RedZonePatchingEnabled, redzone_patches)
     SETTING_FORWARD_BOOL(m_general, LegacyCpuPatchesEnabled, legacy_cpu_patches)
     SETTING_FORWARD_BOOL(m_general, NvidiaDriverNotice, nvidia_driver_notice)
@@ -834,14 +816,8 @@ public:
     SETTING_FORWARD_BOOL(m_gpu, BackingWriteMemo, backing_write_memo)
     SETTING_FORWARD_BOOL(m_gpu, StaticColorWriteMask, static_color_write_mask)
     SETTING_FORWARD_BOOL(m_gpu, DescHeapRecycle, desc_heap_recycle)
-    SETTING_FORWARD_BOOL(m_gpu, FullScreen, full_screen)
-    SETTING_FORWARD(m_gpu, FullScreenMode, full_screen_mode)
-    SETTING_FORWARD(m_gpu, PresentMode, present_mode)
-    SETTING_FORWARD(m_gpu, WindowHeight, window_height)
-    SETTING_FORWARD(m_gpu, WindowWidth, window_width)
     SETTING_FORWARD(m_gpu, InternalScreenHeight, internal_screen_height)
     SETTING_FORWARD(m_gpu, InternalScreenWidth, internal_screen_width)
-    SETTING_FORWARD_BOOL(m_gpu, HdrAllowed, hdr_allowed)
 
     u32 GetVblankFrequency() {
         if (m_gpu.vblank_frequency.value < 30) {
@@ -883,7 +859,6 @@ public:
 
     // Vulkan settings
     SETTING_FORWARD(m_vulkan, GpuId, gpu_id)
-    SETTING_FORWARD_BOOL(m_vulkan, RenderdocEnabled, renderdoc_enabled)
     SETTING_FORWARD_BOOL(m_vulkan, VkValidationEnabled, vkvalidation_enabled)
     SETTING_FORWARD_BOOL(m_vulkan, VkValidationCoreEnabled, vkvalidation_core_enabled)
     SETTING_FORWARD_BOOL(m_vulkan, VkValidationSyncEnabled, vkvalidation_sync_enabled)

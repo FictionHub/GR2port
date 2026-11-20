@@ -23,7 +23,6 @@
 #include "core/libraries/kernel/time.h"
 #include "core/libraries/pad/pad.h"
 #include "core/libraries/system/userservice.h"
-#include "core/user_settings.h"
 #include "imgui/renderer/imgui_core.h"
 #include "input/controller.h"
 #include "input/input_handler.h"
@@ -31,7 +30,6 @@
 #include "sdl_window.h"
 
 #include "graphics/gr2port/window.h"
-#include "graphics/renderdoc.h"
 
 #include <core/emulator_settings.h>
 #include "core/libraries/keyboard/keyboard.h"
@@ -227,22 +225,11 @@ void WindowSDL::WaitEvent() {
             DebugState.PauseGuestThreads();
         }
         break;
-    case SDL_EVENT_CHANGE_CONTROLLER:
-        UNREACHABLE_MSG("todo");
-        break;
     case SDL_EVENT_TOGGLE_SIMPLE_FPS:
         Overlay::ToggleSimpleFps();
         break;
-    case SDL_EVENT_TOGGLE_FRIENDS:
-        // GR2port has no friends window: the key is taken and dropped.
-        break;
     case SDL_EVENT_RELOAD_INPUTS:
         Input::ParseInputConfig(std::string(Common::ElfInfo::Instance().GameSerial()));
-        break;
-    case SDL_EVENT_MOUSE_TO_JOYSTICK:
-    case SDL_EVENT_MOUSE_TO_GYRO:
-    case SDL_EVENT_MOUSE_TO_TOUCHPAD:
-        // GR2port: the mouse always turns the camera, so its mode does not change.
         break;
     case SDL_EVENT_MOUSE_TO_TOUCHPAD_SWIPE: {
         // GR2port: swipes take the left button and a free cursor, so the mouse stops turning the
@@ -253,41 +240,6 @@ void WindowSDL::WaitEvent() {
         SDL_SetWindowRelativeMouseMode(this->GetSDLWindow(), !swipe);
         break;
     }
-    case SDL_EVENT_ADD_VIRTUAL_USER:
-        for (int i = 0; i < 4; i++) {
-            if (controllers[i]->user_id == -1) {
-                auto u = UserManagement.GetUserByPlayerIndex(i + 1);
-                if (!u) {
-                    break;
-                }
-                controllers[i]->user_id = u->user_id;
-                controllers[i]->ConnectController(controllers[i]->m_sdl_gamepad);
-                UserManagement.LoginUser(u, i + 1);
-                break;
-            }
-        }
-        break;
-    case SDL_EVENT_REMOVE_VIRTUAL_USER:
-        LOG_INFO(Input, "Remove user");
-        for (int i = 3; i >= 0; i--) {
-            if (controllers[i]->user_id != -1) {
-                UserManagement.LogoutUser(UserManagement.GetUserByID(controllers[i]->user_id));
-                controllers[i]->DisconnectController();
-                controllers[i]->user_id = -1;
-                break;
-            }
-        }
-        break;
-    case SDL_EVENT_RDOC_CAPTURE:
-        if (VideoCore::IsRenderDocLoaded()) {
-            VideoCore::TriggerCapture();
-        } else {
-            VideoCore::RequestScreenshot(VideoCore::ScreenshotRequest::GameOnly);
-        }
-        break;
-    case SDL_EVENT_SCREENSHOT_WITH_OVERLAYS:
-        VideoCore::RequestScreenshot(VideoCore::ScreenshotRequest::WithOverlays);
-        break;
     default:
         break;
     }

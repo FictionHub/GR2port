@@ -29,7 +29,6 @@
 #include "core/emulator_settings.h"
 #include "core/emulator_state.h"
 #include "core/prompt_packs/prompt_packs.h"
-#include "imgui/settings_dialog_layer.h"
 #include "imgui/trophy_list_layer.h"
 #include "input/controller.h"
 #include "input/game_functions.h"
@@ -193,28 +192,17 @@ std::filesystem::path GetInputConfigFile(const std::string& game_id) {
     }
     if (game_id == "global") {
         std::map<std::string, std::string> default_bindings_to_add = {
-            {"hotkey_capture_frame", "f12"},
-            {"hotkey_screenshot_with_overlays", "lalt, f12"},
             {"hotkey_fullscreen", "f11"},
             {"hotkey_show_fps", "f10"},
             {"hotkey_pause", "f9"},
             {"hotkey_reload_inputs", "f8"},
-            {"hotkey_toggle_mouse_to_joystick", "f7"},
-            {"hotkey_toggle_mouse_to_gyro", "f6"},
-            {"hotkey_add_virtual_user", "f5"},
-            {"hotkey_remove_virtual_user", "f4"},
-            {"hotkey_toggle_mouse_to_touchpad", "delete"},
             {"hotkey_toggle_mouse_to_touchpad_swipe", "unmapped"},
             {"hotkey_quit", "lctrl, lshift, end"},
             {"hotkey_volume_up", "kpplus"},
             {"hotkey_volume_down", "kpminus"},
-            {"hotkey_emulator_settings", "f3"},
-            {"hotkey_toggle_friends", "f2"},
             {"hotkey_trophy_list", std::string(TrophyListKeysDefault)},
             {"hotkey_trophy_list_pad", std::string(TrophyListButtonsDefault)},
         };
-        std::string legacy_capture_binding;
-        bool legacy_capture_binding_found = false;
         std::ifstream global_in(config_file);
         std::string line;
         while (std::getline(global_in, line)) {
@@ -225,20 +213,9 @@ std::filesystem::path GetInputConfigFile(const std::string& game_id) {
             if (equal_pos == std::string::npos) {
                 continue;
             }
-            std::string output_string = line.substr(0, equal_pos);
-            if (output_string == "hotkey_renderdoc_capture") {
-                legacy_capture_binding = line.substr(equal_pos + 1);
-                legacy_capture_binding_found = true;
-            }
-            default_bindings_to_add.erase(output_string);
+            default_bindings_to_add.erase(line.substr(0, equal_pos));
         }
         global_in.close();
-        if (legacy_capture_binding_found) {
-            if (auto it = default_bindings_to_add.find("hotkey_capture_frame");
-                it != default_bindings_to_add.end()) {
-                it->second = legacy_capture_binding;
-            }
-        }
         std::ofstream global_out(config_file, std::ios::app);
         for (auto const& b : default_bindings_to_add) {
             global_out << b.first << " = " << b.second << "\n";
@@ -969,7 +946,6 @@ static Uint32 TwoFingerClickCallback(void* param, SDL_TimerID, Uint32) {
     auto* controller = g_two_finger_controller.load(std::memory_order_acquire);
     if (controller != nullptr && g_two_finger_gen.load(std::memory_order_acquire) == gen) {
         controller->Button(Libraries::Pad::OrbisPadButtonDataOffset::TouchPad, true);
-        LOG_INFO(Input, "[two-finger diag] click down (gen {})", gen); // TEMPORARY
     }
     return 0; // one-shot
 }
@@ -1025,8 +1001,6 @@ void ControllerOutput::FinalizeUpdate(u8 gamepad_index) {
             break;
         case SDL_GAMEPAD_BUTTON_TOUCHPAD_TWO_FINGER: {
             const u32 gen = g_two_finger_gen.fetch_add(1, std::memory_order_acq_rel) + 1;
-            LOG_INFO(Input, "[two-finger diag] {} (gen {})", // TEMPORARY
-                     new_button_state ? "press: fingers down" : "release", gen);
             if (new_button_state) {
                 controller->SetTouchpadState(0, true, kTwoFingerLeftX, 0.5f);
                 controller->SetTouchpadState(1, true, kTwoFingerRightX, 0.5f);
@@ -1084,29 +1058,8 @@ void ControllerOutput::FinalizeUpdate(u8 gamepad_index) {
         case HOTKEY_SIMPLE_FPS:
             PushSDLEvent(SDL_EVENT_TOGGLE_SIMPLE_FPS);
             break;
-        case HOTKEY_TOGGLE_MOUSE_TO_JOYSTICK:
-            PushSDLEvent(SDL_EVENT_MOUSE_TO_JOYSTICK);
-            break;
-        case HOTKEY_TOGGLE_MOUSE_TO_GYRO:
-            PushSDLEvent(SDL_EVENT_MOUSE_TO_GYRO);
-            break;
-        case HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD:
-            PushSDLEvent(SDL_EVENT_MOUSE_TO_TOUCHPAD);
-            break;
         case HOTKEY_TOGGLE_MOUSE_TO_TOUCHPAD_SWIPE:
             PushSDLEvent(SDL_EVENT_MOUSE_TO_TOUCHPAD_SWIPE);
-            break;
-        case HOTKEY_RENDERDOC:
-            PushSDLEvent(SDL_EVENT_RDOC_CAPTURE);
-            break;
-        case HOTKEY_SCREENSHOT_WITH_OVERLAYS:
-            PushSDLEvent(SDL_EVENT_SCREENSHOT_WITH_OVERLAYS);
-            break;
-        case HOTKEY_ADD_VIRTUAL_USER:
-            PushSDLEvent(SDL_EVENT_ADD_VIRTUAL_USER);
-            break;
-        case HOTKEY_REMOVE_VIRTUAL_USER:
-            PushSDLEvent(SDL_EVENT_REMOVE_VIRTUAL_USER);
             break;
         case HOTKEY_VOLUME_UP:
             if (new_button_state) {
@@ -1124,14 +1077,6 @@ void ControllerOutput::FinalizeUpdate(u8 gamepad_index) {
             break;
         case HOTKEY_QUIT:
             PushSDLEvent(SDL_EVENT_QUIT_DIALOG);
-            break;
-        case HOTKEY_OPEN_EMULATOR_SETTINGS:
-            if (new_button_state) {
-                ImGuiEmuSettings::OpenInGameSettingsDialog();
-            }
-            break;
-        case HOTKEY_TOGGLE_FRIENDS:
-            PushSDLEvent(SDL_EVENT_TOGGLE_FRIENDS);
             break;
         case HOTKEY_TROPHY_LIST:
             if (new_button_state) {
