@@ -38,14 +38,21 @@ constexpr Hooks::Entry EventOffset{0x9d1a5f, 8, {0xc5, 0xf8, 0x28, 0x90, 0x00, 0
 // cmp byte [rax + 0x330], 0.
 constexpr Hooks::Entry EventRumble{0x9d1a8f, 7, {0x80, 0xb8, 0x30, 0x03, 0x00, 0x00, 0x00}};
 
+// FUN_01560750, the gameplay cameras' shake by speed (the shift's fall among them), which turns
+// the view by a random walk and moves it along the motion. vmovss [rbp - 0x44], xmm3 stores the
+// field of view's share of it; vmovss [rbp - 0x3c], xmm0 stores how much of it the speed asks
+// for, which only the size of both steps takes. xmm0 is written before it is read.
+constexpr Hooks::Entry SpeedAmount{
+    0x15608a2, 10, {0xc5, 0xfa, 0x11, 0x5d, 0xbc, 0xc5, 0xfa, 0x11, 0x45, 0xc4}};
+
 // The manager's sums of the shakes: the turn, a quaternion x, y, z, w, and the offset; and its
 // link of the pad's vibration to the camera.
 constexpr u32 Turn = 0x320;
 constexpr u32 Offset = 0x300;
 constexpr u32 PadLink = 0x330;
 
-// The six stubs, their jumps from the sites, and the room the last jump's Replace asks for.
-constexpr size_t StubBytes = 320 + 6 * 14 + Hooks::MaxStubBytes;
+// The seven stubs, their jumps from the sites, and the room the last jump's Replace asks for.
+constexpr size_t StubBytes = 352 + 7 * 14 + Hooks::MaxStubBytes;
 
 // The scale the stubs read and Set writes, and the turn of no shake.
 struct alignas(16) Shake {
@@ -103,12 +110,24 @@ void EmitRumble(Xbyak::CodeGenerator& c, const Xbyak::Reg64& manager, const void
     c.jmp(back);
 }
 
+// Stores the field of view's share and the speed's amount times the scale.
+void EmitSpeedAmount(Xbyak::CodeGenerator& c, const void* back) {
+    using namespace Xbyak::util;
+    c.vmovss(dword[rbp - 0x44], xmm3);
+    c.push(rax);
+    c.mov(rax, reinterpret_cast<u64>(&g_shake));
+    c.vmulss(xmm0, xmm0, dword[rax + offsetof(Shake, scale)]);
+    c.pop(rax);
+    c.vmovss(dword[rbp - 0x3c], xmm0);
+    c.jmp(back);
+}
+
 } // namespace
 
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     using namespace Xbyak::util;
-    constexpr std::array Sites{&ManagerTurn, &ManagerOffset, &ManagerRumble,
-                               &EventTurn,   &EventOffset,   &EventRumble};
+    constexpr std::array Sites{&ManagerTurn, &ManagerOffset, &ManagerRumble, &EventTurn,
+                               &EventOffset, &EventRumble,   &SpeedAmount};
     if (!std::ranges::all_of(Sites, [module_base](const Hooks::Entry* site) {
             return Hooks::Holds(module_base, *site);
         })) {
@@ -138,6 +157,8 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     EmitOffset(c, rax, rcx, back(EventOffset));
     stubs[5] = c.getCurr();
     EmitRumble(c, rax, back(EventRumble));
+    stubs[6] = c.getCurr();
+    EmitSpeedAmount(c, back(SpeedAmount));
     for (size_t i = 0; i < Sites.size(); ++i) {
         Hooks::Replace(module_base, *Sites[i], c, capacity, stubs[i]);
     }

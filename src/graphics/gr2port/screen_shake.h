@@ -16,7 +16,8 @@ class CodeGenerator;
 // eye by the offset and their target by 1.5 times it, and turn their up vector by the turn. While
 // the pad's vibration is linked to the camera (a script's setPadVibLink; gameplay keeps it linked)
 // the pad rumbles by the offset's size. Stubs scale the offset and the turn where the cameras take
-// them, so the pad rumbles as with the game's own shake.
+// them, so the pad rumbles as with the game's own shake. The gameplay cameras also shake by speed,
+// as in the shift's fall, and a stub scales how much of that shake the speed asks for.
 namespace Gr2Port::ScreenShake {
 
 /// Hooks the gameplay and event cameras' shake, with the screen shake of the settings.
