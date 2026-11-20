@@ -12,7 +12,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 <b>
   
-To reiterate, the game's render passes are **NOT EMULATED OR STATICALLY RECOMPILED IN ANY SHAPE OR FORM** - they were completely rewritten. As mentioned, some more complex shaders were recompiled to GLSL rather than handwritten. This, however, only adds slight GPU overhead rather than CPU overhead and is in the process of being replaced.
+To reiterate, the game's render passes are **NOT EMULATED OR STATICALLY RECOMPILED IN ANY SHAPE OR FORM** - they were completely rewritten. Regarding the shaders, some more complex shaders were recompiled to GLSL rather than handwritten. This, however, only adds slight GPU overhead rather than CPU overhead and is in the process of being replaced.
 Each frame, GR2port takes the game's scene at the start of its frame graph and draws it on its own render thread, so it never builds or translates per-draw PS4 GPU commands. **The CPU overhead of the native renderer was measured as only 0.8ms in frame time**. 
 
 <b>
