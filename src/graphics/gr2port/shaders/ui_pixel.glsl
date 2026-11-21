@@ -78,6 +78,17 @@ vec4 Export(vec4 color) {
     return vec4(unpackHalf2x16(packHalf2x16(color.xy)), unpackHalf2x16(packHalf2x16(color.zw)));
 }
 
+// Export in two halves, for a program whose packing and unpacking lie on either side of a branch.
+// The driver drops the round through half floats where the two meet, so where they lie keeps the
+// game's program's rounding.
+uvec2 ExportPack(vec4 color) {
+    return uvec2(packHalf2x16(color.xy), packHalf2x16(color.zw));
+}
+
+vec4 ExportUnpack(uvec2 packed) {
+    return vec4(unpackHalf2x16(packed.x), unpackHalf2x16(packed.y));
+}
+
 // The colour times alpha and the alpha, each held to 0..1.
 vec4 Premultiply(vec3 color, float alpha) {
     return vec4(clamp(color * alpha, 0.0, 1.0), clamp(max(0.0, alpha), 0.0, 1.0));
