@@ -1,0 +1,24 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's GpuParticleClear (CS 0x1c805b0): resets every 64-byte particle record of the next
+// pool copy to zeros with 1.0 in its third 16 bytes.
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 64) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer Particles {
+    uvec4 quarters[];
+};
+layout(push_constant) uniform Push {
+    Particles particles;
+};
+
+void main() {
+    const uint first = (gl_WorkGroupID.x * 64u + gl_LocalInvocationID.x) * 4u;
+    particles.quarters[first] = uvec4(0u);
+    particles.quarters[first + 1u] = uvec4(0u);
+    particles.quarters[first + 2u] = floatBitsToUint(vec4(1.0));
+    particles.quarters[first + 3u] = uvec4(0u);
+}

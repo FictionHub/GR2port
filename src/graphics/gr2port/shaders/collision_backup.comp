@@ -1,0 +1,33 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's BackupCollisionBuffer (CS 0x1c24660): copies the depth at each output pixel scaled
+// by the source's size over the copy's, for the particles' collisions.
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 10, local_size_y = 10) in;
+
+layout(set = 0, binding = 0) uniform texture2D input_texture;
+layout(set = 0, binding = 1) uniform sampler input_sampler;
+layout(set = 0, binding = 2, r32f) uniform writeonly image2D output_image;
+
+// The copy's width and height, then the scale from its pixels to the source's.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Size {
+    vec4 size;
+};
+layout(push_constant) uniform Push {
+    Size constants;
+};
+
+void main() {
+    const uvec2 pixel = gl_WorkGroupID.xy * 10u + gl_LocalInvocationID.xy;
+    const vec4 size = constants.size;
+    const ivec2 limit = ivec2(size.xy);
+    if (int(pixel.y) >= limit.y || int(pixel.x) >= limit.x) {
+        return;
+    }
+    const ivec2 source = ivec2(size.zw * vec2(pixel));
+    const float depth = texelFetch(sampler2D(input_texture, input_sampler), source, 0).x;
+    imageStore(output_image, ivec2(pixel), vec4(depth, 0.0, 0.0, 0.0));
+}
