@@ -120,6 +120,19 @@ constexpr std::array ExpectedBytes{
     Expected{0x018c2bf8, "0000e0430000b8440000e04100808344"},
 };
 
+struct Segment {
+    u64 address;
+    u64 size;
+};
+
+// The address and file size of each segment the loader maps from the v1.11 eboot.bin, the same in
+// every region's dump. An eboot.bin with code or data added or cut has segments of other sizes.
+constexpr std::array EbootSegments{
+    Segment{0x0000000, 0x165c518},
+    Segment{0x1660000, 0x00a6678},
+    Segment{0x1708000, 0x017e548},
+};
+
 enum class Form {
     Missing,
     Archive,
@@ -179,7 +192,8 @@ std::vector<u8> FromHex(std::string_view hex) {
     return bytes;
 }
 
-// Reads eboot.bin at each expected address through its program headers, as the loader would.
+// Checks the size of each segment eboot.bin maps, then reads it at each expected address through
+// its program headers, as the loader would.
 bool EbootFits(IBackend& files) {
     std::unique_ptr<Core::FileSys::IFile> file =
         files.Open("eboot.bin", Common::FS::FileAccessMode::Read);
@@ -192,6 +206,26 @@ bool EbootFits(IBackend& files) {
         return false;
     }
     const std::span<const elf_program_header> headers = elf.GetProgramHeader();
+    size_t mapped = 0;
+    for (const elf_program_header& header : headers) {
+        if (header.p_type != PT_LOAD && header.p_type != PT_SCE_RELRO) {
+            continue;
+        }
+        if (mapped == EbootSegments.size() || header.p_vaddr != EbootSegments[mapped].address ||
+            header.p_filesz != EbootSegments[mapped].size) {
+            LOG_ERROR(Loader,
+                      "GR2port: eboot.bin's segment at {:#x} is {:#x} bytes, unlike the v1.11 "
+                      "eboot.bin's",
+                      header.p_vaddr, header.p_filesz);
+            return false;
+        }
+        ++mapped;
+    }
+    if (mapped != EbootSegments.size()) {
+        LOG_ERROR(Loader, "GR2port: eboot.bin has {} segments to map, the v1.11 eboot.bin {}",
+                  mapped, EbootSegments.size());
+        return false;
+    }
     for (const Expected& expected : ExpectedBytes) {
         const std::vector<u8> wanted = FromHex(expected.bytes);
         const u64 address = expected.address - PatchBase;
