@@ -1318,10 +1318,9 @@ struct UiAttribute {
     u32 format;
 };
 
-/// A screen draw, as the generated programs in shaders/pfx/ui_*.vert and ui_*.frag read it: the
-/// device addresses of its indices (0 for none) and constants, the handles of its textures, its
-/// samplers (bit 0 clamps, bit 1 picks point filtering), its inputs, and the size and first of
-/// its indices.
+/// A screen draw, as the UI programs read it (shaders/ui_draw.glsl): the device addresses of its
+/// indices (0 for none) and constants, the handles of its textures, its samplers (bit 0 clamps,
+/// bit 1 picks point filtering), its inputs, and the size and first of its indices.
 struct UiDraw {
     u64 indices;
     u64 vs_constants;
