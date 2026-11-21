@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -49,6 +50,12 @@ static spdlog::level ToSpdlog(Level l) {
 
 static Level FromSpdlog(spdlog::level l) {
     return static_cast<Level>(l);
+}
+
+// GR2port: the log's size limit, which settings can lower but not raise above MaxLogSize.
+static u64 SizeLimit() {
+    const u64 configured = EmulatorSettings.GetLogSizeLimit();
+    return configured == 0 ? MaxLogSize : std::min<u64>(configured, MaxLogSize);
 }
 
 [[nodiscard]] static constexpr std::string_view NameOf(spdlog::level lvl) noexcept {
@@ -141,8 +148,7 @@ void Setup(std::string_view log_filename) {
     // Setup file
 
     g_shad_file_sink = std::make_shared<LogFileSink>(
-        (GetUserPath(Common::FS::PathType::LogDir) / log_filename).string(), false,
-        EmulatorSettings.GetLogSizeLimit());
+        GetUserPath(Common::FS::PathType::LogDir) / log_filename, SizeLimit());
     g_shad_file_sink->set_pattern("%^%v%$");
 
     UpdateSinks();
@@ -153,12 +159,9 @@ void Switch(std::string_view game_filename, bool append_log) {
     UpdateLogLevels(EmulatorSettings.GetLogFilter());
     UpdateLogFlushLevel(EmulatorSettings.GetLogFlushLevel());
 
-    g_shad_file_sink->_size_limit = EmulatorSettings.GetLogSizeLimit();
-    // GR2port: the lines from before the game go to the file now, which the game's log replaces.
-    g_shad_file_sink->flush();
-    g_shad_file_sink->session_file_helper_.open(
-        (GetUserPath(Common::FS::PathType::LogDir) / game_filename).string(),
-        !(append_log || EmulatorSettings.IsLogAppend()));
+    // GR2port: the game's log replaces the lines from before the game in the same file.
+    g_shad_file_sink->BeginGameLog(GetUserPath(Common::FS::PathType::LogDir) / game_filename,
+                                   append_log || EmulatorSettings.IsLogAppend(), SizeLimit());
 }
 
 void Shutdown() {
