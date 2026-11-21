@@ -8,7 +8,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <b>GR2port - a genuine native PC port for Gravity Rush 2</b>
 </h1>
 
-**No CPU emulation, no GPU emulation, no GPU command translation, no shader recompiler:** GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC. **The game's graphics were completely rewritten for PC** via a native Vulkan renderer (the game’s render passes have been rebuilt as its own Vulkan code: `glass.cpp, shadows.cpp, countours.cpp, deformers.cpp, enemies.cpp, world.cpp` etc.) in `src/graphics/gr2port` that runs **handwritten plus recompiled GLSL shaders** in `src/graphics/gr2port/shaders` that recreate visuals produced by the original GCN shaders. 
+**No CPU emulation, no GPU emulation, no GPU command translation, no shader recompiler:** GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC. **The game's graphics were completely rewritten for PC** via a native Vulkan renderer (the game’s render passes have been rebuilt as its own Vulkan code: `glass.cpp, shadows.cpp, countours.cpp, deformers.cpp, enemies.cpp, world.cpp` etc.) in `src/graphics/gr2port` that runs **handwritten (`src/graphics/gr2port/shaders`) plus recompiled (`src/graphics/gr2port/shaders/pfx`) GLSL shaders** in that recreate visuals produced by the original GCN shaders. 
 
 <b>
   
