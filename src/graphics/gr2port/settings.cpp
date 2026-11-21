@@ -394,9 +394,9 @@ bool Set(const Values& values) {
 
 std::string Describe() {
     std::scoped_lock lock{g_mutex};
-    const json root = ReadConfig();
-    const auto section = root.find(Section);
-    return section != root.end() ? section->dump() : std::string{"none"};
+    json values = ToJson(Loaded());
+    values[HalloweenKey] = Loaded().game.halloween_items;
+    return values.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 bool Update(const std::function<void(Values&)>& change) {

@@ -10,6 +10,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/game_check.h
     ${CMAKE_CURRENT_LIST_DIR}/game_patches.cpp
     ${CMAKE_CURRENT_LIST_DIR}/game_patches.h
+    ${CMAKE_CURRENT_LIST_DIR}/start_report.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/start_report.h
     ${CMAKE_CURRENT_LIST_DIR}/trophy_list.cpp
     ${CMAKE_CURRENT_LIST_DIR}/trophy_list.h)
 

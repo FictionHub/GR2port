@@ -8,13 +8,10 @@
 #include <iostream>
 #include <memory>
 #include <optional>
-#include <span>
 #include <vector>
 #include <CLI/CLI.hpp>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_messagebox.h>
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 
 #include "GR2port.h"
 #include "common/arch.h"
@@ -27,6 +24,7 @@
 #include "core/emulator_state.h"
 #include "core/file_sys/fs.h"
 #include "core/game_check/game_check.h"
+#include "core/game_check/start_report.h"
 #include "core/ipc/ipc.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
@@ -54,6 +52,7 @@ int main(int argc, char* argv[]) {
     Gr2Port::Launcher::AttachTerminal();
     SetConsoleOutputCP(CP_UTF8);
 #endif
+    Gr2Port::GameCheck::RememberStart(argc, argv);
 
     // -nolauncher starts the game at once. CLI11 takes no long names after a single dash.
     [[maybe_unused]] bool noLauncher = false;
@@ -167,7 +166,8 @@ int main(int argc, char* argv[]) {
     // Initialize main log with default config
     Common::Log::Setup(Common::FS::LOG_FILE);
 
-    LOG_INFO(Debug, "Run: {}", fmt::join(std::span(argv, argc), " "));
+    // GR2port: how the executable was started, for a start that ends before the game's log.
+    Gr2Port::GameCheck::LogLaunch();
 
     // GR2port: the run after one that lost the GPU device traces the GPU for its log.
     if (gpuTrace || std::getenv("GR2PORT_GPU_TRACE") != nullptr) {

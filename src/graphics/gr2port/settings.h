@@ -333,7 +333,7 @@ bool Set(const Values& values);
 /// writes them to config.json.
 bool Update(const std::function<void(Values&)>& change);
 
-/// The settings as config.json holds them, on one line.
+/// The settings in use, with the keys config.json holds them under, on one line.
 std::string Describe();
 
 } // namespace Gr2Port::Settings

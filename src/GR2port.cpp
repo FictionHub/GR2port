@@ -36,6 +36,7 @@
 #include "core/file_sys/fs.h"
 #include "core/game_check/dump_reference.h"
 #include "core/game_check/game_patches.h"
+#include "core/game_check/start_report.h"
 #include "core/ipc/ipc.h"
 #include "core/libraries/kernel/kernel.h"
 #include "core/libraries/libs.h"
@@ -487,6 +488,7 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
     }
     // GR2port: the dump check ran before this log began.
     Gr2Port::GameCheck::LogDumpAgain();
+    Gr2Port::GameCheck::LogStart();
     if (!args.empty()) {
         const auto argc = std::min<size_t>(args.size(), 32);
         for (auto i = 0; i < argc; i++) {
