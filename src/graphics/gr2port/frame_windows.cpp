@@ -46,13 +46,21 @@ constexpr Hooks::Entry StoppedBudget{0x861023, 5, {0xbe, 0x32, 0x82, 0x00, 0x00}
 constexpr VAddr StoppedBudgetNext = 0x861028;
 constexpr float StoppedMicroseconds = 33330.0f;
 
-constexpr size_t StubBytes = 160;
+// FUN_01061b80 moves a bird each frame by its speed, a distance per 30 fps frame:
+// vmulss xmm9, xmm1, [r14 + 0x130].
+constexpr Hooks::Entry BirdSpeed{
+    0x1062839, 9, {0xc4, 0x41, 0x72, 0x59, 0x8e, 0x30, 0x01, 0x00, 0x00}};
+constexpr VAddr BirdSpeedNext = 0x1062842;
+constexpr u32 BirdSpeedOffset = 0x130;
+
+constexpr size_t StubBytes = 192;
 
 } // namespace
 
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     using namespace Xbyak::util;
-    const std::array entries{AttachCount, FollowCount, LedgeEnd, LedgeProbe, StoppedBudget};
+    const std::array entries{AttachCount, FollowCount,   LedgeEnd,
+                             LedgeProbe,  StoppedBudget, BirdSpeed};
     if (!std::ranges::all_of(entries, [module_base](const Hooks::Entry& entry) {
             return Hooks::Holds(module_base, entry);
         })) {
@@ -108,12 +116,18 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     c.lea(rsp, ptr[rsp + 16]);
     c.jmp(code(StoppedBudgetNext));
 
+    const void* bird = c.getCurr();
+    c.vmulss(xmm9, xmm1, dword[r14 + BirdSpeedOffset]);
+    c.vmulss(xmm9, xmm9, dword[rip + code(FrameShare)]);
+    c.jmp(code(BirdSpeedNext));
+
     if (Hooks::Replace(module_base, AttachCount, c, capacity, attach) != Hooks::Result::Hooked ||
         Hooks::Replace(module_base, FollowCount, c, capacity, follow) != Hooks::Result::Hooked ||
         Hooks::Replace(module_base, LedgeEnd, c, capacity, ledge_end) != Hooks::Result::Hooked ||
         Hooks::Replace(module_base, LedgeProbe, c, capacity, ledge_probe) !=
             Hooks::Result::Hooked ||
-        Hooks::Replace(module_base, StoppedBudget, c, capacity, budget) != Hooks::Result::Hooked) {
+        Hooks::Replace(module_base, StoppedBudget, c, capacity, budget) != Hooks::Result::Hooked ||
+        Hooks::Replace(module_base, BirdSpeed, c, capacity, bird) != Hooks::Result::Hooked) {
         LOG_ERROR(Render_Vulkan, "GR2port: the frame windows' hooks did not go in");
         return false;
     }
