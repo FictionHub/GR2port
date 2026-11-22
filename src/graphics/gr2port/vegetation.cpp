@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 
@@ -89,6 +90,18 @@ void LogTiming(const Scene::BranchTiming& timing) {
              "GR2port: Branch kernel timing: phase steps {} on a steady hit, {} while shaken, "
              "{} as a shake starts; shake timer {} frames",
              timing.steady_phase, timing.shaken_phase, timing.start_phase, timing.shake_frames);
+}
+
+// Mesa's Intel driver has the GPU write an indirect call of 4 or more draws, and with
+// tessellation on Arrow Lake, Meteor Lake and DG2 writes them past the space it keeps for them:
+// leaves go in calls of at most 3 there.
+void DrawLeaves(vk::CommandBuffer cmd, vk::Buffer buffer, u64 offset, u32 count) {
+    constexpr u64 Bytes = sizeof(Scene::VertexCommand);
+    const u32 most = g_device->driver_id == vk::DriverId::eIntelOpenSourceMESA ? 3 : count;
+    for (u32 first = 0; first < count; first += most) {
+        cmd.drawIndirect(buffer, offset + first * Bytes, std::min(most, count - first), Bytes,
+                         g_device->dispatch);
+    }
 }
 
 } // namespace
@@ -233,8 +246,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, u64 addr
     }
     const u64 leaves = address + Scene::LeavesOffset;
     Bind(cmd, g_leaves, &leaves, sizeof(leaves));
-    cmd.drawIndirect(buffer, offset + Scene::LeafCommandsOffset, header.leaf_commands,
-                     sizeof(Scene::VertexCommand), g_device->dispatch);
+    DrawLeaves(cmd, buffer, offset + Scene::LeafCommandsOffset, header.leaf_commands);
 }
 
 void RecordShadows(vk::CommandBuffer cmd, const Scene::Header& header, u64 address,
@@ -250,9 +262,9 @@ void RecordShadows(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
     };
     Bind(cmd, g_leaf_shadows, &push, sizeof(push));
     constexpr u64 Bytes = sizeof(Scene::VertexCommand);
-    cmd.drawIndirect(
-        buffer, offset + Scene::LeafShadowCommandsOffset + u64{cascade} * Scene::MaxLeaves * Bytes,
-        count, Bytes, g_device->dispatch);
+    DrawLeaves(cmd, buffer,
+               offset + Scene::LeafShadowCommandsOffset + u64{cascade} * Scene::MaxLeaves * Bytes,
+               count);
 }
 
 } // namespace Gr2Port::Vegetation

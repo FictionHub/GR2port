@@ -21,6 +21,7 @@ struct Device {
     /// A second queue of the same family for the catcher's probe, or none.
     vk::Queue probe_queue;
     u32 queue_family = 0;
+    vk::DriverId driver_id{};
     /// Nanoseconds per timestamp tick, or 0 when the queue has no timestamps.
     double timestamp_period = 0.0;
     /// The device reports the process's memory use and budget (VK_EXT_memory_budget).

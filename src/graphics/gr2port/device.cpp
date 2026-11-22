@@ -403,6 +403,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
             .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>(
                 d.dispatch)
             .get<vk::PhysicalDeviceDriverProperties>();
+    d.driver_id = driver.driverID;
     LOG_INFO(Render_Vulkan,
              "GR2port: renderer device {} (queue family {}), checkpoints {}, fault information {}, "
              "dynamic blend {}, driver {} {}",
