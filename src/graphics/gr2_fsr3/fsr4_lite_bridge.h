@@ -72,19 +72,22 @@ typedef struct Gr2Fsr4CreateInfo {
     uint32_t max_output_height;
 } Gr2Fsr4CreateInfo;
 
-/// A colour image with one mip and one layer, in VK_IMAGE_LAYOUT_GENERAL.
+/// An image with one mip and one layer.
 typedef struct Gr2Fsr4Image {
     VkImage image;
     VkImageView view;
     uint32_t width;
     uint32_t height;
+    /// VK_IMAGE_LAYOUT_GENERAL, or VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL for an input, which
+    /// may then be the depth aspect of a depth image.
+    VkImageLayout layout;
 } Gr2Fsr4Image;
 
 /**
- * One dispatch. The colour (R16G16B16A16_SFLOAT), depth (R32_SFLOAT) and motion vector
- * (R16G16_SFLOAT) images were last written by a compute shader; the output
- * (R16G16B16A16_SFLOAT) was made writable by a compute barrier. All four are left readable by
- * compute shaders.
+ * One dispatch. The colour (R16G16B16A16_SFLOAT), depth (32-bit float) and motion vector
+ * (R16G16_SFLOAT) images are readable by compute shaders; the output (R16G16B16A16_SFLOAT) was
+ * made writable by a compute barrier. All four are left readable by compute shaders, in their
+ * layouts.
  */
 typedef struct Gr2Fsr4DispatchInfo {
     VkCommandBuffer command_buffer;

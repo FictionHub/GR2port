@@ -51,8 +51,8 @@ static FfxApiResource Resource(const Gr2Fsr4Image* image, uint32_t format, uint3
     return resource;
 }
 
-// The image stays in VK_IMAGE_LAYOUT_GENERAL. `access` is the last compute access before the
-// dispatch; the dispatch leaves the image readable by compute shaders.
+// The image stays in its layout. `access` is the last compute access before the dispatch; the
+// dispatch leaves the image readable by compute shaders.
 static VkResult SetImageState(Gr2Fsr4Context* context, const Gr2Fsr4Image* image,
                               VkAccessFlags access) {
     FfxFsr4VkExternalImageState state;
@@ -60,10 +60,10 @@ static VkResult SetImageState(Gr2Fsr4Context* context, const Gr2Fsr4Image* image
     state.structSize = sizeof(state);
     state.image = image->image;
     state.view = image->view;
-    state.layout = VK_IMAGE_LAYOUT_GENERAL;
+    state.layout = image->layout;
     state.stageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
     state.accessMask = access;
-    state.restoreLayout = VK_IMAGE_LAYOUT_GENERAL;
+    state.restoreLayout = image->layout;
     state.restoreStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
     state.restoreAccessMask = VK_ACCESS_SHADER_READ_BIT;
     return ffxFsr4VkSetExternalImageState(&context->iface, &state);

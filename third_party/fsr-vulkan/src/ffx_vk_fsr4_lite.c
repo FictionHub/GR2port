@@ -1238,6 +1238,27 @@ static void imgBarrier(VkCommandBuffer cmd, VkImage img,
     vkCmdPipelineBarrier(cmd,ss,ds,0,0,NULL,0,NULL,1,&b);
 }
 
+static void memBarrier(VkCommandBuffer cmd,
+    VkAccessFlags sa, VkAccessFlags da,
+    VkPipelineStageFlags ss, VkPipelineStageFlags ds)
+{
+    VkMemoryBarrier b;
+    memset(&b, 0, sizeof(b));
+    b.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    b.srcAccessMask=sa; b.dstAccessMask=da;
+    vkCmdPipelineBarrier(cmd,ss,ds,0,1,&b,0,NULL,0,NULL);
+}
+
+/* An import the dispatch only samples may stay in SHADER_READ_ONLY_OPTIMAL. It
+ * takes no layout transition, so it may be a depth image, which imgBarrier's
+ * colour aspect cannot name, and its descriptors name that layout. */
+static int keepsLayout(const VkRes* r)
+{
+    return !(r->apiState & FFX_API_RESOURCE_STATE_UNORDERED_ACCESS) &&
+        r->layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+        r->restoreLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+}
+
 static void transitionExternalImagesToCompute(FfxFsr4VkContext* c,
                                               VkCommandBuffer cmd)
 {
@@ -1246,6 +1267,14 @@ static void transitionExternalImagesToCompute(FfxFsr4VkContext* c,
         if (!r->external || r->kind != RES_IMAGE || !r->img ||
             !r->externalStateKnown)
             continue;
+        if (keepsLayout(r)) {
+            memBarrier(cmd, r->accessMask, VK_ACCESS_SHADER_READ_BIT,
+                r->stageMask, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+            r->stageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            r->accessMask = VK_ACCESS_SHADER_READ_BIT;
+            r->externalTouched = 1;
+            continue;
+        }
         VkPipelineStageFlags srcStage = r->layout == VK_IMAGE_LAYOUT_UNDEFINED
             ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : r->stageMask;
         VkAccessFlags srcAccess = r->layout == VK_IMAGE_LAYOUT_UNDEFINED
@@ -1269,9 +1298,13 @@ static FfxErrorCode restoreExternalImages(FfxFsr4VkContext* c,
         if (!r->external || r->kind != RES_IMAGE || !r->img ||
             !r->externalStateKnown || !r->externalTouched)
             continue;
-        imgBarrier(cmd, r->img, r->layout, r->restoreLayout,
-            r->accessMask, r->restoreAccessMask,
-            r->stageMask, r->restoreStageMask);
+        if (keepsLayout(r))
+            memBarrier(cmd, r->accessMask, r->restoreAccessMask,
+                r->stageMask, r->restoreStageMask);
+        else
+            imgBarrier(cmd, r->img, r->layout, r->restoreLayout,
+                r->accessMask, r->restoreAccessMask,
+                r->stageMask, r->restoreStageMask);
         r->layout = r->restoreLayout;
         r->stageMask = r->restoreStageMask;
         r->accessMask = r->restoreAccessMask;
@@ -1302,10 +1335,10 @@ static FfxErrorCode writeFullDs(FfxFsr4VkContext* c, const VkPipe* pipe, VkDescr
         return FFX_ERROR_OUT_OF_RANGE;
 
     // SRV textures t0..t20 -> bindings 0..20 (SAMPLED_IMAGE)
-    // Use VK_IMAGE_LAYOUT_GENERAL for all images.  Internal images (history,
-    // recurrent, reprojected, exposure) are also used as UAV STORAGE_IMAGE in
-    // other passes, so they must stay in GENERAL. External images enter
-    // GENERAL through the public state-registration contract before dispatch.
+    // Internal images (history, recurrent, reprojected, exposure) are also used
+    // as UAV STORAGE_IMAGE in other passes, so they stay in GENERAL. External
+    // images enter GENERAL through the public state-registration contract before
+    // dispatch, except the ones keepsLayout leaves in SHADER_READ_ONLY_OPTIMAL.
     for (uint32_t i=0; i<cj->pipeline.srvTextureCount; i++) {
         uint32_t idx=cj->srvTextures[i].resource.internalIndex;
         if (idx == UINT32_MAX) continue;
@@ -1315,7 +1348,7 @@ static FfxErrorCode writeFullDs(FfxFsr4VkContext* c, const VkPipe* pipe, VkDescr
                 !(c->res[idx].apiState & FFX_API_RESOURCE_STATE_COMPUTE_READ))
                 return FFX_ERROR_INVALID_ARGUMENT;
             imgs[ic]=(VkDescriptorImageInfo){VK_NULL_HANDLE, c->res[idx].view,
-                VK_IMAGE_LAYOUT_GENERAL};
+                c->res[idx].external ? c->res[idx].layout : VK_IMAGE_LAYOUT_GENERAL};
             wr[wc]=(VkWriteDescriptorSet){VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 NULL,ds,SLOT_SRV_TEX_BASE+i,0,1,
                 VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,&imgs[ic],NULL,NULL};

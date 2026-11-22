@@ -48,8 +48,11 @@ typedef struct FfxFsr4VkShaderBlob {
  * restores `restoreLayout` while unregistering the frame's imports.  Stage and
  * access fields describe the corresponding producer/consumer operations.  A
  * GENERAL-to-GENERAL record is valid and still establishes the documented
- * compute visibility boundary.  The record may be updated every frame; it is
- * matched by `view` and does not transfer image/view ownership.
+ * compute visibility boundary.  An import the dispatch only samples, with
+ * `layout` and `restoreLayout` both SHADER_READ_ONLY_OPTIMAL, stays in that
+ * layout and may be the depth aspect of a depth image.  The record may be
+ * updated every frame; it is matched by `view` and does not transfer image/view
+ * ownership.
  */
 typedef struct FfxFsr4VkExternalImageState {
     uint32_t                structSize;

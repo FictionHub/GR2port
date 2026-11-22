@@ -11,8 +11,9 @@
 // FSR 4 Lite's pass 0 for the 1080p size tier (fsr4_model_v07_fp8_no_scale_prepass of
 // fsr4_lite_main_1080_pass0.spv). AMD's module converts each 16-bit weight to a float and back;
 // this one reads the weights as 16-bit floats, which leaves the same values, and does the rest
-// with AMD's operations in AMD's order, so its results are identical. One thread per pixel; the
-// four threads of a quad are a 2x2 block of pixels.
+// with AMD's operations in AMD's order, so its results are identical. It reads the scene's depth,
+// where AMD's module reads the inputs pass's copy: 1 - depth, and zero outside the render size.
+// One thread per pixel; the four threads of a quad are a 2x2 block of pixels.
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
@@ -61,6 +62,12 @@ const uint HalfRow = 15392u; // (960 + 2) * 16
 const uint Plane = 8342464u;
 // The weights, 32 bytes for each channel and quad position, then a float bias for each channel.
 const uint BiasWords = 256u;
+
+// The depth AMD's module reads from its copy.
+float CopiedDepth(ivec2 at) {
+    const float depth = texelFetch(r_depth, at, 0).x;
+    return all(lessThan(uvec2(at), uvec2(width_lr, height_lr))) ? 1.0 - depth : 0.0;
+}
 
 // A tap of the input colour in AMD's log space.
 vec3 Tap(ivec2 at, ivec2 last, float exposure) {
@@ -116,12 +123,12 @@ void main() {
 
     // The motion of the nearest depth of the 3x3 render pixels around the pixel.
     ivec2 at = ivec2(roundEven(lr + offset));
-    float nearest = texelFetch(r_depth, at, 0).x;
+    float nearest = CopiedDepth(at);
     const ivec2 Around[8] = ivec2[](ivec2(-1, -1), ivec2(-1, 0), ivec2(-1, 1), ivec2(0, -1),
                                     ivec2(0, 1), ivec2(1, -1), ivec2(1, 0), ivec2(1, 1));
     [[unroll]] for (uint i = 0u; i < 8u; ++i) {
         const ivec2 tap = ivec2(roundEven((fpos + vec2(Around[i])) * inv_scale + offset));
-        const float depth = texelFetch(r_depth, tap, 0).x;
+        const float depth = CopiedDepth(tap);
         if (depth < nearest) {
             nearest = depth;
             at = tap;

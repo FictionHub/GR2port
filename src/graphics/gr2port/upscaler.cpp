@@ -142,8 +142,11 @@ Image g_output;
 vk::Extent2D g_render;
 vk::Extent2D g_output_extent;
 vk::Image g_depth;
+vk::ImageView g_depth_view;
 vk::Image g_velocity;
+vk::ImageView g_velocity_view;
 vk::Image g_toned;
+vk::ImageView g_toned_view;
 vk::Format g_toned_format = vk::Format::eUndefined;
 s32 g_phase = 0;
 s32 g_phase_count = 1;
@@ -182,6 +185,8 @@ Gr2Fsr3::Fsr4DeviceFeatures g_fsr4_features{};
 bool g_fsr4_cooperative_vectors = false;
 Gr2Fsr4Context* g_fsr4 = nullptr;
 std::deque<Fsr4Frame> g_fsr4_frames;
+// Whether FSR 4 reads the toned colour, the velocity and the depth, not the inputs pass's copies.
+bool g_fsr4_reads_scene = false;
 
 // DLSS: whether the options are set for the sizes, which the first evaluation makes NGX's feature
 // with.
@@ -206,8 +211,8 @@ const char* Name(Settings::Upscaler upscaler) {
 }
 
 bool UsesInputs() {
-    return g_upscaler == Settings::Upscaler::Fsr4 || g_upscaler == Settings::Upscaler::Dlss ||
-           g_upscaler == Settings::Upscaler::Xess;
+    return (g_upscaler == Settings::Upscaler::Fsr4 && !g_fsr4_reads_scene) ||
+           g_upscaler == Settings::Upscaler::Dlss || g_upscaler == Settings::Upscaler::Xess;
 }
 
 // The radical inverse of index in base: the Halton sequence the jitter follows.
@@ -317,6 +322,7 @@ void FreeContexts() {
         g_fsr4 = nullptr;
         g_fsr4_frames.clear();
     }
+    g_fsr4_reads_scene = false;
     if (g_dlss_ready) {
         Gr2Fsr3::DlssFree();
         g_dlss_ready = false;
@@ -558,9 +564,11 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
     const bool radv =
         properties.get<vk::PhysicalDeviceDriverProperties>().driverID == vk::DriverId::eMesaRadv;
     // Pass 0 has the same results with its weights read as 16-bit floats, which RADV runs faster on
-    // the GPUs that do not take the float passes.
+    // the GPUs that do not take the float passes. It reads the scene's images, so FSR 4 needs no
+    // copies of them.
     const bool half_pass0 = radv && dot_products.integerDotProduct4x8BitPackedSignedAccelerated &&
                             matches(0, MainPass0Sha256);
+    g_fsr4_reads_scene = half_pass0;
     std::vector<u8> initializer = assets.initializer;
     if (vector_pass2 || vector_pass5 || vector_pass7) {
         const std::vector<u8> matrices = VectorMatrices(assets.initializer);
@@ -827,14 +835,28 @@ void RecordFsr4(vk::CommandBuffer cmd) {
             .view = static_cast<VkImageView>(source.view),
             .width = source.extent.width,
             .height = source.extent.height,
+            .layout = VK_IMAGE_LAYOUT_GENERAL,
         };
     };
+    // The scene's images are the render size, in the layouts the inputs pass reads them in.
+    const auto scene = [](vk::Image source, vk::ImageView view, vk::ImageLayout layout) {
+        return Gr2Fsr4Image{
+            .image = static_cast<VkImage>(source),
+            .view = static_cast<VkImageView>(view),
+            .width = g_render.width,
+            .height = g_render.height,
+            .layout = static_cast<VkImageLayout>(layout),
+        };
+    };
+    constexpr auto Read = vk::ImageLayout::eShaderReadOnlyOptimal;
     const Gr2Fsr4DispatchInfo info{
         .command_buffer = static_cast<VkCommandBuffer>(cmd),
         .frame_id = g_frame_id,
-        .color = image(g_input_color),
-        .depth = image(g_input_depth),
-        .motion_vectors = image(g_input_motion),
+        .color = g_fsr4_reads_scene ? scene(g_toned, g_toned_view, Read) : image(g_input_color),
+        .depth = g_fsr4_reads_scene ? scene(g_depth, g_depth_view, Read) : image(g_input_depth),
+        .motion_vectors = g_fsr4_reads_scene
+                              ? scene(g_velocity, g_velocity_view, vk::ImageLayout::eGeneral)
+                              : image(g_input_motion),
         .output = image(g_output),
         .jitter_x = g_jitter.x,
         .jitter_y = g_jitter.y,
@@ -1205,7 +1227,7 @@ bool Resize(vk::Extent2D render, vk::Extent2D output) {
                               vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
                                   vk::ImageUsageFlagBits::eTransferDst,
                               vk::ImageAspectFlagBits::eColor);
-    if (!g_output.image || (UsesInputs() && !CreateInputs(render))) {
+    if (!g_output.image) {
         return false;
     }
     const auto start = Clock::now();
@@ -1229,6 +1251,10 @@ bool Resize(vk::Extent2D render, vk::Extent2D output) {
     if (!created) {
         return true;
     }
+    // After the context, which tells whether FSR 4 reads the copies.
+    if (UsesInputs() && !CreateInputs(render)) {
+        return false;
+    }
     g_render = render;
     g_output_extent = output;
     g_phase_count = PhaseCount(render, output);
@@ -1245,7 +1271,9 @@ bool Resize(vk::Extent2D render, vk::Extent2D output) {
 void SetInputs(vk::Image depth, vk::ImageView depth_view, vk::Image velocity,
                vk::ImageView velocity_view) {
     g_depth = depth;
+    g_depth_view = depth_view;
     g_velocity = velocity;
+    g_velocity_view = velocity_view;
     if (UsesInputs()) {
         WriteInput(1, vk::DescriptorType::eSampledImage, velocity_view, vk::ImageLayout::eGeneral);
         WriteInput(2, vk::DescriptorType::eSampledImage, depth_view,
@@ -1255,6 +1283,7 @@ void SetInputs(vk::Image depth, vk::ImageView depth_view, vk::Image velocity,
 
 void SetColor(vk::Image toned, vk::ImageView view, vk::Format format) {
     g_toned = toned;
+    g_toned_view = view;
     g_toned_format = format;
     if (UsesInputs()) {
         WriteInput(0, vk::DescriptorType::eSampledImage, view,
@@ -1327,7 +1356,9 @@ void Record(vk::CommandBuffer cmd) {
         RecordFsr3(cmd);
         break;
     case Settings::Upscaler::Fsr4:
-        RecordInputs(cmd);
+        if (!g_fsr4_reads_scene) {
+            RecordInputs(cmd);
+        }
         RecordFsr4(cmd);
         break;
     case Settings::Upscaler::Dlss:
