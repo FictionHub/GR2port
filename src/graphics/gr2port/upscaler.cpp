@@ -33,6 +33,7 @@
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass5_fma_comp.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass7_comp.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass7_fma_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass9_comp.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass9_fma_comp.h"
 #include "graphics/gr2_fsr3/vk_trampolines.h"
 #include "graphics/gr2_fsr3/xess_vulkan.h"
@@ -569,6 +570,14 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
     const bool half_pass0 = radv && dot_products.integerDotProduct4x8BitPackedSignedAccelerated &&
                             matches(0, MainPass0Sha256);
     g_fsr4_reads_scene = half_pass0;
+    // RDNA3 and later, the GPUs RADV reports mixed-sign 8-bit dot products on, run the passes in
+    // WideSubgroupPasses faster in 64-wide subgroups.
+    const bool wide_subgroups =
+        radv && dot_products.integerDotProduct4x8BitPackedMixedSignednessAccelerated;
+    // Pass 9 has the same results with the log of each input colour texel taken once for the four
+    // pixels a thread makes, which RADV runs faster than AMD's module in 32-wide subgroups.
+    const bool shared_pass9 = radv && dot_products.integerDotProduct4x8BitPackedSignedAccelerated &&
+                              !wide_subgroups && main_weights && matches(9, MainPass9Sha256);
     std::vector<u8> initializer = assets.initializer;
     if (vector_pass2 || vector_pass5 || vector_pass7) {
         const std::vector<u8> matrices = VectorMatrices(assets.initializer);
@@ -626,15 +635,17 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
     if (float_pass9) {
         replace(9, FSR4_MAIN_1080_PASS9_FMA_COMP, sizeof(FSR4_MAIN_1080_PASS9_FMA_COMP));
     }
+    if (shared_pass9) {
+        replace(9, FSR4_MAIN_1080_PASS9_COMP, sizeof(FSR4_MAIN_1080_PASS9_COMP));
+    }
     if (!replaced_passes.empty()) {
         LOG_INFO(Render_Vulkan, "GR2port upscaler: FSR 4 passes{} run on {}", replaced_passes,
                  g_fsr4_cooperative_vectors ? "cooperative vectors"
                  : float_products           ? "float multiply-adds"
-                                            : "16-bit float weights");
+                                            : "GR2port's modules");
     }
-    // These passes have the same results in 64-wide subgroups, which RADV runs faster on RDNA3 and
-    // later: the GPUs it reports mixed-sign 8-bit dot products on.
-    if (radv && dot_products.integerDotProduct4x8BitPackedMixedSignednessAccelerated) {
+    // These passes have the same results in 64-wide subgroups.
+    if (wide_subgroups) {
         std::string wide_passes;
         for (const auto& [pass, sha256] : WideSubgroupPasses) {
             if (matches(pass, *sha256)) {

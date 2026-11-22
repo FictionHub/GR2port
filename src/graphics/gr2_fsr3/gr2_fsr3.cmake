@@ -124,6 +124,7 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
     gr2_fsr3_add_shader(fsr4_main_1080_pass2.comp fsr4_main_1080_pass2_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass5.comp fsr4_main_1080_pass5_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass7.comp fsr4_main_1080_pass7_comp)
+    gr2_fsr3_add_shader(fsr4_main_1080_pass9.comp fsr4_main_1080_pass9_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass2_fma.comp fsr4_main_1080_pass2_fma_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass5_fma.comp fsr4_main_1080_pass5_fma_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass7_fma.comp fsr4_main_1080_pass7_fma_comp)
@@ -136,6 +137,7 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
             ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass2.comp
             ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass5.comp
             ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass7.comp
+            ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass9.comp
             ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass2_fma.comp
             ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass5_fma.comp
             ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass7_fma.comp
