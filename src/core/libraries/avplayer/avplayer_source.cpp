@@ -70,6 +70,18 @@ bool AvPlayerSource::Init(const AvPlayerInitData& init_data, std::string_view pa
         context->flags |= AVFMT_FLAG_CUSTOM_IO;
     };
 
+    // The edit list of every game movie starts at media time 0, so a frame's time is its
+    // composition time, and a movie with B frames shows its first frame one or two frames in. The
+    // game's movie events count on that clock. FFmpeg's edit list handling moves the first frame
+    // to time 0, which stops the movie at an event one frame late.
+    const auto open_input = [&context](const char* url) {
+        AVDictionary* options = nullptr;
+        av_dict_set(&options, "ignore_editlist", "1", 0);
+        const int result = avformat_open_input(&context, url, nullptr, &options);
+        av_dict_free(&options);
+        return result;
+    };
+
     if (init_data.file_replacement.open != nullptr) {
         LOG_INFO(Lib_AvPlayer, "Opening {} through the game-provided file replacement", path);
         m_up_data_streamer = std::make_unique<AvPlayerFileStreamer>(init_data.file_replacement);
@@ -78,7 +90,7 @@ bool AvPlayerSource::Init(const AvPlayerInitData& init_data, std::string_view pa
             return false;
         }
         attach_custom_io();
-        if (AVPLAYER_IS_ERROR(avformat_open_input(&context, nullptr, nullptr, nullptr))) {
+        if (AVPLAYER_IS_ERROR(open_input(nullptr))) {
             return false;
         }
     } else {
@@ -88,8 +100,7 @@ bool AvPlayerSource::Init(const AvPlayerInitData& init_data, std::string_view pa
             if (auto host = handle->GetHostPath(); host.has_value()) {
                 LOG_INFO(Lib_AvPlayer, "Opening {} directly from host path {}", path,
                          host->string());
-                if (AVPLAYER_IS_ERROR(
-                        avformat_open_input(&context, host->string().c_str(), nullptr, nullptr))) {
+                if (AVPLAYER_IS_ERROR(open_input(host->string().c_str()))) {
                     return false;
                 }
             } else {
@@ -100,7 +111,7 @@ bool AvPlayerSource::Init(const AvPlayerInitData& init_data, std::string_view pa
                     return false;
                 }
                 attach_custom_io();
-                if (AVPLAYER_IS_ERROR(avformat_open_input(&context, nullptr, nullptr, nullptr))) {
+                if (AVPLAYER_IS_ERROR(open_input(nullptr))) {
                     return false;
                 }
             }
@@ -108,8 +119,7 @@ bool AvPlayerSource::Init(const AvPlayerInitData& init_data, std::string_view pa
             const auto filepath = mnt->GetHostPath(path);
             LOG_INFO(Lib_AvPlayer, "Opening {} via GetHostPath fallback {}", path,
                      filepath.string());
-            if (AVPLAYER_IS_ERROR(
-                    avformat_open_input(&context, filepath.string().c_str(), nullptr, nullptr))) {
+            if (AVPLAYER_IS_ERROR(open_input(filepath.string().c_str()))) {
                 return false;
             }
         }
