@@ -386,6 +386,10 @@ bool AvPlayerSource::GetVideoData(AvPlayerFrameInfo& video_info) {
     return true;
 }
 
+// How far behind the time played a looped source's frame can be and still count as on time: more
+// than a frame's wait for the game's next read at 30 fps.
+constexpr u64 MaxLoopedVideoLagMs = 100;
+
 bool AvPlayerSource::GetVideoData(AvPlayerFrameInfoEx& video_info) {
     if (!IsActive() || m_is_paused) {
         return false;
@@ -400,13 +404,20 @@ bool AvPlayerSource::GetVideoData(AvPlayerFrameInfoEx& video_info) {
     // The clock of a source without sound stops at the source's length, and a looped source's
     // timestamps start over: such a source's frame is due when the time played reaches its
     // timestamp after the loops before it. The last frames of a loop come out of order, so only
-    // a fall of half the length begins a loop.
+    // a fall of half the length begins a loop. The time played runs on while the game reads no
+    // frames, as when the menu showing a looped source is closed: the source goes on from its
+    // next frame, or the frames behind would play one per game frame. A movie that does not loop
+    // keeps to the time played, because the game plays its sound separately.
     auto loop_base = m_video_loop_base;
     bool looped = false;
     if (!m_audio_stream_index.has_value() && m_duration != 0) {
         looped = new_frame.info.timestamp + m_duration / 2 < m_last_video_ts;
         loop_base += looped ? m_duration : 0;
         current_time = PlayedTime();
+        const u64 due = loop_base + new_frame.info.timestamp;
+        if (m_is_looping && current_time > due + MaxLoopedVideoLagMs) {
+            loop_base += current_time - due;
+        }
     }
     if (m_state.GetSyncMode() == AvPlayerAvSyncMode::Default) {
         if (loop_base + new_frame.info.timestamp > current_time) {
