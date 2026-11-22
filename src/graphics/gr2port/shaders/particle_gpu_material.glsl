@@ -11,15 +11,17 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Mat
 };
 
 // A material (140 words): the dissolve's threshold and its full mark, its four erosion values,
-// the depth fade's scale, the curves that replace those three where they are above 0, and the
-// first material of the particle's set.
+// the depth fade's scale, the blur's count of taps and its step, the curves that replace those
+// four where they are above 0, and the first material of the particle's set.
 const uint MaterialWordsEach = 140u;
 const uint MaterialDissolve = 0u;
 const uint MaterialErosion = 4u;
 const uint MaterialFadeScale = 8u;
+const uint MaterialBlur = 20u;
 const uint MaterialDissolveCurve = 120u;
 const uint MaterialErosionCurve = 121u;
 const uint MaterialFadeCurve = 122u;
+const uint MaterialBlurCurve = 125u;
 const uint MaterialSetFirst = 132u;
 
 // The particle's material: the set at c_gpufxUsed.w plus the set the particle names, then the
@@ -82,6 +84,12 @@ uint GameIntBits(float value) {
     return isnan(value) ? 0u : uint(int(clamp(value, -2147483648.0, 2147483520.0)));
 }
 
+// The game's conversion to an unsigned integer: NaN gives 0, other values are clamped to the
+// uint range.
+uint GameUint(float value) {
+    return isnan(value) ? 0u : uint(clamp(value, 0.0, 4294967040.0));
+}
+
 // x modulo 4 with x's sign, as the game's fmod computes it.
 float Modulo4(float x) {
     const float m = fract(abs(0.25 * x)) * 4.0;
@@ -122,4 +130,87 @@ float DepthDistance(ParticleDraw draw, vec2 place, float distance) {
     const float inverse_range = 1.0 / (clip_far - clip_near);
     const float scale = clip_near * -clip_far * inverse_range;
     return scale * (1.0 / (-clip_far * inverse_range + depth)) + -distance;
+}
+
+// Where c_materialAttr.y is above 0, the scale of the depth fade: the material's scale, 0.3 where
+// that is below 2^-23, or its curve at x; elsewhere 1.
+float FadeScale(ParticleDraw draw, uint material, uint curve_offset, float x) {
+    float scale = 1.0;
+    if (draw.constants[MaterialAttr + 1u] > 0.0) {
+        const float stored = uintBitsToFloat(MaterialWord(material, MaterialFadeScale));
+        scale = MaterialCurve(material, MaterialFadeCurve, curve_offset, x,
+                              vec4(uintBitsToFloat(0x34000000u) > stored ? 0.3 : stored))
+                    .x;
+    }
+    return scale;
+}
+
+// The material's dissolve at x: its threshold, -1 where its value is below 2^-23 and else a
+// hundredth of it, and its full mark.
+vec2 DissolveThreshold(uint material, uint curve_offset, float x) {
+    const vec4 dissolve = MaterialCurve(material, MaterialDissolveCurve, curve_offset, x,
+                                        MaterialVector(material, MaterialDissolve));
+    return vec2(uintBitsToFloat(0x34000000u) > dissolve.x ? -1.0 : 0.01 * dissolve.x, dissolve.y);
+}
+
+// The particle's alpha dissolved by the material's erosion at x, at its texture coordinates times
+// c_clipPlane.z times the scale over its distance.
+float ErodedAlpha(ParticleDraw draw, uint material, uint curve_offset, float x, float alpha,
+                  vec2 coordinates, float scale, float distance, float threshold) {
+    const vec4 erosion = MaterialCurve(material, MaterialErosionCurve, curve_offset, x,
+                                       MaterialVector(material, MaterialErosion));
+    const vec2 place = coordinates * ((draw.constants[ClipPlane + 2u] * scale) * (1.0 / distance));
+    return Dissolved(clamp(max(0.0, alpha), 0.0, 1.0), place, erosion, threshold);
+}
+
+// The colour faded by the depth behind the particle and coloured by its curve, times its alpha,
+// discarded below 2^-23 before and after c_materialAttr2.w and held to the dissolve's threshold,
+// premultiplied, with alpha times 1 - c_materialAttr.x. c_gpufxUsed.z holds the curve from bit 4,
+// 0 for none, and from bit 18 what picks the place on it: 0 the alpha, 1 the vector's length, 2
+// the fade, 3 the value in thousandths.
+vec4 MaterialColor(ParticleDraw draw, vec3 color, float particle_alpha, float fade,
+                   vec2 threshold, vec2 vector, float value, uint curve_offset) {
+    float alpha = particle_alpha * fade;
+    float fade_out = fade;
+    const uint curve = bitfieldExtract(draw.gpufx_used[2], 4, 14);
+    if (curve > 0u) {
+        float x = clamp(max(0.0, alpha), 0.0, 1.0);
+        float alpha_scale = 1.0;
+        const uint pick = bitfieldExtract(draw.gpufx_used[2], 18, 4);
+        if (pick != 0u) {
+            alpha_scale = alpha;
+            if (pick == 1u) {
+                x = clamp(sqrt(vector.y * vector.y + vector.x * vector.x), 0.0, 1.0);
+            } else if (pick == 2u) {
+                x = fade;
+                fade_out = 1.0;
+            } else if (pick == 3u) {
+                x = clamp(0.001 * value, 0.0, 1.0);
+            } else {
+                x = 0.0;
+            }
+        }
+        const vec4 curve_color = CurveColor(curve + curve_offset, x);
+        color = curve_color.rgb * color;
+        alpha = alpha_scale * curve_color.a;
+    }
+    alpha = fade_out * alpha;
+    if (uintBitsToFloat(0x34000000u) > alpha) {
+        discard;
+    }
+    alpha = draw.constants[MaterialAttr2 + 3u] * alpha;
+    // Above a threshold of 0 the alpha below it goes, and where the dissolve's full mark reaches
+    // 1 - 2^-23 the rest is whole.
+    if (0.0 < threshold.x) {
+        alpha = alpha < threshold.x
+                    ? 0.0
+                    : (uintBitsToFloat(0x3f7ffffeu) <= threshold.y ? 1.0 : alpha);
+    }
+    if (uintBitsToFloat(0x34000000u) > alpha) {
+        discard;
+    }
+    const vec3 premultiplied = alpha * color;
+    const float coverage = clamp((1.0 - draw.constants[MaterialAttr]) * alpha, 0.0, 1.0);
+    return vec4(unpackHalf2x16(packHalf2x16(premultiplied.rg)),
+                unpackHalf2x16(packHalf2x16(vec2(premultiplied.b, coverage))));
 }
