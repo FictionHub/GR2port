@@ -1,0 +1,146 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's ExtractEmitterColor compute program 0x1c341b0: for each effect object at most a
+// thirtieth of a second into its description whose description asks for a tint, the colour of
+// nine taps of the albedo's copy around a random point of the description's box, seen through the
+// view and its projection, averaged and turned by 1/2.2.
+#version 460
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0) uniform texture2D color_texture;
+layout(set = 0, binding = 1) uniform sampler curve_sampler;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words {
+    uint words[];
+};
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer Colors {
+    vec4 colors[];
+};
+layout(push_constant) uniform Push {
+    uint64_t objects_address;
+    uint64_t descriptions_address;
+    uint64_t colors_address;
+    // The view's rows at word 0, its projection's at 16, and a quarter of the render size at 64.
+    uint64_t scene_address;
+};
+
+// An effect object (128 bytes): its position, its description, a mark of a dead object, its time,
+// its random seed, and a word that holds the tint back.
+const uint ObjectBytes = 128u;
+const uint ObjectPosition = 0u;
+const uint ObjectDescription = 32u;
+const uint ObjectDead = 40u;
+const uint ObjectTime = 44u;
+const uint ObjectSeed = 48u;
+const uint ObjectHold = 112u;
+const uint DeadMark = 0x27bc86aau;
+// A description (256 bytes): its start time, whether it tints, and its box.
+const uint DescriptionBytes = 256u;
+const uint DescriptionStart = 0u;
+const uint DescriptionTint = 16u;
+const uint DescriptionBoxMin = 96u;
+const uint DescriptionBoxMax = 112u;
+
+// The word at a byte of a record, addressed as the game's program does.
+uint Word(Words records, uint record, uint size, uint byte_offset) {
+    return records.words[(record * size + byte_offset) >> 2];
+}
+
+float Float(Words records, uint record, uint size, uint byte_offset) {
+    return uintBitsToFloat(Word(records, record, size, byte_offset));
+}
+
+vec3 Vector(Words records, uint record, uint size, uint byte_offset) {
+    return vec3(Float(records, record, size, byte_offset),
+                Float(records, record, size, byte_offset + 4u),
+                Float(records, record, size, byte_offset + 8u));
+}
+
+// One step of the game's random sequence, a 20-bit shift register fed by bits 0 and 3.
+uint Step(uint state) {
+    return (state >> 1) | ((uint(bitCount(state & 9u)) & 1u) << 19);
+}
+
+// A random number from a state of the sequence. The game's program turns its sign where it is
+// negative, which a number made from an unsigned one never is.
+float Random(uint state) {
+    return uintBitsToFloat(0x402a91b9u) *
+           fract(abs(uintBitsToFloat(0x3ac01c14u) * float(state ^ 0xc6395u)));
+}
+
+vec3 Tap(float u, float v) {
+    return textureLod(sampler2D(color_texture, curve_sampler), vec2(u, v), 1.0).rgb;
+}
+
+void main() {
+    const uint index = gl_WorkGroupID.x * 64u + gl_LocalInvocationID.x;
+    Words objects = Words(objects_address);
+    Words descriptions = Words(descriptions_address);
+    if (Word(objects, index, ObjectBytes, ObjectDead) == DeadMark) {
+        return;
+    }
+    const uint description = Word(objects, index, ObjectBytes, ObjectDescription);
+    if (Word(descriptions, description, DescriptionBytes, DescriptionTint) != 1u) {
+        return;
+    }
+    const float age = Float(objects, index, ObjectBytes, ObjectTime) -
+                      Float(descriptions, description, DescriptionBytes, DescriptionStart);
+    if (!(Word(objects, index, ObjectBytes, ObjectHold) == 0u &&
+          uintBitsToFloat(0x3d086595u) >= age)) {
+        return;
+    }
+
+    // A random point of the box, three steps of the sequence on, around the object's position.
+    const uint step1 = Step(Word(objects, index, ObjectBytes, ObjectSeed));
+    const uint step2 = Step(step1);
+    const uint step3 = Step(step2);
+    const vec3 position = Vector(objects, index, ObjectBytes, ObjectPosition);
+    const vec3 low = Vector(descriptions, description, DescriptionBytes, DescriptionBoxMin);
+    const vec3 high = Vector(descriptions, description, DescriptionBytes, DescriptionBoxMax);
+    const float scale = uintBitsToFloat(0x3ec01c14u);
+    const vec3 point =
+        vec3(position.x + (Random(step1) * (high.x - low.x) * scale + low.x),
+             (Random(step2) * (high.y - low.y) * scale + low.y) + position.y,
+             Random(step3) * (high.z - low.z) * scale + (low.z + position.z));
+
+    // The point through the view, then the projection's rows 0, 1 and 3.
+    Words scene = Words(scene_address);
+    float m[32];
+    for (uint i = 0u; i < 32u; i++) {
+        m[i] = uintBitsToFloat(scene.words[i]);
+    }
+    const vec3 view = vec3(m[2] * point.z + (m[1] * point.y + (m[0] * point.x + m[3])),
+                           m[6] * point.z + (m[5] * point.y + (m[4] * point.x + m[7])),
+                           m[10] * point.z + (m[9] * point.y + (m[8] * point.x + m[11])));
+    const float x = m[19] + (m[18] * view.z + (m[17] * view.y + m[16] * view.x));
+    const float y = m[23] + (m[22] * view.z + (m[21] * view.y + m[20] * view.x));
+    const float w = m[30] * view.z + (m[29] * view.y + (m[28] * view.x + m[31]));
+    const float inverse = 1.0 / w;
+    const float u = 0.5 * (inverse * x) + 0.5;
+    const float v = 0.5 * (-inverse * y) + 0.5;
+
+    // Nine taps a texel of the copy apart, at its second level, summed in the game's order.
+    const float du = 1.0 / uintBitsToFloat(scene.words[64]);
+    const float dv = 1.0 / uintBitsToFloat(scene.words[65]);
+    const float left = clamp(u - du, 0.0, 1.0);
+    const float middle = clamp(max(0.0, u), 0.0, 1.0);
+    const float right = clamp(du + u, 0.0, 1.0);
+    const float top = clamp(v - dv, 0.0, 1.0);
+    const float centre = clamp(max(0.0, v), 0.0, 1.0);
+    const float bottom = clamp(dv + v, 0.0, 1.0);
+    const vec3 first = Tap(left, centre);
+    vec3 sum = Tap(left, top) + first;
+    sum = sum + Tap(left, bottom);
+    sum = sum + Tap(middle, top);
+    sum = sum + Tap(middle, centre);
+    sum = sum + Tap(middle, bottom);
+    sum = sum + Tap(right, top);
+    sum = sum + Tap(right, centre);
+    sum = sum + Tap(right, bottom);
+    const vec3 average = clamp((1.0 / 9.0) * sum, 0.0, 1.0);
+    const vec3 color = exp2(uintBitsToFloat(0x3ee8ba2eu) * log2(abs(average)));
+    Colors(colors_address).colors[index] = vec4(color, 1.0);
+}
