@@ -345,7 +345,7 @@ gr2port_add_shader(pfx/particle_surface_tangent.vert particle_surface_tangent_ve
 gr2port_add_shader(pfx/particle_surface_tangent_color.frag particle_surface_tangent_color_frag)
 gr2port_add_shader(pfx/particle_surface_tangent_color.vert particle_surface_tangent_color_vert)
 gr2port_add_shader(pfx/sprite.vert sprite_vert)
-gr2port_add_shader(pfx/sprite_blur.frag sprite_blur_frag)
+gr2port_add_shader(sprite_blur.frag sprite_blur_frag)
 gr2port_add_shader(pfx/sprite_blur_soft.frag sprite_blur_soft_frag)
 gr2port_add_shader(pfx/sprite_distortion.frag sprite_distortion_frag)
 gr2port_add_shader(pfx/sprite_distortion_soft.frag sprite_distortion_soft_frag)
