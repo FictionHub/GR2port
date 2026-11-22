@@ -4,6 +4,9 @@
 // What the enemy vertex programs read: Scene::EnemyDraw, the game's vertex constants and then the
 // mesh, and the mesh's elements at the vertex as the hardware's vertex fetch gives them.
 
+#ifndef ENEMY_VERTEX_GLSL
+#define ENEMY_VERTEX_GLSL
+
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
@@ -139,3 +142,5 @@ vec4 ClipPosition(EnemyConstants constants, uint first, vec3 point) {
     return vec4(PointRow(constants, first, 0u, point), PointRow(constants, first, 1u, point),
                 0.5 * (w - z), w);
 }
+
+#endif
