@@ -248,7 +248,7 @@ private:
     bool Init();
     void Frame(const SceneRing::Packet& packet);
     void RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
-                     const SceneRing::Packet& packet, u64 offset);
+                     const SceneRing::Packet& packet, u64 offset, u64 game_frames);
     void Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
                 const Scene::Header& header);
     void ReadTimes(u32 slot_index);
@@ -302,6 +302,8 @@ private:
     // The camera of the last frame whose world was drawn, which the histories hold.
     Scene::Camera last_camera;
     bool camera_drawn = false;
+    // The game frame of the last packet recorded.
+    u64 recorded_frame = 0;
     bool logged_scene = false;
     bool logged_shadows = false;
     bool logged_decals = false;
@@ -928,7 +930,7 @@ void Thread::MeasureMotion(const SceneRing::Packet& packet) {
 // The world's passes, from the deformers to the antialias, which leave the picture the composite
 // reads.
 void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
-                         const SceneRing::Packet& packet, u64 offset) {
+                         const SceneRing::Packet& packet, u64 offset, u64 game_frames) {
     const auto& dl = d.dispatch;
     const vk::Extent2D extent = render_extent;
     const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices();
@@ -948,7 +950,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         PassTimes::Mark(cmd, PassTimes::Pass::Kernels);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Simulation);
         Particles::RecordSimulation(cmd, header, packet.data, packet.address, scene_ring.buffer,
-                                    offset);
+                                    offset, game_frames);
         PassTimes::Mark(cmd, PassTimes::Pass::Simulation);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::PointLights);
         PointLights::Record(cmd, header, packet.address);
@@ -1340,8 +1342,11 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + 1, dl);
     }
+    // The ring drops the game frames the renderer does not reach.
+    const u64 game_frames = recorded_frame != 0 ? packet.frame - recorded_frame : 1;
+    recorded_frame = packet.frame;
     if (header.ui.only == 0) {
-        RecordWorld(cmd, slot_index, header, packet, offset);
+        RecordWorld(cmd, slot_index, header, packet, offset, game_frames);
         // The game's Composite draws into its back buffer, or into the view's own target.
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Composite);
         const vk::Extent2D world = Ui::BeginWorld(cmd, header, hdr_peak > 0.0f);

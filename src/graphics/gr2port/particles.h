@@ -35,9 +35,10 @@ bool DepthReady();
 
 /// Outside rendering, with the last frame's depth readable: copies what changed in the effect
 /// library and the curves, and runs the simulation for the packet at address, which is at offset
-/// in buffer.
+/// in buffer. The simulation advances by the time of the game frames since the last packet, whose
+/// number is game_frames.
 void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet,
-                      u64 address, vk::Buffer buffer, u64 offset);
+                      u64 address, vk::Buffer buffer, u64 offset, u64 game_frames);
 
 /// Inside SelfTranslucent's rendering, with its viewport set: draws the items of its three
 /// passes, each where the stencil holds its value.

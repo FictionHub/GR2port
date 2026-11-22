@@ -1,0 +1,34 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// Each effect's record holds the time of one game frame, and the spawn and move programs advance
+// by it. They run once per drawn frame, and above 30 fps the renderer can draw fewer frames than
+// the game makes. This scales each record's time to the game frames since the programs last ran.
+
+#version 460
+
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+layout(local_size_x = 64) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Records {
+    float w[];
+};
+
+layout(push_constant) uniform Constants {
+    Records records;
+    uint count;
+    float frames;
+};
+
+const uint RecordWords = 48u;
+const uint StepWord = 41u;
+
+void main() {
+    const uint record = gl_GlobalInvocationID.x;
+    if (record >= count) {
+        return;
+    }
+    records.w[RecordWords * record + StepWord] *= frames;
+}

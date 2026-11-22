@@ -58,6 +58,7 @@
 #include "graphics/gr2port/shaders/particle_gem_vert.h"
 #include "graphics/gr2port/shaders/particle_half_frag.h"
 #include "graphics/gr2port/shaders/particle_mesh_shadow_frag.h"
+#include "graphics/gr2port/shaders/particle_step_comp.h"
 #include "graphics/gr2port/shaders/particle_surface_color_frag.h"
 #include "graphics/gr2port/shaders/particle_surface_color_vert.h"
 #include "graphics/gr2port/shaders/particle_surface_frag.h"
@@ -192,6 +193,12 @@ struct UpdatePush {
     u64 active;
 };
 
+struct StepPush {
+    u64 records;
+    u32 count;
+    float frames;
+};
+
 struct ActivePush {
     u64 owners;
     u64 emitters;
@@ -258,6 +265,7 @@ std::array<Pipeline, ShadowPrograms> g_shadow_pipelines;
 std::array<Pipeline, Scene::ParticleSurfacePipelines> g_surface_pipelines;
 Pipeline g_update;
 Pipeline g_active_pipeline;
+Pipeline g_step_pipeline;
 Pipeline g_clear;
 Pipeline g_move;
 Pipeline g_spawn;
@@ -368,6 +376,7 @@ void Build() {
     const std::array draw_sets{Textures::SetLayout(), g_draw_layout};
     batch.Add(g_update, GPU_OBJECT_UPDATE_COMP, sizeof(UpdatePush), compute_sets);
     batch.Add(g_active_pipeline, PARTICLE_ACTIVE_COMP, sizeof(ActivePush));
+    batch.Add(g_step_pipeline, PARTICLE_STEP_COMP, sizeof(StepPush));
     batch.Add(g_clear, GPU_PARTICLE_CLEAR_COMP, sizeof(u64));
     batch.Add(g_move, GPU_PARTICLE_MOVE_COMP, sizeof(MovePush), compute_sets);
     batch.Add(g_spawn, GPU_EMITTER_SPAWN_COMP, sizeof(SpawnPush), compute_sets);
@@ -1610,7 +1619,7 @@ bool DepthReady() {
 }
 
 void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet,
-                      u64 address, vk::Buffer buffer, u64 offset) {
+                      u64 address, vk::Buffer buffer, u64 offset, u64 game_frames) {
     g_frames++;
     const Scene::ParticleHeader& frame = header.particles;
     if (!g_ready.load(std::memory_order_acquire) || frame.refused != 0 || frame.objects == 0 ||
@@ -1672,6 +1681,20 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
     const u64 owners = address + Scene::ParticleOwnersOffset;
     const u32 object_groups = Groups(frame.objects);
     const u32 particle_groups = Groups(frame.particles);
+
+    if (game_frames > 1) {
+        constexpr u32 records = Scene::MaxParticleEffectBytes / Scene::ParticleEffectBytes;
+        const StepPush step{
+            .records = effects,
+            .count = records,
+            .frames = static_cast<float>(game_frames),
+        };
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_step_pipeline.pipeline, dl);
+        cmd.pushConstants(g_step_pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0,
+                          sizeof(step), &step, dl);
+        cmd.dispatch(Groups(records), 1, 1, dl);
+        FullBarrier(cmd);
+    }
 
     // The list starts empty, its dispatch at no groups.
     constexpr std::array<u32, ActiveListWord> empty{0, 0, 1, 1};
