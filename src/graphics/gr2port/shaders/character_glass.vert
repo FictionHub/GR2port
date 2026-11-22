@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // The game's character glass vertex program 0x1b29c84: the position through WorldViewProj, and for
-// the pixel program the tangent and normal turned by World to unit length, the world position, the
-// texture coordinates, and the position moved 0.1 along the world normal through each of the
-// three shadow cascades' matrices.
+// the pixel program the tangent and normal turned by WorldView to unit length, the view position,
+// the texture coordinates, and the position moved 0.1 along the view normal through each of the
+// three ShadowProj matrices.
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
 #include "enemy_vertex.glsl"
 
 // The unit tangent and the tangent's w; the places in cascades 0, 1 and 2; the unit normal and the
-// world position's x; the world position's y and z and the texture coordinates.
+// view position's x; the view position's y and z and the texture coordinates.
 layout(location = 0) out vec4 attr0;
 layout(location = 1) out vec4 attr1;
 layout(location = 2) out vec4 attr2;
@@ -23,17 +23,18 @@ layout(location = 5) out vec4 attr5;
 const uint64_t GlassDrawBytes = 560ul;
 const uint64_t GlassMeshOffset = 432ul;
 
-// The vertex constants: World, WorldViewProj, then the three shadow cascades' matrices.
-const uint World = 0u;
+// The vertex constants, Buffer0 in the program's metadata: u_m4WorldView, u_m4WorldViewProj, then
+// u_m4ShadowProj0 to 2.
+const uint WorldView = 0u;
 const uint WorldViewProj = 16u;
-const uint Cascades = 32u;
+const uint ShadowProj = 32u;
 
 vec3 Unit(vec3 v) {
     return (1.0 / sqrt(v.z * v.z + (v.y * v.y + v.x * v.x))) * v;
 }
 
 vec4 CascadePlace(EnemyConstants constants, uint cascade, vec3 point) {
-    const uint first = Cascades + 16u * cascade;
+    const uint first = ShadowProj + 16u * cascade;
     return vec4(PointRow(constants, first, 0u, point), PointRow(constants, first, 1u, point),
                 PointRow(constants, first, 2u, point), PointRow(constants, first, 3u, point));
 }
@@ -59,14 +60,14 @@ void main() {
     const vec4 tangent = uintBitsToFloat(ElementWords(mesh, mesh.elements[SemanticTangent]));
 
     gl_Position = ClipPosition(constants, WorldViewProj, position);
-    const vec3 world_normal = TransformDirection(constants, World, normal);
-    const vec3 world_tangent = TransformDirection(constants, World, tangent.xyz);
-    const vec3 world_position = TransformPoint(constants, World, position);
-    const vec3 shadow_point = world_normal * 0.1 + position;
-    attr0 = vec4(Unit(world_tangent), tangent.w);
+    const vec3 view_normal = TransformDirection(constants, WorldView, normal);
+    const vec3 view_tangent = TransformDirection(constants, WorldView, tangent.xyz);
+    const vec3 view_position = TransformPoint(constants, WorldView, position);
+    const vec3 shadow_point = view_normal * 0.1 + position;
+    attr0 = vec4(Unit(view_tangent), tangent.w);
     attr1 = CascadePlace(constants, 0u, shadow_point);
     attr2 = CascadePlace(constants, 1u, shadow_point);
     attr3 = CascadePlace(constants, 2u, shadow_point);
-    attr4 = vec4(Unit(world_normal), world_position.x);
-    attr5 = vec4(world_position.yz, texcoord);
+    attr4 = vec4(Unit(view_normal), view_position.x);
+    attr5 = vec4(view_position.yz, texcoord);
 }
