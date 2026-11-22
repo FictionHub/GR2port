@@ -77,8 +77,9 @@ vec2 ParallaxPlace(ParticleMaterial material, vec2 place, vec2 view, float norma
     return view * -(1.0 - meet) + place;
 }
 
-// HalfOverlay with its difference in one fused step, as the game's program takes green's and
-// blue's. Red's comes from the rounded base, as HalfOverlay gives it.
+// HalfOverlay with its difference in one fused step, where the game's programs take it so: green's
+// and blue's in particle_surface_tangent.frag, which takes red's from the rounded base as
+// HalfOverlay gives it, and all three in particle_surface_tangent_color.frag.
 float FusedHalfOverlay(float factor, float other, float layer) {
     const float base = factor * other;
     const bool bright = 0.5 <= base;
