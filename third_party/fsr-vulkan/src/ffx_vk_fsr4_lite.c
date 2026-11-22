@@ -704,8 +704,8 @@ static VkResult mkPipeline(FfxFsr4VkContext* c, uint32_t passIdx, VkPipe* out)
     VkPipelineShaderStageRequiredSubgroupSizeCreateInfo subgroup;
     memset(&subgroup, 0, sizeof(subgroup));
     subgroup.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO;
-    subgroup.requiredSubgroupSize = 32u;
-    if (c->subgroup32Supported)
+    subgroup.requiredSubgroupSize = blob->subgroupSize ? blob->subgroupSize : 32u;
+    if (blob->subgroupSize || c->subgroup32Supported)
         cpci.stage.pNext = &subgroup;
 
     r = vkCreateComputePipelines(c->dev, VK_NULL_HANDLE, 1, &cpci, c->alloc, &out->pipeline);

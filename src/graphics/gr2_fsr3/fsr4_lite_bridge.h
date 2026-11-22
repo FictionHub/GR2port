@@ -57,6 +57,7 @@ typedef struct Gr2Fsr4Shader {
     const uint32_t* words;
     size_t size_bytes;
     const char* entry_point; ///< At most GR2_FSR4_ENTRY_POINT_MAX - 1 bytes; creation copies it.
+    uint32_t subgroup_size;  ///< Required subgroup size, or 0 for the backend's.
 } Gr2Fsr4Shader;
 
 typedef struct Gr2Fsr4CreateInfo {

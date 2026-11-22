@@ -35,6 +35,7 @@ typedef struct FfxFsr4VkShaderBlob {
     const uint32_t* spirv;      ///< Pointer to SPIR-V words
     size_t          sizeBytes;  ///< Size in bytes (must be multiple of 4)
     const char*     entryPoint; ///< e.g. "main" or the DXC-exported name
+    uint32_t        subgroupSize; ///< Required subgroup size; 0 requests 32 where supported
 } FfxFsr4VkShaderBlob;
 
 /*

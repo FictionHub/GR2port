@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -25,6 +26,7 @@
 #include "graphics/gr2_fsr3/fsr4_assets.h"
 #include "graphics/gr2_fsr3/fsr4_lite_bridge.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_inputs_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass0_comp.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass2_comp.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass2_fma_comp.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass5_comp.h"
@@ -65,6 +67,10 @@ constexpr float FirstFrameMs = 33.3f;
 constexpr u32 InputGroupPixels = 8;
 // The SHA-256 of AMD's FSR 4 modules whose results the FSR4_MAIN_1080 modules reproduce, and of
 // fsr4_lite_main_initializer.bin, which holds the weights that passes 2, 5 and 9 have compiled in.
+constexpr std::array<u8, 32> MainPass0Sha256{
+    0xa2, 0x63, 0xf2, 0x09, 0xcc, 0x51, 0x42, 0xcd, 0xd4, 0x69, 0x9a, 0x5e, 0x78, 0x27, 0x8a, 0x90,
+    0x3a, 0x7d, 0x79, 0x6f, 0x58, 0x17, 0x7e, 0x06, 0x1e, 0x63, 0xb9, 0xc5, 0xd2, 0xe3, 0xc8, 0xaf,
+};
 constexpr std::array<u8, 32> MainPass2Sha256{
     0xde, 0x1b, 0x1b, 0x63, 0x5c, 0x54, 0xb8, 0xb2, 0xe3, 0x79, 0x43, 0x18, 0x98, 0xd2, 0x16, 0xf4,
     0xb0, 0xf4, 0xa5, 0xdd, 0x3a, 0xee, 0xbf, 0x61, 0x9a, 0x48, 0x6d, 0x93, 0x03, 0x14, 0x05, 0x9c,
@@ -85,6 +91,14 @@ constexpr std::array<u8, 32> MainInitializerSha256{
     0x4b, 0x98, 0x98, 0xda, 0x71, 0x9d, 0xc2, 0xdc, 0xa5, 0xdc, 0x45, 0xfd, 0x71, 0xde, 0xc5, 0xf8,
     0x0b, 0xdb, 0x98, 0x86, 0xa5, 0x80, 0xfe, 0x30, 0x38, 0xaf, 0x59, 0xef, 0xe6, 0x37, 0xd5, 0x5e,
 };
+// The passes, by AMD's module, that run in 64-wide subgroups where RADV runs them faster.
+constexpr std::array<std::pair<std::size_t, const std::array<u8, 32>*>, 5> WideSubgroupPasses{{
+    {0, &MainPass0Sha256},
+    {2, &MainPass2Sha256},
+    {5, &MainPass5Sha256},
+    {7, &MainPass7Sha256},
+    {9, &MainPass9Sha256},
+}};
 // DLSS's convolutional model, preset E, in every mode; NGX's default picks the transformer model.
 constexpr Gr2Fsr3::DlssPreset DlssModel = Gr2Fsr3::DlssPreset::E;
 // A camera that moves or turns further than this between frames, or changes its field of view by
@@ -494,11 +508,10 @@ std::vector<float> FloatWeights(const std::vector<u8>& model) {
 }
 
 bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
-    const auto properties =
-        g_device->gpu
-            .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceVulkan11Properties,
-                            vk::PhysicalDeviceShaderIntegerDotProductProperties>(
-                g_device->dispatch);
+    const auto properties = g_device->gpu.getProperties2<
+        vk::PhysicalDeviceProperties2, vk::PhysicalDeviceVulkan11Properties,
+        vk::PhysicalDeviceShaderIntegerDotProductProperties, vk::PhysicalDeviceDriverProperties>(
+        g_device->dispatch);
     const auto& vk11 = properties.get<vk::PhysicalDeviceVulkan11Properties>();
     const bool compute_subgroups =
         static_cast<bool>(vk11.subgroupSupportedStages & vk::ShaderStageFlagBits::eCompute);
@@ -534,14 +547,20 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
     const bool vector_pass7 = g_fsr4_cooperative_vectors && matches(7, MainPass7Sha256);
     // Passes 2, 5, 7 and 9 also have the same results from float multiply-adds of weights made
     // from this initializer, which GPUs without 8-bit dot product instructions run faster.
-    const bool float_products =
-        !g_fsr4_cooperative_vectors && main_weights &&
-        !properties.get<vk::PhysicalDeviceShaderIntegerDotProductProperties>()
-             .integerDotProduct4x8BitPackedSignedAccelerated;
+    const auto& dot_products =
+        properties.get<vk::PhysicalDeviceShaderIntegerDotProductProperties>();
+    const bool float_products = !g_fsr4_cooperative_vectors && main_weights &&
+                                !dot_products.integerDotProduct4x8BitPackedSignedAccelerated;
     const bool float_pass2 = float_products && matches(2, MainPass2Sha256);
     const bool float_pass5 = float_products && matches(5, MainPass5Sha256);
     const bool float_pass7 = float_products && matches(7, MainPass7Sha256);
     const bool float_pass9 = float_products && matches(9, MainPass9Sha256);
+    const bool radv =
+        properties.get<vk::PhysicalDeviceDriverProperties>().driverID == vk::DriverId::eMesaRadv;
+    // Pass 0 has the same results with its weights read as 16-bit floats, which RADV runs faster on
+    // the GPUs that do not take the float passes.
+    const bool half_pass0 = radv && dot_products.integerDotProduct4x8BitPackedSignedAccelerated &&
+                            matches(0, MainPass0Sha256);
     std::vector<u8> initializer = assets.initializer;
     if (vector_pass2 || vector_pass5 || vector_pass7) {
         const std::vector<u8> matrices = VectorMatrices(assets.initializer);
@@ -575,6 +594,9 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
             Gr2Fsr4Shader{.words = words, .size_bytes = size_bytes, .entry_point = "main"};
         replaced_passes += fmt::format(" {}", pass);
     };
+    if (half_pass0) {
+        replace(0, FSR4_MAIN_1080_PASS0_COMP, sizeof(FSR4_MAIN_1080_PASS0_COMP));
+    }
     if (vector_pass2) {
         replace(2, FSR4_MAIN_1080_PASS2_COMP, sizeof(FSR4_MAIN_1080_PASS2_COMP));
     }
@@ -598,7 +620,24 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
     }
     if (!replaced_passes.empty()) {
         LOG_INFO(Render_Vulkan, "GR2port upscaler: FSR 4 passes{} run on {}", replaced_passes,
-                 g_fsr4_cooperative_vectors ? "cooperative vectors" : "float multiply-adds");
+                 g_fsr4_cooperative_vectors ? "cooperative vectors"
+                 : float_products           ? "float multiply-adds"
+                                            : "16-bit float weights");
+    }
+    // These passes have the same results in 64-wide subgroups, which RADV runs faster on RDNA3 and
+    // later: the GPUs it reports mixed-sign 8-bit dot products on.
+    if (radv && dot_products.integerDotProduct4x8BitPackedMixedSignednessAccelerated) {
+        std::string wide_passes;
+        for (const auto& [pass, sha256] : WideSubgroupPasses) {
+            if (matches(pass, *sha256)) {
+                info.shaders[pass].subgroup_size = 64;
+                wide_passes += fmt::format(" {}", pass);
+            }
+        }
+        if (!wide_passes.empty()) {
+            LOG_INFO(Render_Vulkan, "GR2port upscaler: FSR 4 passes{} run in 64-wide subgroups",
+                     wide_passes);
+        }
     }
     const Gr2Fsr4Status status = Gr2Fsr4Create(&info, &g_fsr4);
     if (status.stage != GR2_FSR4_STAGE_NONE) {

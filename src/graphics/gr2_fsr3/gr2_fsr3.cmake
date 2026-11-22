@@ -120,6 +120,7 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
         set(GR2_FSR3_SHADER_HEADERS ${GR2_FSR3_SHADER_HEADERS} ${HEADER_FILE} PARENT_SCOPE)
     endfunction()
     gr2_fsr3_add_shader(fsr4_inputs.comp fsr4_inputs_comp)
+    gr2_fsr3_add_shader(fsr4_main_1080_pass0.comp fsr4_main_1080_pass0_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass2.comp fsr4_main_1080_pass2_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass5.comp fsr4_main_1080_pass5_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass7.comp fsr4_main_1080_pass7_comp)
@@ -131,6 +132,7 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
         DEPENDS ${GR2_FSR3_SHADER_HEADERS}
         SOURCES
             ${GR2_FSR3_DIR}/shaders/fsr4_inputs.comp
+            ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass0.comp
             ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass2.comp
             ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass5.comp
             ${GR2_FSR3_DIR}/shaders/fsr4_main_1080_pass7.comp

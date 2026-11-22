@@ -1,0 +1,263 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_EXT_control_flow_attributes : require
+#extension GL_EXT_samplerless_texture_functions : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_spirv_intrinsics : require
+#extension GL_KHR_shader_subgroup_quad : require
+
+// FSR 4 Lite's pass 0 for the 1080p size tier (fsr4_model_v07_fp8_no_scale_prepass of
+// fsr4_lite_main_1080_pass0.spv). AMD's module converts each 16-bit weight to a float and back;
+// this one reads the weights as 16-bit floats, which leaves the same values, and does the rest
+// with AMD's operations in AMD's order, so its results are identical. One thread per pixel; the
+// four threads of a quad are a 2x2 block of pixels.
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform texture2D r_history_color;
+layout(set = 0, binding = 1) uniform texture2D r_velocity;
+layout(set = 0, binding = 2) uniform texture2D r_depth;
+layout(set = 0, binding = 3) uniform texture2D r_input_color;
+layout(set = 0, binding = 4) uniform texture2D r_recurrent_0;
+layout(set = 0, binding = 6) uniform texture2D r_input_exposure;
+layout(set = 0, binding = 17) uniform texture2D r_auto_exposure_texture;
+layout(set = 0, binding = 21) readonly buffer InitializerBuffer {
+    uint init_words[];
+};
+layout(set = 0, binding = 131) uniform writeonly image2D rw_reprojected_color;
+layout(set = 0, binding = 141) writeonly buffer ScratchBuffer {
+    uint scratch_words[];
+};
+layout(set = 0, binding = 257, std140) uniform MLSR_Optimized_Constants {
+    vec2 inv_size;
+    vec2 scale;
+    vec2 inv_scale;
+    vec2 jitter;
+    vec2 mv_scale;
+    vec2 tex_size;
+    vec2 max_render_size;
+    vec2 motion_vector_jitter_cancellation;
+    uint width;
+    uint height;
+    uint reset;
+    uint width_lr;
+    uint height_lr;
+    float pre_exposure;
+    float previous_pre_exposure;
+    uint rcas_enabled;
+    float rcas_sharpness;
+    float pad;
+};
+layout(set = 0, binding = 320) uniform sampler g_history_sampler;
+
+// GLSL's max is FMax, whose result is undefined for NaN; AMD's module uses NMax.
+spirv_instruction(set = "GLSL.std.450", id = 80) float NMax(float x, float y);
+spirv_instruction(set = "GLSL.std.450", id = 80) vec3 NMax(vec3 x, vec3 y);
+
+// The tensor holds 16 one-byte channels and has a one-pixel border.
+const uint HalfRow = 15392u; // (960 + 2) * 16
+const uint Plane = 8342464u;
+// The weights, 32 bytes for each channel and quad position, then a float bias for each channel.
+const uint BiasWords = 256u;
+
+// A tap of the input colour in AMD's log space.
+vec3 Tap(ivec2 at, ivec2 last, float exposure) {
+    const vec3 rgb = texelFetch(r_input_color, clamp(at, ivec2(0), last), 0).rgb;
+    return NMax(log(vec3(1.0) + (rgb * exposure) * 150.0) * 0.117399998, vec3(0.0));
+}
+
+void main() {
+    const uint lid = gl_LocalInvocationID.x;
+    const uint quad = lid >> 2;
+    const uvec2 local =
+        uvec2(((quad % 8u) << 1) | (lid & 1u), ((quad / 8u) << 1) | ((lid & 3u) >> 1));
+    const uvec2 pos = local + uvec2(gl_WorkGroupID.x * 16u, gl_WorkGroupID.y * 16u);
+    if (pos.x >= width || pos.y >= height) {
+        return;
+    }
+
+    float exposure = texelFetch(r_input_exposure, ivec2(0), 0).x;
+    if (exposure == 0.0) {
+        exposure = 1.0;
+    }
+    exposure = exposure / pre_exposure;
+    const float previous =
+        texelFetch(r_auto_exposure_texture, ivec2(1, 0), 0).x / previous_pre_exposure;
+
+    // The input colour at the pixel: four taps around it, weighted by a Gaussian of the distance.
+    const vec2 offset = inv_scale * 0.5 - vec2(0.5);
+    const vec2 fpos = vec2(pos);
+    const vec2 lr = fpos * inv_scale;
+    const vec2 c = ((vec2(-0.5) + inv_scale * vec2(0.5)) + lr) + jitter;
+    const ivec2 base = ivec2(floor(c));
+    const ivec2 last = ivec2(int(width_lr - 1u), int(height_lr - 1u));
+    const float dx0 = scale.x * abs(float(base.x) - c.x);
+    const float wx0 = exp((dx0 * dx0) * -2.26346755);
+    const float dx1 = scale.x * abs(float(base.x + 1) - c.x);
+    const float wx1 = exp((dx1 * dx1) * -2.26346755);
+    const float dy0 = scale.y * abs(float(base.y) - c.y);
+    const float wy0 = exp((dy0 * dy0) * -2.26346755);
+    const float dy1 = scale.y * abs(float(base.y + 1) - c.y);
+    const float wy1 = exp((dy1 * dy1) * -2.26346755);
+    const float w00 = wx0 * wy0;
+    const float w10 = wx1 * wy0;
+    const float w01 = wx0 * wy1;
+    const float w11 = wx1 * wy1;
+    const float weights = ((w00 + w10) + w01) + w11;
+    const float peak = NMax(NMax(NMax(w00, w10), w01), w11);
+    const vec3 color =
+        (((Tap(base, last, exposure) * w00 + Tap(base + ivec2(1, 0), last, exposure) * w10) +
+          Tap(base + ivec2(0, 1), last, exposure) * w01) +
+         Tap(base + ivec2(1, 1), last, exposure) * w11) /
+        vec3(weights);
+    const float keep = peak * 0.100000001;
+
+    // The motion of the nearest depth of the 3x3 render pixels around the pixel.
+    ivec2 at = ivec2(roundEven(lr + offset));
+    float nearest = texelFetch(r_depth, at, 0).x;
+    const ivec2 Around[8] = ivec2[](ivec2(-1, -1), ivec2(-1, 0), ivec2(-1, 1), ivec2(0, -1),
+                                    ivec2(0, 1), ivec2(1, -1), ivec2(1, 0), ivec2(1, 1));
+    [[unroll]] for (uint i = 0u; i < 8u; ++i) {
+        const ivec2 tap = ivec2(roundEven((fpos + vec2(Around[i])) * inv_scale + offset));
+        const float depth = texelFetch(r_depth, tap, 0).x;
+        if (depth < nearest) {
+            nearest = depth;
+            at = tap;
+        }
+    }
+    const vec2 mv = texelFetch(r_velocity, at, 0).xy * mv_scale;
+    const bool invalid =
+        any(isnan(mv)) || any(isinf(mv)) || any(greaterThan(mv, vec2(1000000.0)));
+    const vec2 motion = invalid ? vec2(0.0) : mv;
+
+    // The history at where the pixel was, through a 9-tap bicubic filter, blended with the input.
+    // Every pixel samples it, and AMD's conditions decide what each pixel keeps, so the samples
+    // are not held back by branches.
+    const vec2 moved = fpos + vec2(abs(motion.x) <= 0.03125 * inv_size.x ? 0.0 : motion.x,
+                                   abs(motion.y) <= 0.03125 * inv_size.y ? 0.0 : motion.y) *
+                                  vec2(float(width), float(height));
+    const vec2 center = moved + vec2(0.5);
+    const vec2 cell = floor(moved);
+    const vec2 cell_center = cell + vec2(0.5);
+    const vec2 f = center - cell_center;
+    const vec2 half_f = f * 0.5;
+    const vec2 w0 = f * (vec2(-0.5) + f * (vec2(1.0) - half_f));
+    const vec2 ff = f * f;
+    const vec2 f15 = f * 1.5;
+    const vec2 w2 = f * (vec2(0.5) + f * (vec2(2.0) - f15));
+    const vec2 w3 = ff * (vec2(-0.5) + half_f);
+    const vec2 w12 = (vec2(1.0) + ff * (vec2(-2.5) + f15)) + w2;
+    const vec2 t0 = (cell + vec2(-0.5)) / tex_size;
+    const vec2 t3 = (cell + vec2(2.5)) / tex_size;
+    const vec2 t12 = (cell_center + w2 / w12) / tex_size;
+    const vec3 s0 = textureLod(sampler2D(r_history_color, g_history_sampler), t0, 0.0).rgb;
+    const vec3 s1 =
+        textureLod(sampler2D(r_history_color, g_history_sampler), vec2(t12.x, t0.y), 0.0).rgb;
+    const vec3 s2 =
+        textureLod(sampler2D(r_history_color, g_history_sampler), vec2(t3.x, t0.y), 0.0).rgb;
+    const vec3 s3 =
+        textureLod(sampler2D(r_history_color, g_history_sampler), vec2(t0.x, t12.y), 0.0).rgb;
+    const vec3 s4 = textureLod(sampler2D(r_history_color, g_history_sampler), t12, 0.0).rgb;
+    const vec3 s5 =
+        textureLod(sampler2D(r_history_color, g_history_sampler), vec2(t3.x, t12.y), 0.0).rgb;
+    const vec3 s6 =
+        textureLod(sampler2D(r_history_color, g_history_sampler), vec2(t0.x, t3.y), 0.0).rgb;
+    const vec3 s7 =
+        textureLod(sampler2D(r_history_color, g_history_sampler), vec2(t12.x, t3.y), 0.0).rgb;
+    const vec3 s8 = textureLod(sampler2D(r_history_color, g_history_sampler), t3, 0.0).rgb;
+    const vec4 sampled_recurrent =
+        textureLod(sampler2D(r_recurrent_0, g_history_sampler), center / tex_size, 0.0);
+    const vec3 bicubic = ((((((((s0 * w0.x) * w0.y + (s1 * w12.x) * w0.y) + (s2 * w3.x) * w0.y) +
+                              (s3 * w0.x) * w12.y) +
+                             (s4 * w12.x) * w12.y) +
+                            (s5 * w3.x) * w12.y) +
+                           (s6 * w0.x) * w3.y) +
+                          (s7 * w12.x) * w3.y) +
+                         (s8 * w3.x) * w3.y;
+    const bool use_history = !invalid && reset == 0u;
+    const bool inside = 0.0 <= moved.x && moved.x <= float(width - 1u) && 0.0 <= moved.y &&
+                        moved.y <= float(height - 1u);
+    const vec3 without_history = reset != 0u ? color : vec3(0.0);
+    const vec3 history = inside ? bicubic : without_history;
+    const vec3 blended =
+        color * keep +
+        NMax(log(vec3(1.0) +
+                 ((NMax((exp(NMax(history, vec3(0.0)) * 8.51788044) - vec3(1.0)) *
+                            vec3(0.00666666683),
+                        vec3(0.0)) /
+                   vec3(previous)) *
+                  exposure) *
+                     150.0) *
+                 0.117399998,
+             vec3(0.0)) *
+            (1.0 - keep);
+    const vec3 reprojected = use_history ? blended : without_history;
+    const vec4 recurrent = use_history && inside ? sampled_recurrent : vec4(0.0);
+    imageStore(rw_reprojected_color, ivec2(pos), vec4(vec3(f16vec3(reprojected)), 0.0));
+
+    // Eight features in [-1, 1]: the two lumas, their chroma change and the recurrent state.
+    const float luma =
+        ((color.x * 0.212599993) + (color.y * 0.715200007)) + (color.z * 0.0722000003);
+    const float luma_history = ((reprojected.x * 0.212599993) + (reprojected.y * 0.715200007)) +
+                               (reprojected.z * 0.0722000003);
+    const float blue = 0.538909256 * ((color.z - luma) - (reprojected.z - luma_history));
+    const float red = 0.635001242 * ((color.x - luma) - (reprojected.x - luma_history));
+    const f16vec4 features_a =
+        f16vec4(2.0hf * float16_t(luma) - 1.0hf, 2.0hf * float16_t(luma_history) - 1.0hf,
+                float16_t(sqrt((pow(blue, 2.0) + pow(red, 2.0)) + 9.99999997e-07)),
+                2.0hf * float16_t(recurrent.x) - 1.0hf);
+    const f16vec4 features_b =
+        f16vec4(2.0hf * float16_t(recurrent.y) - 1.0hf, 2.0hf * float16_t(recurrent.z) - 1.0hf,
+                2.0hf * float16_t(recurrent.w) - 1.0hf, 0.0hf);
+
+    // Each channel: the weights of the pixel's place in its quad times its features, summed over
+    // the quad.
+    const uvec2 place = local % 2u;
+    const uint weights_byte = 16u * place.x + 512u * place.y;
+    float pairs[16];
+    float columns[16];
+    [[unroll]] for (uint channel = 0u; channel < 16u; ++channel) {
+        const uint w = (weights_byte + 32u * channel) >> 2;
+        const f16vec4 wa =
+            f16vec4(unpackFloat2x16(init_words[w]), unpackFloat2x16(init_words[w + 1u]));
+        const f16vec4 wb =
+            f16vec4(unpackFloat2x16(init_words[w + 2u]), unpackFloat2x16(init_words[w + 3u]));
+        const vec2 p0 = vec2(wa.xy * features_a.xy);
+        const vec2 p1 = vec2(wa.zw * features_a.zw);
+        const vec2 p2 = vec2(wb.xy * features_b.xy);
+        const vec2 p3 = vec2(wb.zw * features_b.zw);
+        const float sum = (p3.x + p3.y) + ((p2.x + p2.y) + ((p1.x + p1.y) + (p0.x + p0.y)));
+        pairs[channel] = sum + subgroupQuadSwapHorizontal(sum);
+        columns[channel] = subgroupQuadSwapVertical(pairs[channel]);
+    }
+
+    // The quad's first thread stores its 16 channels, quantized to bytes, at its half-resolution
+    // pixel.
+    if (all(equal(place, uvec2(0u)))) {
+        uint packed[4];
+        [[unroll]] for (uint g = 0u; g < 4u; ++g) {
+            const uint b = BiasWords + 4u * g;
+            const vec4 bias = uintBitsToFloat(
+                uvec4(init_words[b], init_words[b + 1u], init_words[b + 2u], init_words[b + 3u]));
+            const ivec4 q = clamp(
+                ivec4(roundEven((vec4(pairs[4u * g] + columns[4u * g],
+                                      pairs[4u * g + 1u] + columns[4u * g + 1u],
+                                      pairs[4u * g + 2u] + columns[4u * g + 2u],
+                                      pairs[4u * g + 3u] + columns[4u * g + 3u]) +
+                                 bias) *
+                                64.0)),
+                ivec4(-128), ivec4(127));
+            packed[g] = (((uint(q.x) & 255u) | ((uint(q.y) & 255u) << 8)) |
+                         ((uint(q.z) & 255u) << 16)) |
+                        ((uint(q.w) & 255u) << 24);
+        }
+        const ivec2 half_pos = ivec2(gl_WorkGroupID.xy) * ivec2(8) + ivec2(local / 2u);
+        const uvec4 at4 = uvec4(uint(half_pos.x), uint(half_pos.y), 0u, 0u) + uvec4(1u, 1u, 0u, 0u);
+        const uint word = ((((16u * at4.x) + (HalfRow * at4.y)) + at4.z) + (Plane * at4.w)) >> 2;
+        [[unroll]] for (uint g = 0u; g < 4u; ++g) {
+            scratch_words[word + g] = packed[g];
+        }
+    }
+}

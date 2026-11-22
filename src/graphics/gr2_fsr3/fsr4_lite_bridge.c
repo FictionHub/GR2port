@@ -122,6 +122,7 @@ Gr2Fsr4Status Gr2Fsr4Create(const Gr2Fsr4CreateInfo* info, Gr2Fsr4Context** cont
         create.shaders[pass].spirv = info->shaders[pass].words;
         create.shaders[pass].sizeBytes = info->shaders[pass].size_bytes;
         create.shaders[pass].entryPoint = ctx->entry_points[pass];
+        create.shaders[pass].subgroupSize = info->shaders[pass].subgroup_size;
     }
     create.modelInitializer = info->initializer;
     create.modelInitializerSize = info->initializer_size;
