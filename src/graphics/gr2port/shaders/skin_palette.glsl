@@ -10,6 +10,8 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Ski
 };
 
 // The skin stream at the vertex: four RGBA16 FLOAT weights, then four RGBA16 SINT bone indices.
+// Programs without vertices define SKIN_PALETTE_BONES_ONLY to leave these out.
+#ifndef SKIN_PALETTE_BONES_ONLY
 vec4 SkinWeights(uint64_t skin) {
     SkinWords at = SkinWords(skin + uint64_t(gl_VertexIndex) * 16ul);
     return vec4(unpackHalf2x16(at.words[0]), unpackHalf2x16(at.words[1]));
@@ -20,6 +22,8 @@ uvec4 SkinBones(uint64_t skin) {
     return uvec4(uint(int(at.words[2] << 16) >> 16), uint(int(at.words[2]) >> 16),
                  uint(int(at.words[3] << 16) >> 16), uint(int(at.words[3]) >> 16));
 }
+
+#endif
 
 // Row `row` of a bone's matrix: the palette holds 48 bytes a bone, addressed in 32 bits.
 vec4 BoneRow(uint64_t palette, uint bone, uint row) {

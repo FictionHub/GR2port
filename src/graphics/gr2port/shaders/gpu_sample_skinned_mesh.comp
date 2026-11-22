@@ -1,0 +1,120 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's skinned sample mesh compute program 0x1c366b8: gpu_sample_mesh.comp for a skinned
+// mesh, the sampled vertex's position and normal moved by its four bones from the skin stream in
+// place of the mesh's matrix.
+#version 460
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive : require
+
+layout(local_size_x = 1) in;
+
+#define SKIN_PALETTE_BONES_ONLY
+#include "gpu_sample.glsl"
+#include "skin_palette.glsl"
+
+void main() {
+    Words constants = Words(constants_address);
+    Words vertices = Words(vertices_address);
+    const uint object = constants.words[SampleObject];
+    if (Word(emitter_out_address, object, 128u, ObjectPlacing) != 1u) {
+        return;
+    }
+    const uint description = Word(emitter_out_address, object, 128u, ObjectDescription);
+    if (Word(description_address, description, 256u, DescriptionMesh) != 1u ||
+        Word(description_address, description, 256u, DescriptionSamples) == 0u) {
+        return;
+    }
+    const uint count = Word(emitter_out_address, object, 128u, ObjectCount);
+    if (count == 0u) {
+        return;
+    }
+    const uint pool = Word(description_address, description, 256u, DescriptionPool);
+    const float divisor =
+        Word(description_address, description, 256u, DescriptionOwnDivisor) != 2u
+            ? float(pool)
+            : Float(description_address, description, 256u, DescriptionDivisor);
+    const float inverse_divisor = 1.0 / max(1.0, divisor);
+    const bool in_turn = Word(description_address, description, 256u, DescriptionInTurn) > 0u;
+    const bool unturned = Word(description_address, description, 256u, DescriptionFixed) == 1u;
+    const vec3 position_scale =
+        Vector(description_address, description, 256u, DescriptionPositionScale);
+    const vec3 normal_scale =
+        Vector(description_address, description, 256u, DescriptionNormalScale);
+    const float last_vertex = float(constants.words[SampleVertices] - 1u);
+    const float scale_start = Float(emitter_out_address, object, 128u, ObjectScaleStart);
+    const float scale_range =
+        Float(emitter_out_address, object, 128u, ObjectScaleEnd) - scale_start;
+    const float duration = Float(emitter_out_address, object, 128u, ObjectDuration);
+    const float inverse_duration = 1.0 / duration;
+    const uint first = Word(emitter_out_address, object, 128u, ObjectFirst);
+    uint cursor = Word(emitter_out_address, object, 128u, ObjectCursor);
+
+    for (uint i = 0u; i < count; i++) {
+        // Without the description's fixed word, the scale goes from its start to its end over the
+        // placing's duration, back from the time it ends, and the object's rotation turns it.
+        float scale = 1.0;
+        vec4 rotation = vec4(0.0, 0.0, 0.0, 1.0);
+        if (!unturned) {
+            float time = 0.0;
+            if (duration != 0.0) {
+                time = fma(-float(i), inverse_duration,
+                           Float(emitter_out_address, object, 128u, ObjectEnd));
+            }
+            scale = time * scale_range + scale_start;
+            rotation = vec4(Vector(emitter_out_address, object, 128u, ObjectRotation),
+                            Float(emitter_out_address, object, 128u, ObjectRotation + 12u));
+        }
+        const uint particle = first + cursor;
+        // The program multiplies by the reciprocals, which spirv-opt would otherwise fold into
+        // divisions that round apart.
+        precise float along;
+        if (in_turn) {
+            along = float(cursor) * inverse_divisor;
+        } else {
+            const uint seed = 0xc6395u ^ Word(particle_out_address, particle, 64u, ParticleSeed);
+            along = uintBitsToFloat(0x3ec01c14u) *
+                    (uintBitsToFloat(0x402a91b9u) *
+                     fract(abs(uintBitsToFloat(0x3ac01c14u) * float(seed))));
+        }
+        const uint vertex_index = GameUint(last_vertex * along);
+        const uint offset = constants.words[SampleStride] * vertex_index;
+        cursor = GameRemainder(cursor + 1u, pool);
+        // The vertex's skin: four RGBA16 FLOAT weights and four 16-bit bone indices.
+        const uint skin = constants.words[SampleSkinStride] * vertex_index;
+        const uint weights_at = (constants.words[SampleWeights] + skin) >> 2;
+        const uint bones_at = (constants.words[SampleBones] + skin) >> 2;
+        const vec4 weights = vec4(unpackHalf2x16(Words(weights_address).words[weights_at]),
+                                  unpackHalf2x16(Words(weights_address).words[weights_at + 1u]));
+        const uint bones01 = Words(weights_address).words[bones_at];
+        const uint bones23 = Words(weights_address).words[bones_at + 1u];
+        const uvec4 bones =
+            uvec4(bones01 & 0xffffu, bones01 >> 16, bones23 & 0xffffu, bones23 >> 16);
+        const vec4 row0 = BlendedRow(palette_address, weights, bones, 0u);
+        const vec4 row1 = BlendedRow(palette_address, weights, bones, 1u);
+        const vec4 row2 = BlendedRow(palette_address, weights, bones, 2u);
+
+        if (constants.words[SampleMode] == ModeNormals) {
+            const vec3 normal =
+                normal_scale *
+                VertexNormal(vertices.words[(constants.words[SampleNormal] + offset) >> 2]);
+            const vec3 world = vec3(SkinnedDirection(row0, normal), SkinnedDirection(row1, normal),
+                                    SkinnedDirection(row2, normal));
+            const vec3 velocity = Vector(particle_out_address, particle, 64u, ParticleVelocity);
+            SetVector(particle_out_address, particle, 64u, ParticleVelocity,
+                      fma(Turned(rotation, world), vec3(scale), velocity));
+        }
+        const uint at = (constants.words[SamplePosition] + offset) >> 2;
+        const vec3 vertex = position_scale * uintBitsToFloat(uvec3(
+                                                 vertices.words[at], vertices.words[at + 1u],
+                                                 vertices.words[at + 2u]));
+        const vec3 world = vec3(SkinnedRow(row0, vertex), SkinnedRow(row1, vertex),
+                                SkinnedRow(row2, vertex));
+        const vec3 position = Vector(particle_out_address, particle, 64u, ParticlePosition);
+        SetVector(particle_out_address, particle, 64u, ParticlePosition,
+                  fma(vec3(scale), Turned(rotation, world), position));
+    }
+    Words(emitter_out_address).words[(object * 128u + ObjectCount) >> 2] = 0u;
+}
