@@ -51,14 +51,47 @@ constexpr Hooks::Entry Swirl{
     0x8fadba, 10, {0xc5, 0xf8, 0x58, 0x40, 0x70, 0xc5, 0xf8, 0x29, 0x40, 0x70}};
 constexpr VAddr SwirlNext = 0x8fadc4;
 
+// FUN_008f6430 next, with the root's pushes in xmm0: in Jupiter style vaddps xmm0, xmm0,
+// [0x1845cc0] adds (0, -0.03, 0, 0) and in Lunar style vaddps xmm0, xmm0, [0x1845cd0] adds
+// (0, 0.015, 0, 0) in each frame. Both go on to vmovaps [rax + 0x70], xmm0, and xmm1 is written
+// before it is read.
+constexpr Hooks::Entry JupiterPush{0x8faeef, 8, {0xc5, 0xf8, 0x58, 0x05, 0xc9, 0xad, 0xf4, 0x00}};
+constexpr VAddr JupiterPushNext = 0x8faef7;
+constexpr VAddr JupiterPushAmount = 0x1845cc0;
+constexpr Hooks::Entry LunarPush{0x8faf6f, 8, {0xc5, 0xf8, 0x58, 0x05, 0x59, 0xad, 0xf4, 0x00}};
+constexpr VAddr LunarPushNext = 0x8faf77;
+constexpr VAddr LunarPushAmount = 0x1845cd0;
+
+// FUN_008f6430 next, while objects are in Kat's stasis field, with her hair's root in rax:
+// vaddps xmm0, xmm0, [rax + 0x70]; vmovaps [rax + 0x70], xmm0 adds her up axis times 0.03 and a
+// share of the objects' motion in each frame. xmm1 is written before it is read.
+constexpr Hooks::Entry FieldPush{
+    0x8fb417, 10, {0xc5, 0xf8, 0x58, 0x40, 0x70, 0xc5, 0xf8, 0x29, 0x40, 0x70}};
+constexpr VAddr FieldPushNext = 0x8fb421;
+
+// FUN_008f6430 next, with the step's time in xmm0 and her style's gravity per second in xmm1:
+// vpermilps xmm0, xmm0, 0 broadcasts the time, and the game stores the product as the gravity of
+// Kat's hair's root. The game does not read the product again.
+constexpr Hooks::Entry StyleGravity{0x8fbac2, 6, {0xc4, 0xe3, 0x79, 0x04, 0xc0, 0x00}};
+constexpr VAddr StyleGravityNext = 0x8fbac8;
+
+// 1/30 in all four lanes.
+constexpr VAddr FrameTime = 0x18a0c60;
+
+// FUN_01506ac0, a root's update: vmovaps xmm0, [r14 + 0x50] loads the gravity that the root's
+// chains add to their speeds in a step. Other characters' roots keep a constant for a 30 fps
+// frame, so every root stores a 30 fps frame's gravity and this takes the step's share of it.
+constexpr Hooks::Entry RootGravity{0x1506ae5, 6, {0xc4, 0xc1, 0x78, 0x28, 0x46, 0x50}};
+constexpr VAddr RootGravityNext = 0x1506aeb;
+
 // The frames per second the limit and the pushes are made for.
 constexpr float GameRate = 30.0f;
 
 // The stack bytes a stub moves down by first: the red zone.
 constexpr s32 RedZone = 128;
 
-// The four stubs and their constant.
-constexpr size_t StubBytes = 512;
+// The nine stubs and their constant.
+constexpr size_t StubBytes = 744;
 
 VAddr g_module_base = 0;
 
@@ -171,6 +204,35 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     c.vaddps(xmm0, xmm0, xword[rax + 0x70]);
     c.vmovaps(xword[rax + 0x70], xmm0);
     c.jmp(code(SwirlNext));
+    const auto style_push = [&](VAddr amount, VAddr next) {
+        const void* stub = c.getCurr();
+        c.vmovss(xmm1, dword[rip + code(StepTime)]);
+        c.vmulss(xmm1, xmm1, dword[rip + game_rate]);
+        c.vshufps(xmm1, xmm1, xmm1, 0);
+        c.vmulps(xmm1, xmm1, xword[rip + code(amount)]);
+        c.vaddps(xmm0, xmm0, xmm1);
+        c.jmp(code(next));
+        return stub;
+    };
+    const void* jupiter = style_push(JupiterPushAmount, JupiterPushNext);
+    const void* lunar = style_push(LunarPushAmount, LunarPushNext);
+    const void* field = c.getCurr();
+    c.vbroadcastss(xmm1, dword[rip + code(StepTime)]);
+    c.vmulps(xmm0, xmm0, xmm1);
+    c.vbroadcastss(xmm1, dword[rip + game_rate]);
+    c.vmulps(xmm0, xmm0, xmm1);
+    c.vaddps(xmm0, xmm0, xword[rax + 0x70]);
+    c.vmovaps(xword[rax + 0x70], xmm0);
+    c.jmp(code(FieldPushNext));
+    const void* style_gravity = c.getCurr();
+    c.vbroadcastss(xmm0, dword[rip + code(FrameTime)]);
+    c.jmp(code(StyleGravityNext));
+    const void* root_gravity = c.getCurr();
+    c.vmovss(xmm0, dword[rip + code(StepTime)]);
+    c.vmulss(xmm0, xmm0, dword[rip + game_rate]);
+    c.vshufps(xmm0, xmm0, xmm0, 0);
+    c.vmulps(xmm0, xmm0, xword[r14 + 0x50]);
+    c.jmp(code(RootGravityNext));
     c.L(game_rate);
     c.dd(std::bit_cast<u32>(GameRate));
     if (Hooks::Replace(module_base, Limit, c, capacity, limit) != Hooks::Result::Hooked) {
@@ -187,6 +249,22 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     }
     if (Hooks::Replace(module_base, Swirl, c, capacity, swirl) != Hooks::Result::Hooked) {
         LOG_ERROR(Render_Vulkan, "GR2port: Kat's swirl on the hair is not the expected code");
+        return false;
+    }
+    if (Hooks::Replace(module_base, JupiterPush, c, capacity, jupiter) != Hooks::Result::Hooked ||
+        Hooks::Replace(module_base, LunarPush, c, capacity, lunar) != Hooks::Result::Hooked) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the styles' push on the hair is not the expected code");
+        return false;
+    }
+    if (Hooks::Replace(module_base, FieldPush, c, capacity, field) != Hooks::Result::Hooked) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the field's push on the hair is not the expected code");
+        return false;
+    }
+    if (Hooks::Replace(module_base, StyleGravity, c, capacity, style_gravity) !=
+            Hooks::Result::Hooked ||
+        Hooks::Replace(module_base, RootGravity, c, capacity, root_gravity) !=
+            Hooks::Result::Hooked) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the hair's gravity is not the expected code");
         return false;
     }
     return true;
