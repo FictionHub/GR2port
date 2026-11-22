@@ -312,7 +312,7 @@ gr2port_add_shader(pfx/gpu_sample_skinned_mesh.comp gpu_sample_skinned_mesh_comp
 gr2port_add_shader(pfx/model.vert model_vert)
 gr2port_add_shader(model_blur.frag model_blur_frag)
 gr2port_add_shader(pfx/model_blur_soft.frag model_blur_soft_frag)
-gr2port_add_shader(pfx/model_distortion.frag model_distortion_frag)
+gr2port_add_shader(model_distortion.frag model_distortion_frag)
 gr2port_add_shader(pfx/model_distortion_soft.frag model_distortion_soft_frag)
 gr2port_add_shader(pfx/model_fog.frag model_fog_frag)
 gr2port_add_shader(pfx/model_fog_lit.frag model_fog_lit_frag)
