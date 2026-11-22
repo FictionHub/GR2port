@@ -17,6 +17,7 @@
 #include "graphics/gr2port/catcher_outside.h"
 #include "graphics/gr2port/catcher_stacks.h"
 #include "graphics/gr2port/comic_camera.h"
+#include "graphics/gr2port/cord_bend.h"
 #include "graphics/gr2port/exit_rows.h"
 #include "graphics/gr2port/field_of_view.h"
 #include "graphics/gr2port/float_spin.h"
@@ -42,6 +43,7 @@
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/screen_shake.h"
 #include "graphics/gr2port/script_timers.h"
+#include "graphics/gr2port/scripted_moves.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/smoke_and_dust.h"
 #include "graphics/gr2port/stick_tilt.h"
@@ -162,6 +164,8 @@ void Install(VAddr module_base) {
         PartHits::Install(module_base, c, StubAreaSize);
         ComicCamera::Install(module_base, c, StubAreaSize);
         LayoutClock::Install(module_base, c, StubAreaSize);
+        ScriptedMoves::Install(module_base, c, StubAreaSize);
+        CordBend::Install(module_base, c, StubAreaSize);
     }
     FieldOfView::Install(module_base, c, StubAreaSize);
     ScreenShake::Install(module_base, c, StubAreaSize);
