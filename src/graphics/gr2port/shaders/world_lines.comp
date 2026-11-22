@@ -69,7 +69,10 @@ void main() {
         imageStore(lines, pixel, vec4(0.0, scaled_distance, 0.0, 0.0));
         return;
     }
-    const float seed = float(int(uint((pixel.x * 3) ^ (frame + pixel.y + pixel.x * pixel.y)) * 3u));
+    // The angles repeat every 1920x1080 pixels. A larger seed loses the fraction that sets the
+    // angle, and the walks of many pixels share one direction.
+    const ivec2 tile = pixel % ivec2(1920, 1080);
+    const float seed = float(int(uint((tile.x * 3) ^ (frame + tile.y + tile.x * tile.y)) * 3u));
     const float angle = TwoPi * fract(abs(seed / TwoPi));
     const vec2 walk = -WalkPixels * vec2(sin(angle), cos(angle));
     float around = 0.0;
