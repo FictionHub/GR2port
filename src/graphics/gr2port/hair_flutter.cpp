@@ -84,14 +84,20 @@ constexpr VAddr FrameTime = 0x18a0c60;
 constexpr Hooks::Entry RootGravity{0x1506ae5, 6, {0xc4, 0xc1, 0x78, 0x28, 0x46, 0x50}};
 constexpr VAddr RootGravityNext = 0x1506aeb;
 
+// FUN_014f2280, the step of a dress's chains: vmovaps xmm0, [rdi + 0x80] loads the gravity they
+// add to their speeds. A step's share of it is too light to hold them down and they whip around
+// above 30 fps, so they take the root's gravity for a 30 fps frame in every step.
+constexpr Hooks::Entry DressGravity{0x14f2847, 8, {0xc5, 0xf8, 0x28, 0x87, 0x80, 0x00, 0x00, 0x00}};
+constexpr VAddr DressGravityNext = 0x14f284f;
+
 // The frames per second the limit and the pushes are made for.
 constexpr float GameRate = 30.0f;
 
 // The stack bytes a stub moves down by first: the red zone.
 constexpr s32 RedZone = 128;
 
-// The nine stubs and their constant.
-constexpr size_t StubBytes = 744;
+// The ten stubs and their constant.
+constexpr size_t StubBytes = 760;
 
 VAddr g_module_base = 0;
 
@@ -233,6 +239,9 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     c.vshufps(xmm0, xmm0, xmm0, 0);
     c.vmulps(xmm0, xmm0, xword[r14 + 0x50]);
     c.jmp(code(RootGravityNext));
+    const void* dress_gravity = c.getCurr();
+    c.vmovaps(xmm0, xword[rdi + 0x50]);
+    c.jmp(code(DressGravityNext));
     c.L(game_rate);
     c.dd(std::bit_cast<u32>(GameRate));
     if (Hooks::Replace(module_base, Limit, c, capacity, limit) != Hooks::Result::Hooked) {
@@ -263,6 +272,8 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     if (Hooks::Replace(module_base, StyleGravity, c, capacity, style_gravity) !=
             Hooks::Result::Hooked ||
         Hooks::Replace(module_base, RootGravity, c, capacity, root_gravity) !=
+            Hooks::Result::Hooked ||
+        Hooks::Replace(module_base, DressGravity, c, capacity, dress_gravity) !=
             Hooks::Result::Hooked) {
         LOG_ERROR(Render_Vulkan, "GR2port: the hair's gravity is not the expected code");
         return false;
