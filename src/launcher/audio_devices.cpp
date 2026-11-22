@@ -13,10 +13,6 @@ namespace Gr2Port::Launcher::AudioDevices {
 
 namespace {
 
-bool OpenAL() {
-    return EmulatorSettings.GetAudioBackend() == AudioBackend::OpenAL;
-}
-
 std::vector<std::string> SdlDevices() {
     std::vector<std::string> names;
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
@@ -37,16 +33,21 @@ std::vector<std::string> SdlDevices() {
 
 } // namespace
 
-Chosen Get() {
-    if (OpenAL()) {
+u32 Backend() {
+    return EmulatorSettings.GetAudioBackend() == AudioBackend::OpenAL ? AudioBackend::OpenAL
+                                                                      : AudioBackend::SDL;
+}
+
+Chosen Get(u32 backend) {
+    if (backend == AudioBackend::OpenAL) {
         return {EmulatorSettings.GetOpenALMainOutputDevice(),
                 EmulatorSettings.GetOpenALPadSpkOutputDevice()};
     }
     return {EmulatorSettings.GetSDLMainOutputDevice(), EmulatorSettings.GetSDLPadSpkOutputDevice()};
 }
 
-void Set(const Chosen& chosen) {
-    if (OpenAL()) {
+void Set(u32 backend, const Chosen& chosen) {
+    if (backend == AudioBackend::OpenAL) {
         EmulatorSettings.SetOpenALMainOutputDevice(chosen.main);
         EmulatorSettings.SetOpenALPadSpkOutputDevice(chosen.pad_speaker);
     } else {
@@ -55,10 +56,11 @@ void Set(const Chosen& chosen) {
     }
 }
 
-std::vector<std::string> List(const Chosen& chosen) {
+std::vector<std::string> List(u32 backend, const Chosen& chosen) {
     std::vector<std::string> names{std::string{Default}};
     const std::vector<std::string> devices =
-        OpenAL() ? Libraries::AudioOut::OpenALDevice::GetAvailableDevices() : SdlDevices();
+        backend == AudioBackend::OpenAL ? Libraries::AudioOut::OpenALDevice::GetAvailableDevices()
+                                        : SdlDevices();
     names.insert(names.end(), devices.begin(), devices.end());
     for (const std::string& name : {chosen.main, chosen.pad_speaker}) {
         if (std::ranges::find(names, name) == names.end()) {

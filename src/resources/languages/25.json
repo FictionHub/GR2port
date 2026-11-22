@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "Ανίχνευση σφαλμάτων GPU",
     "Audio Device": "Συσκευή ήχου",
     "DS4 Speaker Device": "Ηχείο DS4",
-    "Default Device": "Προεπιλεγμένη συσκευή"
+    "Default Device": "Προεπιλεγμένη συσκευή",
+    "Audio Backend": "Υποσύστημα ήχου"
   }
 }

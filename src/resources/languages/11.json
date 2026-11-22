@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "GPU 崩溃捕获",
     "Audio Device": "音频设备",
     "DS4 Speaker Device": "DS4 扬声器设备",
-    "Default Device": "默认设备"
+    "Default Device": "默认设备",
+    "Audio Backend": "音频后端"
   }
 }

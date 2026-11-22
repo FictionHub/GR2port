@@ -107,6 +107,8 @@ enum Control : int {
     IdVolumeLabel,
     IdVolume,
     IdVolumeValue,
+    IdAudioBackendLabel,
+    IdAudioBackend,
     IdHdrLabel,
     IdHdr,
     IdHdrPeakLabel,
@@ -464,9 +466,9 @@ struct Row {
     int top;
 };
 
-// Rows RowStep pixels apart below the check boxes, then the volume, the HDR rows, the GPU Crash
-// Catcher check box in line with a row and the audio device rows. The page scrolls to the ones
-// below the tenth row, down to DisplayPageBottom.
+// Rows RowStep pixels apart below the check boxes, then the volume, the audio backend, the HDR
+// rows, the GPU Crash Catcher check box in line with a row and the audio device rows. The page
+// scrolls to the ones below the tenth row, down to DisplayPageBottom.
 constexpr int RowStep = 28;
 constexpr std::array Rows{
     Row{IdMonitorLabel, IdMonitor, L"Monitor", 140},
@@ -481,17 +483,18 @@ constexpr std::array Rows{
     Row{IdLanguageLabel, IdLanguage, L"Language", 392},
 };
 constexpr int VolumeTop = 420;
+constexpr Row AudioBackendRow{IdAudioBackendLabel, IdAudioBackend, L"Audio Backend", 468};
 constexpr std::array HdrRows{
-    Row{IdHdrLabel, IdHdr, L"HDR", 468},
-    Row{IdHdrPeakLabel, IdHdrPeak, L"HDR Peak Brightness", 496},
-    Row{IdHdrWhiteLabel, IdHdrWhite, L"HDR Paper White", 524},
+    Row{IdHdrLabel, IdHdr, L"HDR", 496},
+    Row{IdHdrPeakLabel, IdHdrPeak, L"HDR Peak Brightness", 524},
+    Row{IdHdrWhiteLabel, IdHdrWhite, L"HDR Paper White", 552},
 };
-constexpr int CrashCatcherTop = 554;
+constexpr int CrashCatcherTop = 582;
 constexpr std::array AudioRows{
-    Row{IdAudioDeviceLabel, IdAudioDevice, L"Audio Device", 580},
-    Row{IdPadSpeakerDeviceLabel, IdPadSpeakerDevice, L"DS4 Speaker Device", 608},
+    Row{IdAudioDeviceLabel, IdAudioDevice, L"Audio Device", 608},
+    Row{IdPadSpeakerDeviceLabel, IdPadSpeakerDevice, L"DS4 Speaker Device", 636},
 };
-constexpr int DisplayPageBottom = 646;
+constexpr int DisplayPageBottom = 674;
 
 // In the order of Settings::VSync.
 constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
@@ -1068,7 +1071,18 @@ void ShowVolume(const Dialog& dialog, int value) {
     SetWindowTextW(Item(dialog, IdVolumeValue), Percent(value).c_str());
 }
 
-void ShowAudioDevices(const Dialog& dialog, const AudioDevices::Chosen& chosen) {
+// The audio device rows list the backend's devices, each named as the system names it.
+void ShowAudioBackend(Dialog& dialog, u32 backend, const AudioDevices::Chosen& chosen) {
+    Select(Item(dialog, IdAudioBackend), static_cast<int>(backend));
+    dialog.audio_devices = AudioDevices::List(backend, chosen);
+    for (const int combo : {IdAudioDevice, IdPadSpeakerDevice}) {
+        ClearItems(Item(dialog, combo));
+        for (const std::string& name : dialog.audio_devices) {
+            AddText(Item(dialog, combo), name == AudioDevices::Default
+                                             ? Phrase{L"Default Device"}
+                                             : Phrase{L"{0}", {Wide(name)}});
+        }
+    }
     const auto index = [&](const std::string& name) {
         return static_cast<int>(std::ranges::find(dialog.audio_devices, name) -
                                 dialog.audio_devices.begin());
@@ -1895,6 +1909,7 @@ void Build(HWND window, Dialog& dialog) {
         VolumeTop + SliderTop, volume_right - LabelLeft + 2 * SliderOverhang, SliderHeight);
     SendMessageW(volume_bar, TBM_SETRANGE, FALSE, MAKELPARAM(0, MaxVolume));
     page_order.push_back(volume_bar);
+    add_row(AudioBackendRow);
     for (const Row& row : HdrRows) {
         add_row(row);
     }
@@ -2301,15 +2316,8 @@ void Build(HWND window, Dialog& dialog) {
     for (const u32 nits : Settings::HdrPaperWhiteLevels) {
         AddText(Item(dialog, IdHdrWhite), std::to_wstring(nits) + L" nits");
     }
-    // A device is named as the system names it.
-    const AudioDevices::Chosen chosen_devices = AudioDevices::Get();
-    dialog.audio_devices = AudioDevices::List(chosen_devices);
-    for (const std::string& name : dialog.audio_devices) {
-        for (const int combo : {IdAudioDevice, IdPadSpeakerDevice}) {
-            AddText(Item(dialog, combo), name == AudioDevices::Default
-                                             ? Phrase{L"Default Device"}
-                                             : Phrase{L"{0}", {Wide(name)}});
-        }
+    for (const std::string_view name : AudioDevices::Backends) {
+        AddText(Item(dialog, IdAudioBackend), Phrase{L"{0}", {Wide(name)}});
     }
     for (const GamePatches::FrameRate& rate : GamePatches::FrameRates) {
         AddText(Item(dialog, IdFrameRate), std::to_wstring(rate.fps) + L" FPS");
@@ -2333,7 +2341,8 @@ void Build(HWND window, Dialog& dialog) {
     ShowLanguage(dialog, Language::Current());
     Show(dialog, dialog.values.display);
     ShowVolume(dialog, EmulatorSettings.GetVolumeSlider());
-    ShowAudioDevices(dialog, chosen_devices);
+    const u32 audio_backend = AudioDevices::Backend();
+    ShowAudioBackend(dialog, audio_backend, AudioDevices::Get(audio_backend));
     ShowGame(dialog, dialog.values.game);
     ShowGraphics(dialog, dialog.values.graphics);
     ShowUpscaler(dialog, dialog.values.graphics);
@@ -2358,6 +2367,12 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdHdr:
         if (code == CBN_SELCHANGE) {
             UpdateEnabled(dialog);
+        }
+        break;
+    case IdAudioBackend:
+        if (code == CBN_SELCHANGE) {
+            const u32 backend = static_cast<u32>(Selected(Item(dialog, IdAudioBackend)));
+            ShowAudioBackend(dialog, backend, AudioDevices::Get(backend));
         }
         break;
     case IdMonitor:
@@ -2419,7 +2434,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         if (code == BN_CLICKED) {
             Show(dialog, Settings::Display{});
             ShowVolume(dialog, GeneralSettings{}.volume_slider.value);
-            ShowAudioDevices(dialog, {});
+            ShowAudioBackend(dialog, AudioSettings{}.audio_backend.value, {});
             ShowGame(dialog, Settings::Game{});
             ShowGraphics(dialog, Settings::Graphics{});
             ShowUpscaler(dialog, Settings::Graphics{});
@@ -2551,11 +2566,14 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         dialog.values.mouse = ReadMouse(dialog);
         Settings::Set(dialog.values);
         // The game starts in the language the launcher shows; SaveController saves it, the
-        // volume, the audio devices and the trophy pop-ups' switch.
+        // volume, the audio backend and devices and the trophy pop-ups' switch.
         EmulatorSettings.SetConsoleLanguage(Language::Current());
         EmulatorSettings.SetVolumeSlider(
             static_cast<int>(SendMessageW(Item(dialog, IdVolume), TBM_GETPOS, 0, 0)));
-        AudioDevices::Set({dialog.audio_devices[Selected(Item(dialog, IdAudioDevice))],
+        const u32 audio_backend = static_cast<u32>(Selected(Item(dialog, IdAudioBackend)));
+        EmulatorSettings.SetAudioBackend(audio_backend);
+        AudioDevices::Set(audio_backend,
+                          {dialog.audio_devices[Selected(Item(dialog, IdAudioDevice))],
                            dialog.audio_devices[Selected(Item(dialog, IdPadSpeakerDevice))]});
         EmulatorSettings.SetTrophyPopupDisabled(!Checked(dialog, IdTrophyPopups));
         dialog.restart = SavePaths(dialog);

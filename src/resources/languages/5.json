@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "Rilevatore di crash GPU",
     "Audio Device": "Dispositivo audio",
     "DS4 Speaker Device": "Altoparlante DS4",
-    "Default Device": "Dispositivo predefinito"
+    "Default Device": "Dispositivo predefinito",
+    "Audio Backend": "Backend audio"
   }
 }

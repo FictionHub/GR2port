@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "GPU 當機偵測",
     "Audio Device": "音訊裝置",
     "DS4 Speaker Device": "DS4 揚聲器裝置",
-    "Default Device": "預設裝置"
+    "Default Device": "預設裝置",
+    "Audio Backend": "音訊後端"
   }
 }

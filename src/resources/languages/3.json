@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "Detector de fallos de GPU",
     "Audio Device": "Dispositivo de audio",
     "DS4 Speaker Device": "Altavoz del DS4",
-    "Default Device": "Dispositivo predeterminado"
+    "Default Device": "Dispositivo predeterminado",
+    "Audio Backend": "Motor de audio"
   }
 }

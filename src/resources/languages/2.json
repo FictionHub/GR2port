@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "Détecteur de plantages GPU",
     "Audio Device": "Périphérique audio",
     "DS4 Speaker Device": "Haut-parleur DS4",
-    "Default Device": "Périphérique par défaut"
+    "Default Device": "Périphérique par défaut",
+    "Audio Backend": "Moteur audio"
   }
 }

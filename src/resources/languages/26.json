@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "Detector de blocări GPU",
     "Audio Device": "Dispozitiv audio",
     "DS4 Speaker Device": "Difuzor DS4",
-    "Default Device": "Dispozitiv implicit"
+    "Default Device": "Dispozitiv implicit",
+    "Audio Backend": "Backend audio"
   }
 }

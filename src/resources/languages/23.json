@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "Zachytávání pádů GPU",
     "Audio Device": "Zvukové zařízení",
     "DS4 Speaker Device": "Reproduktor DS4",
-    "Default Device": "Výchozí zařízení"
+    "Default Device": "Výchozí zařízení",
+    "Audio Backend": "Zvukový backend"
   }
 }

@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "Bắt lỗi GPU",
     "Audio Device": "Thiết bị âm thanh",
     "DS4 Speaker Device": "Loa DS4",
-    "Default Device": "Thiết bị mặc định"
+    "Default Device": "Thiết bị mặc định",
+    "Audio Backend": "Backend âm thanh"
   }
 }

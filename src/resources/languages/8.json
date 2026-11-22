@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "Отлов сбоев GPU",
     "Audio Device": "Аудиоустройство",
     "DS4 Speaker Device": "Динамик DS4",
-    "Default Device": "Устройство по умолчанию"
+    "Default Device": "Устройство по умолчанию",
+    "Audio Backend": "Аудиобэкенд"
   }
 }

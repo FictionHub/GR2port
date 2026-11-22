@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "GPU-összeomlás-figyelő",
     "Audio Device": "Hangeszköz",
     "DS4 Speaker Device": "DS4 hangszóró",
-    "Default Device": "Alapértelmezett eszköz"
+    "Default Device": "Alapértelmezett eszköz",
+    "Audio Backend": "Hang-háttérrendszer"
   }
 }

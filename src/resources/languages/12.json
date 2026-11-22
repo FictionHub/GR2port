@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "GPU-kaatumisten sieppaus",
     "Audio Device": "Äänilaite",
     "DS4 Speaker Device": "DS4-kaiutin",
-    "Default Device": "Oletuslaite"
+    "Default Device": "Oletuslaite",
+    "Audio Backend": "Äänen taustaosa"
   }
 }

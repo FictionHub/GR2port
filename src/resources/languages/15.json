@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "GPU-krasjfanger",
     "Audio Device": "Lydenhet",
     "DS4 Speaker Device": "DS4-høyttaler",
-    "Default Device": "Standardenhet"
+    "Default Device": "Standardenhet",
+    "Audio Backend": "Lyd-backend"
   }
 }

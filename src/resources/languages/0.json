@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "GPUクラッシュ検出",
     "Audio Device": "音声出力デバイス",
     "DS4 Speaker Device": "DS4スピーカー出力デバイス",
-    "Default Device": "既定のデバイス"
+    "Default Device": "既定のデバイス",
+    "Audio Backend": "オーディオバックエンド"
   }
 }

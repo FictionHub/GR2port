@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "GPU 충돌 감지",
     "Audio Device": "오디오 장치",
     "DS4 Speaker Device": "DS4 스피커 장치",
-    "Default Device": "기본 장치"
+    "Default Device": "기본 장치",
+    "Audio Backend": "오디오 백엔드"
   }
 }

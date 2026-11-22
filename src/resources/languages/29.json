@@ -324,6 +324,7 @@
     "GPU Crash Catcher": "Penangkap Crash GPU",
     "Audio Device": "Perangkat Audio",
     "DS4 Speaker Device": "Speaker DS4",
-    "Default Device": "Perangkat Bawaan"
+    "Default Device": "Perangkat Bawaan",
+    "Audio Backend": "Backend Audio"
   }
 }
