@@ -71,6 +71,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/movies.h
     ${CMAKE_CURRENT_LIST_DIR}/overlays.cpp
     ${CMAKE_CURRENT_LIST_DIR}/overlays.h
+    ${CMAKE_CURRENT_LIST_DIR}/part_hits.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/part_hits.h
     ${CMAKE_CURRENT_LIST_DIR}/particle_capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/particle_capture.h
     ${CMAKE_CURRENT_LIST_DIR}/motion_blur.cpp

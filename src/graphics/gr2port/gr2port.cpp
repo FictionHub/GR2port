@@ -33,6 +33,7 @@
 #include "graphics/gr2port/motion_ends.h"
 #include "graphics/gr2port/mouse_camera.h"
 #include "graphics/gr2port/movies.h"
+#include "graphics/gr2port/part_hits.h"
 #include "graphics/gr2port/particle_capture.h"
 #include "graphics/gr2port/photo_ui.h"
 #include "graphics/gr2port/pipeline.h"
@@ -155,9 +156,10 @@ void Install(VAddr module_base) {
     WaterSplashes::Install(module_base, c, StubAreaSize);
     SmokeAndDust::Install(module_base, c, StubAreaSize);
     FloatSpin::Install(module_base, c, StubAreaSize);
-    // At the game's own 30 fps the motions keep the stock steps.
+    // At the game's own 30 fps the motions and the hits keep the stock code.
     if (Settings::Get().game.frame_rate > 30) {
         MotionEnds::Install(module_base, c, StubAreaSize);
+        PartHits::Install(module_base, c, StubAreaSize);
     }
     FieldOfView::Install(module_base, c, StubAreaSize);
     ScreenShake::Install(module_base, c, StubAreaSize);
