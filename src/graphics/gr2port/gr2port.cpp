@@ -23,6 +23,7 @@
 #include "graphics/gr2port/field_of_view.h"
 #include "graphics/gr2port/float_spin.h"
 #include "graphics/gr2port/frame_graph_draws.h"
+#include "graphics/gr2port/frame_windows.h"
 #include "graphics/gr2port/gpu_writes.h"
 #include "graphics/gr2port/gr2port.h"
 #include "graphics/gr2port/graphics_menu.h"
@@ -168,6 +169,8 @@ void Install(VAddr module_base) {
         LayoutClock::Install(module_base, c, StubAreaSize);
         ScriptedMoves::Install(module_base, c, StubAreaSize);
         CordBend::Install(module_base, c, StubAreaSize);
+        FrameWindows::Install(module_base, c, StubAreaSize);
+        ScriptTimers::InstallFrameCounts(module_base, c, StubAreaSize);
     }
     FieldOfView::Install(module_base, c, StubAreaSize);
     ScreenShake::Install(module_base, c, StubAreaSize);

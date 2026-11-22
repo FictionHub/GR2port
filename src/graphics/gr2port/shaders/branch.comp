@@ -45,11 +45,13 @@ layout(push_constant) uniform Constants {
     BranchJobs scene_jobs;
     Effectors scene_effectors;
     Grid scene_grid;
-    // Scene::BranchTiming: the game's literals, which its frame-rate patches set.
+    // Scene::BranchTiming: the game's literals, per 30 fps frame.
     float steady_phase;
     float shaken_phase;
     float start_phase;
     float shake_frames;
+    // The time since the last frame recorded, in 30 fps frames.
+    float step;
 };
 
 const uint PointFloats = 4u;
@@ -151,17 +153,19 @@ void main() {
     float phase = state.values[first_state + 1u];
     float sway = QuietSway;
     if (hit == 2u) {
-        phase += steady_phase;
-    } else if (timer >= 1.0) {
-        timer -= 1.0;
-        phase += shaken_phase;
+        phase += steady_phase * step;
+    } else if (timer > step) {
+        timer -= step;
+        phase += shaken_phase * step;
         sway = ShakenSway;
     } else if (timer != 0.0) {
         phase = 0.0;
         timer = hit == 0u ? 0.0 : timer;
     } else if (hit == 1u) {
-        timer = shake_frames;
-        phase += start_phase;
+        // A shake also lasts the frame it starts in, whose length is this step. The fraction of
+        // the literal keeps the timer above zero at the shake's last step.
+        timer = floor(shake_frames) + 1.0 - (1.0 - fract(shake_frames)) * step;
+        phase += start_phase * step;
         sway = ShakenSway;
     }
     state.values[first_state] = timer;

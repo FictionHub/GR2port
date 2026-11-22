@@ -9,6 +9,7 @@
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/hooks.h"
+#include "graphics/gr2port/script_timers.h"
 #include "graphics/gr2port/scripted_moves.h"
 
 namespace Gr2Port::ScriptedMoves {
@@ -145,6 +146,7 @@ void PS4_SYSV_ABI OnScriptMove(VAddr object) {
 }
 
 void PS4_SYSV_ABI OnAfterScripts() {
+    ScriptTimers::PlaceCages();
     if (g_moving == 0 || *g_step_time == 0.0f) {
         return;
     }

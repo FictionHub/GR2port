@@ -380,8 +380,8 @@ struct EffectHeader {
     u32 dropped_water;
 };
 
-/// The Branch kernel's per-frame literals, which the game's frame-rate patches set: the phase's
-/// step on a steady hit, while shaken and as a shake starts, and the frames a shake lasts.
+/// The Branch kernel's literals, per 30 fps frame: the phase's step on a steady hit, while shaken
+/// and as a shake starts, and the frames a shake lasts.
 struct BranchTiming {
     float steady_phase;
     float shaken_phase;
@@ -393,6 +393,8 @@ static_assert(sizeof(BranchTiming) == 16);
 /// The start of each packet.
 struct Header {
     u64 frame;
+    /// The length of the game's frames up to this one, in 30 fps frames.
+    double game_time;
     /// The index count of all draws, and of the largest.
     u64 indices;
     u32 max_indices;

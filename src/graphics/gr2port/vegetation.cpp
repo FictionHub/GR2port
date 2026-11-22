@@ -57,6 +57,7 @@ struct BranchKernelPush {
     u64 effectors;
     u64 grid;
     Scene::BranchTiming timing;
+    float step;
 };
 
 const Device* g_device = nullptr;
@@ -156,7 +157,8 @@ bool Start(const Device& device, Memory& memory, std::span<const vk::Format> sur
     return g_leaves.pipeline && g_leaf_shadows.pipeline;
 }
 
-void RecordKernels(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
+void RecordKernels(vk::CommandBuffer cmd, const Scene::Header& header, u64 address,
+                   float game_step) {
     if (header.grass == 0 && header.branch_jobs == 0) {
         return;
     }
@@ -178,6 +180,7 @@ void RecordKernels(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
             .effectors = address + Scene::EffectorsOffset,
             .grid = Deformers::GridAddress(),
             .timing = header.branch_timing,
+            .step = game_step,
         };
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_branch_kernel.pipeline, dl);
         cmd.pushConstants(g_branch_kernel.layout, vk::ShaderStageFlagBits::eCompute, 0,

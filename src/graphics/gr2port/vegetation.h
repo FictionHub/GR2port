@@ -25,8 +25,10 @@ bool Start(const Device& device, Memory& memory, std::span<const vk::Format> sur
            vk::Format depth_format, vk::Format shadow_format);
 
 /// After Deformers::Record, outside rendering: sways the branches and grows the blades of the
-/// packet at address, and makes them visible to vertex shaders and indirect draws.
-void RecordKernels(vk::CommandBuffer cmd, const Scene::Header& header, u64 address);
+/// packet at address, and makes them visible to vertex shaders and indirect draws. The branches
+/// advance by game_step, the time since the last packet recorded in 30 fps frames.
+void RecordKernels(vk::CommandBuffer cmd, const Scene::Header& header, u64 address,
+                   float game_step);
 
 /// Inside the world's surface rendering, with its viewport: draws the grass, the branches and the
 /// leaves of the packet at address, which is at offset in buffer.

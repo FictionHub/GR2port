@@ -755,6 +755,8 @@ constexpr std::array<float, 4> NoTransform{0.0f, 0.0f, 1.0f, 1.0f};
 constexpr u64 MatrixBytes = 64;
 
 std::atomic<u64> g_frames{0};
+// The length of the game's frames so far, in 30 fps frames.
+double g_game_time = 0.0;
 // Whether frames are captured.
 std::atomic<bool> g_capturing{true};
 // The game's frame rate since the last report, in whichever state the switches are: the frames, the
@@ -3617,6 +3619,16 @@ Scene::BranchTiming ReadBranchTiming() {
     };
 }
 
+// The frame rate patches' length of this frame in 30 fps frames. It stays 0 without a patch, when
+// each frame is one 30 fps frame.
+constexpr u64 FrameShare = 0x1f7c600 - Hooks::CodeBase;
+
+double AdvanceGameTime() {
+    const float share = Load<float>(MemoryPatcher::g_eboot_address + FrameShare);
+    g_game_time += share > 0.0f ? share : 1.0f;
+    return g_game_time;
+}
+
 // The view's target for the world's picture; the back buffer when 0.
 constexpr u64 ViewWorldTarget = 0xfe0;
 
@@ -3715,6 +3727,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     const auto start = std::chrono::steady_clock::now();
     const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
     g_frames.store(frame, std::memory_order_relaxed);
+    const double game_time = AdvanceGameTime();
     if (Catcher::On) {
         Catcher::Test::Game(frame);
     }
@@ -3907,6 +3920,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();
     header.frame = frame;
+    header.game_time = game_time;
     header.frame_gap_ns = FrameGap(start);
     header.point_lights = point_lights;
     header.fog = fog.flags;
@@ -3963,6 +3977,7 @@ void OnFrameEnd() {
         }
         g_pending = {.packet = packet, .frame = frame};
         g_pending.header.frame = frame;
+        g_pending.header.game_time = AdvanceGameTime();
         g_pending.header.ui.only = 1;
         g_pending.header.frame_gap_ns = FrameGap(start);
     }

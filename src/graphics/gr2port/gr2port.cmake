@@ -101,6 +101,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/marker_fit.h
     ${CMAKE_CURRENT_LIST_DIR}/scripted_moves.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scripted_moves.h
+    ${CMAKE_CURRENT_LIST_DIR}/frame_windows.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/frame_windows.h
     ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.h
     ${CMAKE_CURRENT_LIST_DIR}/water_splashes.cpp
