@@ -57,6 +57,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/imgui_relay.h
     ${CMAKE_CURRENT_LIST_DIR}/look.cpp
     ${CMAKE_CURRENT_LIST_DIR}/look.h
+    ${CMAKE_CURRENT_LIST_DIR}/loading_tip.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/loading_tip.h
     ${CMAKE_CURRENT_LIST_DIR}/memory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/memory.h
     ${CMAKE_CURRENT_LIST_DIR}/menu_kit.cpp

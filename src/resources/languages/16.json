@@ -325,6 +325,7 @@
     "Audio Device": "Urządzenie audio",
     "DS4 Speaker Device": "Głośnik DS4",
     "Default Device": "Urządzenie domyślne",
-    "Audio Backend": "Backend dźwięku"
+    "Audio Backend": "Backend dźwięku",
+    "TIP: if the display looks blurry, make sure the monitor resolution setting in System Menu > Graphics matches your monitor resolution": "WSKAZÓWKA: jeśli obraz jest rozmyty, w Menu systemowe > Ustawienia grafiki ustaw „Rozdzielczość monitora” zgodną z Twoim monitorem"
   }
 }

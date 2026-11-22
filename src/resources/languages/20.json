@@ -76,6 +76,7 @@
     "Double-click a function, then press its button on the controller.": "Haz doble clic en una función y presiona su botón en el control.",
     "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.": "Mantén presionadas hasta tres teclas a la vez para\n{0}\n\nSe cancelará sin cambios en {1} s.",
     "Hold up to three buttons on the controller together for\n{0}\n\nNothing changes in {1} s.": "Mantén presionados hasta tres botones del control a la vez para\n{0}\n\nSe cancelará sin cambios en {1} s.",
-    "Hide UI (Photo Mode)": "Ocultar interfaz (modo Foto)"
+    "Hide UI (Photo Mode)": "Ocultar interfaz (modo Foto)",
+    "TIP: if the display looks blurry, make sure the monitor resolution setting in System Menu > Graphics matches your monitor resolution": "CONSEJO: si la imagen se ve borrosa, ajusta “Resolución del monitor” en Menú Sistema > Ajustes gráficos a la de tu monitor"
   }
 }

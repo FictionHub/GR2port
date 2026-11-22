@@ -32,6 +32,7 @@
 #include "graphics/gr2port/hair_flutter.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/layout_clock.h"
+#include "graphics/gr2port/loading_tip.h"
 #include "graphics/gr2port/marker_fit.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/mob_float.h"
@@ -150,6 +151,7 @@ void Install(VAddr module_base) {
     if (ExitRows::Install(module_base, c, StubAreaSize)) {
         GraphicsMenu::Install(module_base, c, StubAreaSize);
         PhotoUi::AddRow(module_base, c, StubAreaSize);
+        LoadingTip::Install(module_base, c, StubAreaSize);
     }
     MobFloat::Install(module_base, c, StubAreaSize);
     HairFlutter::Install(module_base, c, StubAreaSize);

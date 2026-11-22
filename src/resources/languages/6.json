@@ -325,6 +325,7 @@
     "Audio Device": "Audioapparaat",
     "DS4 Speaker Device": "DS4-luidspreker",
     "Default Device": "Standaardapparaat",
-    "Audio Backend": "Audio-backend"
+    "Audio Backend": "Audio-backend",
+    "TIP: if the display looks blurry, make sure the monitor resolution setting in System Menu > Graphics matches your monitor resolution": "TIP: ziet het beeld er wazig uit? Zet ‘Monitorresolutie’ onder Systeem > Grafische instellingen op de resolutie van je monitor"
   }
 }

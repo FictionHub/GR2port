@@ -325,6 +325,7 @@
     "Audio Device": "音声出力デバイス",
     "DS4 Speaker Device": "DS4スピーカー出力デバイス",
     "Default Device": "既定のデバイス",
-    "Audio Backend": "オーディオバックエンド"
+    "Audio Backend": "オーディオバックエンド",
+    "TIP: if the display looks blurry, make sure the monitor resolution setting in System Menu > Graphics matches your monitor resolution": "ヒント：画面がぼやけて見える場合は、システムメニュー > グラフィック設定の「モニターの解像度」をモニターに合わせてください"
   }
 }
