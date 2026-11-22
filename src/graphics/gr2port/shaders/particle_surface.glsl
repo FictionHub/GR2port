@@ -5,6 +5,9 @@
 // material's constants, the places of its maps, the colour's half overlay with the layer values,
 // and the G-buffer's packed normal.
 
+#ifndef PARTICLE_SURFACE_GLSL
+#define PARTICLE_SURFACE_GLSL
+
 #include "particle_material.glsl"
 
 // The surface material's pixel constants (WriteSurfaceMaterial): ColorScale, the punch-through
@@ -56,3 +59,5 @@ vec2 PackNormal(vec3 normal) {
     const float scale = 1.0 / sqrt(xy2) * sqrt(abs(0.5 * z + 0.5));
     return vec2(scale * x, scale * y);
 }
+
+#endif
