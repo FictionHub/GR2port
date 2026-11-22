@@ -97,6 +97,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/cord_bend.h
     ${CMAKE_CURRENT_LIST_DIR}/layout_clock.cpp
     ${CMAKE_CURRENT_LIST_DIR}/layout_clock.h
+    ${CMAKE_CURRENT_LIST_DIR}/marker_fit.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/marker_fit.h
     ${CMAKE_CURRENT_LIST_DIR}/scripted_moves.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scripted_moves.h
     ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.cpp

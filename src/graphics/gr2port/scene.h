@@ -1348,6 +1348,8 @@ inline constexpr u32 UiDrawMovie = 8;
 /// A Transform program's draw whose matrix gives no depth, its third row zero: a comic page's
 /// camera, which keeps the 16:9 shape.
 inline constexpr u32 UiDrawNoDepth = 16;
+/// A piece of a marker that follows an object on the screen, which may lie past the 16:9 canvas.
+inline constexpr u32 UiDrawMarker = 32;
 
 /// Consecutive screen draws of one target, pair of programs, blend, primitive type and viewport:
 /// x, y, width and height, with a negative height where the game's y scale is.

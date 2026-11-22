@@ -10,6 +10,7 @@
 #include "common/logging/log.h"
 #include "common/memory_patcher.h"
 #include "core/game_check/arrival_hang.h"
+#include "core/game_check/game_patches.h"
 #include "core/libraries/error_codes.h"
 #include "core/memory.h"
 #include "graphics/gr2port/camera_reach.h"
@@ -30,6 +31,7 @@
 #include "graphics/gr2port/hair_flutter.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/layout_clock.h"
+#include "graphics/gr2port/marker_fit.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/mob_float.h"
 #include "graphics/gr2port/motion_ends.h"
@@ -169,6 +171,9 @@ void Install(VAddr module_base) {
     }
     FieldOfView::Install(module_base, c, StubAreaSize);
     ScreenShake::Install(module_base, c, StubAreaSize);
+    if (GamePatches::FitsUi()) {
+        MarkerFit::Install(module_base, c, StubAreaSize);
+    }
     if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
             Hooks::Result::Mismatch ||
         Hooks::ObserveEntry(module_base, NextContext, c, StubAreaSize, &OnNextContext, 0) ==

@@ -18,6 +18,7 @@
 #include "common/logging/log.h"
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/hooks.h"
+#include "graphics/gr2port/marker_fit.h"
 #include "graphics/gr2port/photo_ui.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/ui.h"
@@ -666,15 +667,21 @@ void Writer::Draw(u32 opcode, const u32* body) {
             drop("no vertex constants");
             return;
         }
-        // The Transform programs place a vertex by the 4x4 matrix at the start of their
+        // The Transform and Skinned programs place a vertex by the 4x4 matrix at the start of their
         // constants, column by column, and never read its third row.
-        if (vertex_index == static_cast<u32>(Scene::UiVertexProgram::Transform) ||
-            vertex_index == static_cast<u32>(Scene::UiVertexProgram::TransformB)) {
+        const bool transform =
+            vertex_index == static_cast<u32>(Scene::UiVertexProgram::Transform) ||
+            vertex_index == static_cast<u32>(Scene::UiVertexProgram::TransformB);
+        if (transform || vertex_index == static_cast<u32>(Scene::UiVertexProgram::Skinned) ||
+            vertex_index == static_cast<u32>(Scene::UiVertexProgram::SkinnedB)) {
             const auto matrix =
                 Load<std::array<float, 16>>(ReadBuffer(vs_user + VsUserConstants).base);
-            if (matrix[2] == 0.0f && matrix[6] == 0.0f && matrix[10] == 0.0f &&
+            if (transform && matrix[2] == 0.0f && matrix[6] == 0.0f && matrix[10] == 0.0f &&
                 matrix[14] == 0.0f) {
                 draw.flags |= Scene::UiDrawNoDepth;
+            }
+            if (matrix[14] == MarkerFit::DrawTag) {
+                draw.flags |= Scene::UiDrawMarker;
             }
         }
     }

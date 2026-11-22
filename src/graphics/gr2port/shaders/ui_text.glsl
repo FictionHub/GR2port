@@ -15,7 +15,8 @@
 // no depth, so a triangle in perspective with no depth fits too. Its panels slide past the screen's
 // edges, so there a corner stays at the edge only on an axis where the triangle reaches both edges,
 // as the page's paper does. A movie the game plays on the screen keeps its 16:9 shape too, its
-// sides included. The viewfinder narrows as before, by the fit scale.
+// sides included. A marker follows an object into the screen's sides, past the 16:9 canvas, so it
+// fits with no corner kept at the edge. The viewfinder narrows as before, by the fit scale.
 // TEXT_ATTRIBUTES is the vertex program's outputs, 1 or 2.
 
 #extension GL_EXT_buffer_reference : require
@@ -46,6 +47,7 @@ const uint DrawAnchored = 2u;
 const uint DrawFinder = 4u;
 const uint DrawMovie = 8u;
 const uint DrawNoDepth = 16u;
+const uint DrawMarker = 32u;
 // The viewfinder's window: the middle 1024 x 1024 of the game's 1920 x 1080 canvas.
 const vec2 FinderEdge = vec2(512.0 / 960.0, 512.0 / 540.0);
 
@@ -131,7 +133,7 @@ void main() {
                           greaterThanEqual(target_high, vec2(EdgeReach)).y);
     }
     const vec2 finder_scale = scaled ? fit_scale : text_scale;
-    const bool movie = (flags & DrawMovie) != 0u;
+    const bool free_corners = (flags & (DrawMovie | DrawMarker)) != 0u;
     for (int i = 0; i < 3; i++) {
         vec4 position = gl_in[i].gl_Position;
         if (narrow) {
@@ -146,7 +148,7 @@ void main() {
             const vec2 at = ToTarget(position.xy / position.w);
             const bvec2 reach = greaterThanEqual(abs(at), vec2(EdgeReach));
             const bvec2 edge =
-                movie ? bvec2(false) : bvec2(reach.x && spans.x, reach.y && spans.y);
+                free_corners ? bvec2(false) : bvec2(reach.x && spans.x, reach.y && spans.y);
             position.xy = FromTarget(mix(at * fit_scale, at, edge)) * position.w;
         }
         gl_Position = position;

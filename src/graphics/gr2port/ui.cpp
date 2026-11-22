@@ -11,6 +11,7 @@
 
 #include "common/logging/log.h"
 #include "core/game_check/game_patches.h"
+#include "graphics/gr2port/marker_fit.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/shaders/fullscreen_vert.h"
@@ -658,6 +659,9 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
     const u64 draws = address + Scene::UiDrawsOffset;
     const vk::Extent2D screen =
         HasImage(header, header.ui.picture) ? g_images[header.ui.picture].extent : vk::Extent2D{};
+    if (g_fit_ui && screen.height != 0) {
+        MarkerFit::SetFitScale(TextScale(screen, screen));
+    }
     const std::array sets{Textures::Set(), g_sampler_set};
     for (u32 i = 0; i < count; i++) {
         const Scene::UiRun& run = runs[i];
