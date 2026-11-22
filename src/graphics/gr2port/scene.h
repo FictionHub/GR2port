@@ -917,9 +917,9 @@ struct WaterDraw {
 };
 static_assert(sizeof(WaterDraw) == 1200);
 
-/// A G2_BG_Metaball draw, as shaders/pfx/metaball.vert and metaball.frag read it: the game's
-/// vertex constants, with the neighbours its draw writes at +0x110 filled in, its pixel constants,
-/// then its mesh, whose displacement is the displacement map.
+/// A G2_BG_Metaball draw, as shaders/pfx/metaball.vert and shaders/metaball.frag read it: the
+/// game's vertex constants, with the neighbours its draw writes at +0x110 filled in, its pixel
+/// constants, then its mesh, whose displacement is the displacement map.
 struct MetaballDraw {
     u32 vertex_constants[96];
     u32 pixel_constants[12];
