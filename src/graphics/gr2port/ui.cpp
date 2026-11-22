@@ -289,6 +289,25 @@ vk::PipelineColorBlendAttachmentState BlendState(u32 control) {
     };
 }
 
+// A screen draw's blend over the world in an HDR picture. The alpha holds the share of the world
+// the draws leave, which the present gives the world's gain: none under an opaque draw, and under a
+// draw that multiplies the world the share stays, as the colour it leaves caps it.
+vk::PipelineColorBlendAttachmentState WorldBlendState(u32 control) {
+    vk::PipelineColorBlendAttachmentState blend = BlendState(control);
+    if (!blend.blendEnable) {
+        blend.blendEnable = true;
+        blend.srcColorBlendFactor = vk::BlendFactor::eOne;
+        blend.dstColorBlendFactor = vk::BlendFactor::eZero;
+        blend.colorBlendOp = vk::BlendOp::eAdd;
+    }
+    blend.srcAlphaBlendFactor = vk::BlendFactor::eZero;
+    blend.dstAlphaBlendFactor = blend.srcColorBlendFactor == vk::BlendFactor::eDstColor
+                                    ? vk::BlendFactor::eOne
+                                    : blend.dstColorBlendFactor;
+    blend.alphaBlendOp = vk::BlendOp::eAdd;
+    return blend;
+}
+
 std::span<const u32> VertexCode(u32 program) {
     switch (static_cast<Scene::UiVertexProgram>(program)) {
     case Scene::UiVertexProgram::Pass:
@@ -348,11 +367,13 @@ std::span<const u32> PixelCode(u32 program) {
 }
 
 // A pipeline per pair of programs and blend, made when a frame first draws with them.
-const Pipeline& PipelineFor(const Scene::UiRun& run) {
-    const u64 key = u64{run.vertex} << 40 | u64{run.pixel} << 32 | run.blend;
+const Pipeline& PipelineFor(const Scene::UiRun& run, bool over_world) {
+    const u64 key =
+        u64{over_world} << 48 | u64{run.vertex} << 40 | u64{run.pixel} << 32 | run.blend;
     const auto [entry, added] = g_pipelines.try_emplace(key);
     if (added) {
-        const vk::PipelineColorBlendAttachmentState blend = BlendState(run.blend);
+        const vk::PipelineColorBlendAttachmentState blend =
+            over_world ? WorldBlendState(run.blend) : BlendState(run.blend);
         const std::array sets{Textures::SetLayout(), g_sampler_layout};
         entry->second = CreateGraphicsPipeline(*g_device, {
                                                               .vertex = VertexCode(run.vertex),
@@ -674,9 +695,10 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
             (run.vertex == StrokeVertex && !g_device->geometry_shaders)) {
             continue;
         }
+        const bool over_world = g_world_gain && run.target == header.ui.picture;
         const Pipeline& pipeline = g_device->dynamic_blend
                                        ? g_pairs[run.vertex * PixelPrograms + run.pixel]
-                                       : PipelineFor(run);
+                                       : PipelineFor(run, over_world);
         if (!pipeline.pipeline) {
             continue;
         }
@@ -688,7 +710,8 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
         }
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
         if (g_device->dynamic_blend) {
-            const vk::PipelineColorBlendAttachmentState blend = BlendState(run.blend);
+            const vk::PipelineColorBlendAttachmentState blend =
+                over_world ? WorldBlendState(run.blend) : BlendState(run.blend);
             cmd.setColorBlendEnableEXT(0, blend.blendEnable, dl);
             cmd.setColorBlendEquationEXT(0,
                                          vk::ColorBlendEquationEXT{

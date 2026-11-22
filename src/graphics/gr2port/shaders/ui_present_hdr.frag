@@ -24,23 +24,18 @@ layout(location = 0) in vec2 position;
 
 layout(location = 0) out vec4 color;
 
-// How much of the world's colour the screen drawing left: 1 where it kept it or darkened it
-// evenly, as fades and dark panels do, and 0 where it drew over it.
-float Kept(vec3 shown, vec3 drawn) {
-    const float scale = min(dot(shown, drawn) / max(dot(drawn, drawn), 1e-6), 1.0);
-    const vec3 off = abs(shown - scale * drawn);
-    return 1.0 - smoothstep(1.5 / 255.0, 3.0 / 255.0, max(max(off.r, off.g), off.b));
-}
-
-// The frame's back buffer over the HDR window, through the clamping bilinear sampler. The world's
-// highlights take their gain where the screen drawing left them.
+// The frame's back buffer over the HDR window, through the clamping bilinear sampler. With the
+// world in it, the back buffer's alpha holds the share of the world the screen drawing left, and
+// only that part of the colour takes the world's gain. A draw that multiplies the world leaves the
+// alpha alone, so the colour it leaves also caps that part.
 void main() {
     const vec2 texcoord = 0.5 * position + 0.5;
-    const vec3 shown = texture(sampler2D(textures[picture], samplers[1]), texcoord).rgb;
-    float gain = 1.0;
+    const vec4 shown = texture(sampler2D(textures[picture], samplers[1]), texcoord);
+    vec3 light = DecodeSrgb(shown.rgb);
     if (has_world != 0u) {
         const vec4 drawn = texture(sampler2D(world, samplers[1]), texcoord);
-        gain = mix(1.0, drawn.a, Kept(shown, drawn.rgb));
+        const vec3 left = clamp(drawn.rgb * shown.a, vec3(0.0), shown.rgb);
+        light += DecodeSrgb(left) * (drawn.a - 1.0);
     }
-    color = vec4(Hdr10(shown, gain, white), 1.0);
+    color = vec4(Pq(Bt2020(light) * white), 1.0);
 }
