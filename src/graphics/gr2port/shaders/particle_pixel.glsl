@@ -25,9 +25,12 @@ layout(set = 1, binding = 1) uniform sampler curve_sampler;
 layout(set = 1, binding = 2) uniform texture2D depth_texture;
 layout(set = 1, binding = 3) uniform sampler depth_sampler;
 layout(set = 1, binding = 5) uniform texture2D background_texture;
+// particle_gpu_push.glsl declares the GPU particle programs' longer block in its place.
+#ifndef PARTICLE_GPU_PUSH
 layout(push_constant) uniform Push {
     uint64_t draws_address;
 };
+#endif
 layout(location = 15) flat in uint draw_index;
 
 ParticleDraw Draw() {
