@@ -2559,7 +2559,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             ShowTrophyList(dialog);
         }
         break;
-    case IDOK:
+    case IDOK: {
         dialog.values.display = Read(dialog);
         dialog.values.game = ReadGame(dialog);
         dialog.values.graphics = ReadGraphics(dialog);
@@ -2594,6 +2594,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         }
         EndDialog(window, IDOK);
         break;
+    }
     case IDCANCEL:
         Language::Use(EmulatorSettings.GetConsoleLanguage());
         EndDialog(window, IDCANCEL);
