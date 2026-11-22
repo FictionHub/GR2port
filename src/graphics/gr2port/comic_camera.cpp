@@ -16,11 +16,9 @@ namespace Gr2Port::ComicCamera {
 
 namespace {
 
-// The game step's time in seconds, a float.
-constexpr VAddr StepTime = 0x1efb104;
-
-// The frames per second the move's counts and fractions are made for.
-constexpr float GameRate = 30.0f;
+// The real length of this frame in 30 fps frames, at most 1, a float. Slow motion and a stopped
+// game clock leave it alone.
+constexpr VAddr FrameShare = 0x1f7c600;
 
 // FUN_017742c0, a 3D comic page's update, with the page in rbx and the frames since the panel
 // change in r12d: mov edx, [rbx + 0x2e4], mov eax, [rbx + 0x2e8] and mov ecx, [rbx + 0x2ec] load
@@ -42,6 +40,16 @@ constexpr VAddr MoveNext = 0x1775b03;
 constexpr Hooks::Entry Turn{0x1775bc4, 6, {0xc4, 0xc3, 0x79, 0x04, 0xcb, 0x00}};
 constexpr VAddr TurnNext = 0x1775bca;
 
+// FUN_017772a0, a 3D comic's update, with the comic's menu in r12. On the last page,
+// mov ecx, [r12 + 0xa0] loads the frames left to wait, 20 in a new menu, and the comic can end once
+// they run out and no animation plays. The call before it leaves no vector register live, and the
+// game writes rax and rdx right after it.
+constexpr Hooks::Entry LastPageWait{0x1778382, 8, {0x41, 0x8b, 0x8c, 0x24, 0xa0, 0x00, 0x00, 0x00}};
+constexpr u32 LastPageFrames = 0xa0;
+// The game's own count of the wait, and the instruction that takes the wait's result from al.
+constexpr VAddr LastPageCount = 0x177838a;
+constexpr VAddr LastPageResult = 0x17783a2;
+
 // The fewest 30 fps frames a step's time is taken as.
 constexpr float ShortestStep = 1.0f / 64.0f;
 
@@ -53,12 +61,14 @@ constexpr size_t StubBytes = 1024;
 
 VAddr g_module_base = 0;
 
-// The game step's time in 30 fps frames, between ShortestStep and 1.
+// The real time the last page's wait holds toward its next 30 fps frame.
+float g_last_page_time = 0.0f;
+
+// The frame's time in 30 fps frames, between ShortestStep and 1.
 float StepFrames() {
-    float step;
-    std::memcpy(&step, Hooks::Code(g_module_base, StepTime), sizeof(step));
-    const float frames = step * GameRate;
-    return frames >= 1.0f ? 1.0f : frames > ShortestStep ? frames : ShortestStep;
+    float frames;
+    std::memcpy(&frames, Hooks::Code(g_module_base, FrameShare), sizeof(frames));
+    return frames > ShortestStep ? frames : ShortestStep;
 }
 
 // The fraction of the way the step moves when a 30 fps frame moves fraction of it:
@@ -126,14 +136,12 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         LOG_ERROR(Render_Vulkan, "GR2port: the comic camera's counts are not the expected code");
         return false;
     }
-    Xbyak::Label game_rate, one, shortest_step;
+    Xbyak::Label one, shortest_step;
 
     // Each count of 30 fps frames becomes the count of steps that take as long.
     const void* counts = c.getCurr();
-    c.vmovss(xmm2, dword[rip + code(StepTime)]);
-    c.vmulss(xmm2, xmm2, dword[rip + game_rate]);
+    c.vmovss(xmm2, dword[rip + code(FrameShare)]);
     c.vmaxss(xmm2, xmm2, dword[rip + shortest_step]);
-    c.vminss(xmm2, xmm2, dword[rip + one]);
     c.vmovss(xmm3, dword[rip + one]);
     c.vdivss(xmm3, xmm3, xmm2);
     const std::array<std::pair<Xbyak::Reg32, u32>, 3> loads{std::pair{edx, FramesBeforeGrowth},
@@ -145,8 +153,6 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         c.vcvtss2si(reg, xmm2);
     }
     c.jmp(code(CountsNext));
-    c.L(game_rate);
-    c.dd(std::bit_cast<u32>(GameRate));
     c.L(one);
     c.dd(std::bit_cast<u32>(1.0f));
     c.L(shortest_step);
@@ -154,9 +160,33 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
 
     const void* move = FractionStub(c, xmm7, xmm2, code(MoveNext));
     const void* turn = FractionStub(c, xmm11, xmm1, code(TurnNext));
+
+    // The wait's count drops once per 30 fps frame of real time. A frame that does not complete
+    // one reports the wait as still running.
+    Xbyak::Label whole_frame, game_count;
+    const void* last_page = c.getCurr();
+    c.mov(ecx, dword[r12 + LastPageFrames]);
+    c.test(ecx, ecx);
+    c.jle(game_count);
+    c.mov(rax, reinterpret_cast<u64>(&g_last_page_time));
+    c.vmovss(xmm0, dword[rax]);
+    c.vaddss(xmm0, xmm0, dword[rip + code(FrameShare)]);
+    c.vcomiss(xmm0, dword[rip + one]);
+    c.jae(whole_frame);
+    c.vmovss(dword[rax], xmm0);
+    c.xor_(eax, eax);
+    c.jmp(code(LastPageResult));
+    c.L(whole_frame);
+    c.vsubss(xmm0, xmm0, dword[rip + one]);
+    c.vmovss(dword[rax], xmm0);
+    c.L(game_count);
+    c.jmp(code(LastPageCount));
+
     if (Hooks::Replace(module_base, Counts, c, capacity, counts) != Hooks::Result::Hooked ||
         Hooks::Replace(module_base, Move, c, capacity, move) != Hooks::Result::Hooked ||
-        Hooks::Replace(module_base, Turn, c, capacity, turn) != Hooks::Result::Hooked) {
+        Hooks::Replace(module_base, Turn, c, capacity, turn) != Hooks::Result::Hooked ||
+        Hooks::Replace(module_base, LastPageWait, c, capacity, last_page) !=
+            Hooks::Result::Hooked) {
         LOG_ERROR(Render_Vulkan, "GR2port: the comic camera's move is not the expected code");
         return false;
     }

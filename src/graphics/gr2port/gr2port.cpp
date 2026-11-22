@@ -28,6 +28,7 @@
 #include "graphics/gr2port/gravity_slide.h"
 #include "graphics/gr2port/hair_flutter.h"
 #include "graphics/gr2port/hooks.h"
+#include "graphics/gr2port/layout_clock.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/mob_float.h"
 #include "graphics/gr2port/motion_ends.h"
@@ -149,17 +150,18 @@ void Install(VAddr module_base) {
     HairFlutter::Install(module_base, c, StubAreaSize);
     GravityKick::Install(module_base, c, StubAreaSize);
     GravitySlide::Install(module_base, c, StubAreaSize);
-    ComicCamera::Install(module_base, c, StubAreaSize);
     ScriptTimers::Install(module_base, c, StubAreaSize);
     Catcher::Stacks::SetGame(module_base);
     Catcher::Outside::Set(Catcher::Outside::Crumb::GameBase, module_base);
     WaterSplashes::Install(module_base, c, StubAreaSize);
     SmokeAndDust::Install(module_base, c, StubAreaSize);
     FloatSpin::Install(module_base, c, StubAreaSize);
-    // At the game's own 30 fps the motions and the hits keep the stock code.
+    // At the game's own 30 fps the motions, the hits and the comics keep the stock code.
     if (Settings::Get().game.frame_rate > 30) {
         MotionEnds::Install(module_base, c, StubAreaSize);
         PartHits::Install(module_base, c, StubAreaSize);
+        ComicCamera::Install(module_base, c, StubAreaSize);
+        LayoutClock::Install(module_base, c, StubAreaSize);
     }
     FieldOfView::Install(module_base, c, StubAreaSize);
     ScreenShake::Install(module_base, c, StubAreaSize);
