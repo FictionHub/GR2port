@@ -4,7 +4,8 @@
 // What the game's sprite and model particle pixel programs share beside particle_pixel.glsl: the
 // four maps in the game's T0 to T3, each moved by the maps before it, the combiner that mixes them
 // by c_gpufxUsed's fields, and the end that colours and fades the result by the particle's curve.
-// Include particle_gpu_push.glsl first: the material lies at push constant slot 5.
+// Include particle_gpu_push.glsl first: the material lies at push constant slot 5. The shadow
+// programs define PARTICLE_COMBINER_NEAREST_MAP3.
 
 #extension GL_EXT_nonuniform_qualifier : require
 
@@ -43,6 +44,15 @@ vec4 CombinerMap(ParticleDraw draw, uint map, vec2 place) {
                                          CombinerTexturesOffset)
                             .handles[map];
     const vec2 at = vec2(LowBitCleared(place.x), place.y);
+#ifdef PARTICLE_COMBINER_NEAREST_MAP3
+    // The shadow programs read map 3 through the depth's sampler (nearest, clamped).
+    if (map == 3u) {
+        const vec4 texel =
+            texture(sampler2D(textures[nonuniformEXT(handle)], depth_sampler), at, 0.0);
+        return bitfieldExtract(draw.gpufx_used[2], 0, 1) != 0u ? vec4(1.0, 1.0, 1.0, texel.x)
+                                                                : texel;
+    }
+#endif
     vec4 color;
     if (bitfieldExtract(draw.gpufx_used[2], 3 - int(map), 1) != 0u) {
         color = vec4(1.0, 1.0, 1.0,
@@ -215,6 +225,34 @@ vec4 CurvedColor(ParticleDraw draw, vec3 color, float particle_alpha, float fade
         discard;
     }
     return vec4(color, alpha);
+}
+
+// The colour and alpha coloured by the particle's curve as CurvedColor does with no fade (a curve
+// picked by the fade takes it at 1), the alpha times c_materialAttr2.w, with no discard.
+vec4 UnfadedCurved(ParticleDraw draw, vec3 color, float alpha, vec2 vector, float value,
+                   uint curve_offset) {
+    const uint curve = bitfieldExtract(draw.gpufx_used[2], 4, 14);
+    if (curve != 0u) {
+        const uint pick = bitfieldExtract(draw.gpufx_used[2], 18, 4);
+        float x = clamp(max(0.0, alpha), 0.0, 1.0);
+        float alpha_scale = 1.0;
+        if (pick != 0u) {
+            alpha_scale = alpha;
+            if (pick == 1u) {
+                x = clamp(sqrt(vector.y * vector.y + vector.x * vector.x), 0.0, 1.0);
+            } else if (pick == 2u) {
+                x = 1.0;
+            } else if (pick == 3u) {
+                x = clamp(0.001 * value, 0.0, 1.0);
+            } else {
+                x = 0.0;
+            }
+        }
+        const vec4 curve_color = CurveColor(curve + curve_offset, x);
+        color = curve_color.rgb * color;
+        alpha = alpha_scale * curve_color.a;
+    }
+    return vec4(color, draw.constants[MaterialAttr2 + 3u] * alpha);
 }
 
 // The colour premultiplied by the alpha, with alpha times 1 - c_materialAttr.x, as halves.
