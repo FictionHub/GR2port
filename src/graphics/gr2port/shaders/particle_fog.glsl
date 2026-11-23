@@ -15,11 +15,10 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Fog
     float words[36];
 };
 
-// The colour through the fog to the pixel at the place: the volumetric fog's texture at the
-// view depth's root past the near plane, and the height fog along the way from the camera to
-// the position; what the two let through keeps the colour, the texture adds its own, and the
-// fog's colour covers the rest by its strength.
-vec3 Fogged(vec3 color, vec2 place, vec3 position) {
+// The fog to the pixel at the place: the volumetric fog's texture at the view depth's root past
+// the near plane in red, green and blue, and in alpha the share that the texture and the height
+// fog along the way from the camera to the position let through.
+vec4 FogThrough(vec2 place, vec3 position) {
     FogConstants fog = FogConstants(fog_address);
     const float ndc = 2.0 * (1.0 - gl_FragCoord.z) + -1.0;
     const float depth = 1.0 / (fog.words[0] * ndc + fog.words[1]);
@@ -44,8 +43,17 @@ vec3 Fogged(vec3 color, vec2 place, vec3 position) {
     const float inverse_span = 1.0 / (max(fog.words[13], y) - low);
     const float below = clamp(fma(low, -inverse_span, fog.words[8] * inverse_span), 0.0, 1.0);
     const float travel = min(fog.words[10], distance * below);
-    const float through =
-        min(volume.a, exp2(uintBitsToFloat(0x3fb8aa3bu) * (-fog.words[9] * travel)));
+    return vec4(volume.rgb,
+                min(volume.a, exp2(uintBitsToFloat(0x3fb8aa3bu) * (-fog.words[9] * travel))));
+}
+
+// The colour through the fog to the pixel at the place: what the fog lets through keeps the
+// colour, the volumetric fog's texture adds its own, and the fog's colour covers the rest by its
+// strength.
+vec3 Fogged(vec3 color, vec2 place, vec3 position) {
+    FogConstants fog = FogConstants(fog_address);
+    const vec4 volume = FogThrough(place, position);
+    const float through = volume.a;
     const float cover =
         fog.words[7] * clamp(uintBitsToFloat(0xbf317218u) * log2(through), 0.0, 1.0);
     const vec3 kept = through * color + volume.rgb;
