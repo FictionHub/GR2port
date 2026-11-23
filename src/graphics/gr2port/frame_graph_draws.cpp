@@ -18,7 +18,7 @@ constexpr Hooks::Entry DrawLoop{0x14214e0, 6, Hooks::FramePrologue};
 
 // What the game calls for each draw and dispatch on a graphics context. FUN_0042dc50 binds a
 // draw's shaders and writes their constants, FUN_0042da70 does the same for a dispatch, and the
-// others write the draw packets. Each takes its arguments in registers.
+// others write the draw packets.
 constexpr std::array Writers{
     Hooks::Entry{0x42dc50, 6, Hooks::FramePrologue},
     Hooks::Entry{0x42da70, 6, Hooks::FramePrologue},
@@ -39,6 +39,50 @@ constexpr std::array Writers{
     Hooks::Entry{0x42d410, 6, Hooks::FramePrologue},
     Hooks::Entry{0x42d4d0, 6, Hooks::FramePrologue},
     Hooks::Entry{0x42d590, 6, Hooks::FramePrologue},
+    // The writers of what the frame graph's passes still send: the registers of the draw
+    // wrappers' state flush FUN_01614150, the targets and viewports of FUN_016137a0,
+    // FUN_01616ee0, FUN_0161b3e0 and FUN_0161b760, the index buffer of FUN_01616e10, and the
+    // cache flushes and waits. Each writes its packet and nothing else; the callers keep the
+    // engine's copy of the state, which UiCapture reads.
+    Hooks::Entry{0x411550, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x411610, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x411680, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
+    Hooks::Entry{0x411710, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x4118a0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x411920, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x411980, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x4119e0, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x411a40, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
+    Hooks::Entry{0x411aa0, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
+    Hooks::Entry{0x411b10, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
+    Hooks::Entry{0x411b70, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x411bd0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x411c50, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
+    Hooks::Entry{0x411d60, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x411e50, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x412520, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x412590, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x413b10, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x413b90, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x413bf0, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x4148e0, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x414950, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x415120, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x4152c0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x4154b0, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x415690, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x415b10, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x415b70, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x415bd0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x415d10, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x415d80, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
+    Hooks::Entry{0x415df0, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
+    Hooks::Entry{0x415e60, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x415ed0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x415f50, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x416730, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x416b40, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x429b40, 6, Hooks::FramePrologue},
 };
 
 // push rbp; mov rbp, rsp.
@@ -86,17 +130,20 @@ constexpr std::array Returning{
     Hooks::Entry{0x14a7350, 4, PushFrame},
 };
 
-using WriterFunction = void PS4_SYSV_ABI (*)(u64, u64, u64, u64, u64, u64);
+using WriterFunction = void PS4_SYSV_ABI (*)(u64, u64, u64, u64, u64, u64, u64, double, double,
+                                             double, double);
 std::array<WriterFunction, Writers.size()> g_writers{};
 
 // On the game's draw thread: whether the frame graph runs.
 thread_local bool t_frame_graph = false;
 
-// In place of writer Index. The frame graph's draws, dispatches and binds are not written.
+// In place of writer Index, which writes nothing while the frame graph runs. A writer takes at
+// most seven integer arguments and four float arguments, which OnWriter passes on.
 template <size_t Index>
-void PS4_SYSV_ABI OnWriter(u64 a, u64 b, u64 c, u64 d, u64 e, u64 f) {
+void PS4_SYSV_ABI OnWriter(u64 a, u64 b, u64 c, u64 d, u64 e, u64 f, u64 g, double x0, double x1,
+                           double x2, double x3) {
     if (!t_frame_graph) {
-        g_writers[Index](a, b, c, d, e, f);
+        g_writers[Index](a, b, c, d, e, f, g, x0, x1, x2, x3);
     }
 }
 
