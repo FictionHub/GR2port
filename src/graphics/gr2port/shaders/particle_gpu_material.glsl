@@ -223,3 +223,49 @@ vec4 MaterialColor(ParticleDraw draw, vec3 color, float particle_alpha, float fa
     return vec4(unpackHalf2x16(packHalf2x16(premultiplied.rg)),
                 unpackHalf2x16(packHalf2x16(vec2(premultiplied.b, coverage))));
 }
+
+// MaterialColor's colour and alpha before the alpha premultiplies them, for the programs that
+// fog the colour first.
+vec4 MaterialCurved(ParticleDraw draw, vec3 color, float particle_alpha, float fade,
+                    vec2 threshold, vec2 vector, float value, uint curve_offset) {
+    float alpha = particle_alpha * fade;
+    float fade_out = fade;
+    const uint curve = bitfieldExtract(draw.gpufx_used[2], 4, 14);
+    if (curve > 0u) {
+        float x = clamp(max(0.0, alpha), 0.0, 1.0);
+        float alpha_scale = 1.0;
+        const uint pick = bitfieldExtract(draw.gpufx_used[2], 18, 4);
+        if (pick != 0u) {
+            alpha_scale = alpha;
+            if (pick == 1u) {
+                x = clamp(sqrt(vector.y * vector.y + vector.x * vector.x), 0.0, 1.0);
+            } else if (pick == 2u) {
+                x = fade;
+                fade_out = 1.0;
+            } else if (pick == 3u) {
+                x = clamp(0.001 * value, 0.0, 1.0);
+            } else {
+                x = 0.0;
+            }
+        }
+        const vec4 curve_color = CurveColor(curve + curve_offset, x);
+        color = curve_color.rgb * color;
+        alpha = alpha_scale * curve_color.a;
+    }
+    alpha = fade_out * alpha;
+    if (uintBitsToFloat(0x34000000u) > alpha) {
+        discard;
+    }
+    alpha = draw.constants[MaterialAttr2 + 3u] * alpha;
+    // Above a threshold of 0 the alpha below it goes, and where the dissolve's full mark reaches
+    // 1 - 2^-23 the rest is whole.
+    if (0.0 < threshold.x) {
+        alpha = alpha < threshold.x
+                    ? 0.0
+                    : (uintBitsToFloat(0x3f7ffffeu) <= threshold.y ? 1.0 : alpha);
+    }
+    if (uintBitsToFloat(0x34000000u) > alpha) {
+        discard;
+    }
+    return vec4(color, alpha);
+}
