@@ -326,6 +326,8 @@
     "DS4 Speaker Device": "Динамік DS4",
     "Default Device": "Типовий пристрій",
     "Audio Backend": "Аудіобекенд",
-    "Upscaler Sharpening": "Різкість апскейлера"
+    "Upscaler Sharpening": "Різкість апскейлера",
+    "Screenshots": "Знімки екрана",
+    "Disable F12 Screenshot Popup": "Вимкнути сповіщення про знімок екрана (F12)"
   }
 }

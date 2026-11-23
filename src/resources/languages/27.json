@@ -326,6 +326,8 @@
     "DS4 Speaker Device": "ลำโพง DS4",
     "Default Device": "อุปกรณ์เริ่มต้น",
     "Audio Backend": "แบ็กเอนด์เสียง",
-    "Upscaler Sharpening": "ความคมชัดการอัปสเกล"
+    "Upscaler Sharpening": "ความคมชัดการอัปสเกล",
+    "Screenshots": "ภาพหน้าจอ",
+    "Disable F12 Screenshot Popup": "ปิดป๊อปอัปภาพหน้าจอ F12"
   }
 }

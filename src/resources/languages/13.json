@@ -326,6 +326,8 @@
     "DS4 Speaker Device": "DS4-högtalare",
     "Default Device": "Standardenhet",
     "Audio Backend": "Ljudbackend",
-    "Upscaler Sharpening": "Uppskalningsskärpa"
+    "Upscaler Sharpening": "Uppskalningsskärpa",
+    "Screenshots": "Skärmbilder",
+    "Disable F12 Screenshot Popup": "Inaktivera popup för F12-skärmbild"
   }
 }

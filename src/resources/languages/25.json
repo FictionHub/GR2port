@@ -326,6 +326,8 @@
     "DS4 Speaker Device": "Ηχείο DS4",
     "Default Device": "Προεπιλεγμένη συσκευή",
     "Audio Backend": "Υποσύστημα ήχου",
-    "Upscaler Sharpening": "Ευκρίνεια αναβάθμισης"
+    "Upscaler Sharpening": "Ευκρίνεια αναβάθμισης",
+    "Screenshots": "Στιγμιότυπα οθόνης",
+    "Disable F12 Screenshot Popup": "Απενεργοποίηση αναδυόμενου στιγμιότυπου (F12)"
   }
 }

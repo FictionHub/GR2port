@@ -201,6 +201,8 @@ enum Control : int {
     IdTouchSwipeNote,
     IdKeyBindings,
     IdPadBindings,
+    IdScreenshotGroup,
+    IdScreenshotPopup,
     IdExtras,
     IdPresetLabel,
     IdPreset,
@@ -280,7 +282,10 @@ constexpr std::array<const wchar_t*, PageCount> PageNames{
     L"Display",  L"Graphics",         L"Controller", L"Mouse && Keyboard", L"DLC", L"Online",
     L"Trophies", L"Cheats && Extras", L"Paths"};
 
-constexpr RECT ExtrasList{18, 88, 577, 424};
+// The Cheats & Extras tab: the screenshots' section above the list of extras.
+constexpr RECT ScreenshotGroup{18, 88, 577, 136};
+constexpr int ScreenshotPopupTop = 109;
+constexpr RECT ExtrasList{18, 144, 577, 424};
 constexpr int OnlineIdTop = 121;
 constexpr int PasswordTop = 150;
 constexpr int AvatarTop = 192;
@@ -1408,6 +1413,7 @@ void ShowGame(const Dialog& dialog, const Settings::Game& game) {
                             GamePatches::RenderSizes.begin()));
     Check(dialog, IdDlc, game.dlc_entitlements);
     Check(dialog, IdHalloween, game.halloween_items);
+    Check(dialog, IdScreenshotPopup, !game.screenshot_popup);
     const HWND list = Item(dialog, IdExtras);
     for (size_t i = 0; i < dialog.extras.size(); ++i) {
         const auto chosen = game.extras.find(dialog.extras[i].name);
@@ -1433,6 +1439,7 @@ Settings::Game ReadGame(const Dialog& dialog) {
     }
     game.dlc_entitlements = Checked(dialog, IdDlc);
     game.halloween_items = Checked(dialog, IdHalloween);
+    game.screenshot_popup = !Checked(dialog, IdScreenshotPopup);
     game.extras.clear();
     const HWND list = Item(dialog, IdExtras);
     for (size_t i = 0; i < dialog.extras.size(); ++i) {
@@ -2232,11 +2239,21 @@ void Build(HWND window, Dialog& dialog) {
                     TrophyClearWidth, ComboHeight);
     }
 
+    const HWND screenshot_group = MakeControl(
+        dialog, dialog.pages[ExtrasPage], page_origin, WC_BUTTONW, L"Screenshots", BS_GROUPBOX,
+        IdScreenshotGroup, ScreenshotGroup.left, ScreenshotGroup.top,
+        ScreenshotGroup.right - ScreenshotGroup.left, ScreenshotGroup.bottom - ScreenshotGroup.top);
+    const HWND screenshot_popup =
+        MakeControl(dialog, dialog.pages[ExtrasPage], page_origin, WC_BUTTONW,
+                    L"Disable F12 Screenshot Popup", BS_AUTOCHECKBOX | WS_TABSTOP,
+                    IdScreenshotPopup, ScreenshotGroup.left + GroupInset, ScreenshotPopupTop,
+                    ScreenshotGroup.right - ScreenshotGroup.left - 2 * GroupInset, CheckHeight);
     const HWND list =
         MakeControl(dialog, dialog.pages[ExtrasPage], page_origin, WC_LISTVIEWW, L"",
                     WS_BORDER | WS_TABSTOP | LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SINGLESEL,
                     IdExtras, ExtrasList.left, ExtrasList.top, ExtrasList.right - ExtrasList.left,
                     ExtrasList.bottom - ExtrasList.top);
+    KeepTabOrder({screenshot_group, screenshot_popup, list});
     SendMessageW(list, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
                  LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
     LVCOLUMNW column{};

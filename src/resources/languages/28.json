@@ -326,6 +326,8 @@
     "DS4 Speaker Device": "Loa DS4",
     "Default Device": "Thiết bị mặc định",
     "Audio Backend": "Backend âm thanh",
-    "Upscaler Sharpening": "Độ sắc nét nâng độ phân giải"
+    "Upscaler Sharpening": "Độ sắc nét nâng độ phân giải",
+    "Screenshots": "Ảnh chụp màn hình",
+    "Disable F12 Screenshot Popup": "Tắt cửa sổ thông báo chụp màn hình F12"
   }
 }

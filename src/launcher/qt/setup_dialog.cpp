@@ -113,7 +113,10 @@ constexpr std::array<std::string_view, PageCount> PageNames{
     "Display",  "Graphics",         "Controller", "Mouse && Keyboard", "DLC", "Online",
     "Trophies", "Cheats && Extras", "Paths"};
 
-constexpr Area ExtrasList{18, 88, 577, 424};
+// The Cheats & Extras tab: the screenshots' section above the list of extras.
+constexpr Area ScreenshotGroup{18, 88, 577, 136};
+constexpr int ScreenshotPopupTop = 109;
+constexpr Area ExtrasList{18, 144, 577, 424};
 constexpr int OnlineIdTop = 121;
 constexpr int PasswordTop = 150;
 constexpr int AvatarTop = 192;
@@ -502,6 +505,7 @@ struct Dialog {
     ClickLabel* avatar_picture = nullptr;
     // The Online tab's controls for an account, off when there is no user.
     std::vector<QWidget*> account_controls;
+    QCheckBox* screenshot_popup = nullptr;
     QListWidget* extras_list = nullptr;
     QLineEdit* game_folder = nullptr;
     QRadioButton* portable_folder = nullptr;
@@ -901,6 +905,7 @@ void ShowGame(const Dialog& dialog, const Settings::Game& game) {
                          GamePatches::RenderSizes.begin()));
     dialog.dlc->setChecked(game.dlc_entitlements);
     dialog.halloween->setChecked(game.halloween_items);
+    dialog.screenshot_popup->setChecked(!game.screenshot_popup);
     for (size_t i = 0; i < dialog.extras.size(); ++i) {
         const auto chosen = game.extras.find(dialog.extras[i].name);
         CheckRow(dialog, static_cast<int>(i),
@@ -925,6 +930,7 @@ Settings::Game ReadGame(const Dialog& dialog) {
     }
     game.dlc_entitlements = dialog.dlc->isChecked();
     game.halloween_items = dialog.halloween->isChecked();
+    game.screenshot_popup = !dialog.screenshot_popup->isChecked();
     game.extras.clear();
     for (size_t i = 0; i < dialog.extras.size(); ++i) {
         const bool on = dialog.extras_list->item(static_cast<int>(i))->checkState() == Qt::Checked;
@@ -1679,6 +1685,11 @@ void BuildTrophies(Dialog& dialog, QWidget* page) {
 }
 
 void BuildExtras(Dialog& dialog, QWidget* page) {
+    MakeGroup(dialog, page, "Screenshots", ScreenshotGroup);
+    dialog.screenshot_popup = MakeCheck(
+        dialog, page, "Disable F12 Screenshot Popup",
+        Place(page, ScreenshotGroup.left + GroupInset, ScreenshotPopupTop,
+              ScreenshotGroup.right - ScreenshotGroup.left - 2 * GroupInset, CheckHeight));
     dialog.extras_list = new QListWidget{page};
     dialog.extras_list->setGeometry(Place(page, ExtrasList));
     dialog.extras_list->setSelectionMode(QAbstractItemView::SingleSelection);

@@ -326,6 +326,8 @@
     "DS4 Speaker Device": "DS4 Hoparlörü",
     "Default Device": "Varsayılan Aygıt",
     "Audio Backend": "Ses Arka Ucu",
-    "Upscaler Sharpening": "Yükseltme Keskinliği"
+    "Upscaler Sharpening": "Yükseltme Keskinliği",
+    "Screenshots": "Ekran Görüntüleri",
+    "Disable F12 Screenshot Popup": "F12 Ekran Görüntüsü Bildirimini Kapat"
   }
 }

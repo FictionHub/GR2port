@@ -326,6 +326,8 @@
     "DS4 Speaker Device": "Difuzor DS4",
     "Default Device": "Dispozitiv implicit",
     "Audio Backend": "Backend audio",
-    "Upscaler Sharpening": "Claritate upscaling"
+    "Upscaler Sharpening": "Claritate upscaling",
+    "Screenshots": "Capturi de ecran",
+    "Disable F12 Screenshot Popup": "Dezactivează fereastra capturii de ecran (F12)"
   }
 }

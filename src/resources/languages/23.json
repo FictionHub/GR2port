@@ -326,6 +326,8 @@
     "DS4 Speaker Device": "Reproduktor DS4",
     "Default Device": "Výchozí zařízení",
     "Audio Backend": "Zvukový backend",
-    "Upscaler Sharpening": "Ostrost upscalingu"
+    "Upscaler Sharpening": "Ostrost upscalingu",
+    "Screenshots": "Snímky obrazovky",
+    "Disable F12 Screenshot Popup": "Vypnout oznámení snímku obrazovky (F12)"
   }
 }

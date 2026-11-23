@@ -11,6 +11,7 @@
 #include "core/user_settings.h"
 #include "graphics/gr2port/catcher_note.h"
 #include "graphics/gr2port/photo_ui.h"
+#include "graphics/gr2port/screenshot.h"
 #include "imgui/renderer/imgui_core.h"
 #include "input/controller.h"
 #include "pad.h"
@@ -452,6 +453,8 @@ int PS4_SYSV_ABI scePadRead(s32 handle, OrbisPadData* pData, s32 num) {
     for (int i = 0; i < read; i++) {
         Gr2Port::PhotoUi::OnButtons(handle, static_cast<u32>(pData[i].buttons));
     }
+    // GR2port: the game's sound call runs on the thread that reads the pad.
+    Gr2Port::Screenshot::PlayShutter();
     return read;
 }
 

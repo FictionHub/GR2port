@@ -46,6 +46,7 @@
 #include "graphics/gr2port/player_control.h"
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/screen_shake.h"
+#include "graphics/gr2port/screenshot.h"
 #include "graphics/gr2port/script_timers.h"
 #include "graphics/gr2port/scripted_moves.h"
 #include "graphics/gr2port/settings.h"
@@ -152,6 +153,7 @@ void Install(VAddr module_base) {
         GraphicsMenu::Install(module_base, c, StubAreaSize);
         PhotoUi::AddRow(module_base, c, StubAreaSize);
         LoadingTip::Install(module_base, c, StubAreaSize);
+        Screenshot::Install();
     }
     MobFloat::Install(module_base, c, StubAreaSize);
     HairFlutter::Install(module_base, c, StubAreaSize);

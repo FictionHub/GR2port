@@ -326,6 +326,8 @@
     "DS4 Speaker Device": "DS4 hangszóró",
     "Default Device": "Alapértelmezett eszköz",
     "Audio Backend": "Hang-háttérrendszer",
-    "Upscaler Sharpening": "Felskálázás élessége"
+    "Upscaler Sharpening": "Felskálázás élessége",
+    "Screenshots": "Képernyőképek",
+    "Disable F12 Screenshot Popup": "F12-képernyőkép felugró ablakának kikapcsolása"
   }
 }

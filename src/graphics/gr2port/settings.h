@@ -59,6 +59,8 @@ struct Game {
     bool dlc_entitlements{true};
     /// The Halloween photo items mod pack. GR2Fork's setting gr2HalloweenItems holds it.
     bool halloween_items{true};
+    /// If screenshot_popup is true, a screenshot shows a notice with its picture and its path.
+    bool screenshot_popup{true};
     /// Extras the player turned on or off, by patch name; the others keep the patch file's flag.
     std::map<std::string, bool> extras;
 };

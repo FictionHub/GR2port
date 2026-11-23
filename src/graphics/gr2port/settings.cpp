@@ -172,6 +172,7 @@ void ReadGame(const json& section, Game& game) {
         game.render_size = size->get<std::string>();
     }
     game.dlc_entitlements = ReadBool(section, "dlc_entitlements", game.dlc_entitlements);
+    game.screenshot_popup = ReadBool(section, "screenshot_popup", game.screenshot_popup);
     if (const auto extras = section.find("extras");
         extras != section.end() && extras->is_object()) {
         for (const auto& [name, on] : extras->items()) {
@@ -260,6 +261,7 @@ json ToJson(const Values& values) {
         {"aspect", game.aspect},
         {"render_size", game.render_size},
         {"dlc_entitlements", game.dlc_entitlements},
+        {"screenshot_popup", game.screenshot_popup},
         {"extras", std::move(extras)},
         {"mouse_foot_horizontal", values.mouse.foot_horizontal},
         {"mouse_foot_vertical", values.mouse.foot_vertical},

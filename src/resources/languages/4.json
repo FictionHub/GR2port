@@ -327,6 +327,8 @@
     "Default Device": "Standardgerät",
     "Audio Backend": "Audio-Backend",
     "TIP: if the display looks blurry, make sure the monitor resolution setting in System Menu > Graphics matches your monitor resolution": "TIPP: Wirkt das Bild unscharf? Stelle „Monitorauflösung“ unter System-Menü > Grafikeinstellungen auf die Auflösung deines Monitors ein",
-    "Upscaler Sharpening": "Upscaler-Schärfe"
+    "Upscaler Sharpening": "Upscaler-Schärfe",
+    "Screenshots": "Screenshots",
+    "Disable F12 Screenshot Popup": "F12-Screenshot-Popup deaktivieren"
   }
 }
