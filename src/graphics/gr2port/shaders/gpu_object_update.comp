@@ -1,0 +1,298 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's compute program 0x1c6f020, the GPU particles' object update: each emitter object
+// takes its owner (an effect and a description) and, while the owner's description lets it, its
+// place and turn from the effect's (a move between two keys, turned along the move with flag
+// 0x100), the description's turn curve and offset curve, and three more description curves.
+// Objects without an owner, or whose owner changed, keep their words or take marks.
+#version 460
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0) uniform texture2D curve_texture;
+layout(set = 0, binding = 1) uniform sampler curve_sampler;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
+    uint words[];
+};
+layout(push_constant) uniform Push {
+    uint64_t emitter_in_address;
+    uint64_t effect_in_address;
+    // Two words an object: its owner's effect and description.
+    uint64_t owner_in_address;
+    uint64_t description_address;
+    uint64_t emitter_out_address;
+    // The active list: the count at word 0, the objects from word 4; 0 runs every object.
+    uint64_t active_address;
+};
+
+const uint ObjectBytes = 128u;
+const uint EffectBytes = 192u;
+const uint DescriptionBytes = 256u;
+// The object's mark of no owner, and of an owner whose effect changed.
+const uint DeadMark = 0x27bc86aau;
+const uint ChangedMark = 0x27bc86abu;
+
+uint Word(uint64_t address, uint record, uint size, uint byte_offset) {
+    return Words(address).words[(record * size + byte_offset) >> 2];
+}
+
+float Float(uint64_t address, uint record, uint size, uint byte_offset) {
+    return uintBitsToFloat(Word(address, record, size, byte_offset));
+}
+
+vec4 Vector(uint64_t address, uint record, uint size, uint byte_offset) {
+    return vec4(Float(address, record, size, byte_offset),
+                Float(address, record, size, byte_offset + 4u),
+                Float(address, record, size, byte_offset + 8u),
+                Float(address, record, size, byte_offset + 12u));
+}
+
+uvec4 Words4(uint64_t address, uint record, uint size, uint byte_offset) {
+    return floatBitsToUint(Vector(address, record, size, byte_offset));
+}
+
+// A description curve at s from 0 to 1: column curve & 0x7ff, row (curve >> 11) * 64 plus s * 63.
+vec4 DescriptionCurve(uint curve, float s) {
+    const float row = clamp(max(0.0, s), 0.0, 1.0) * 63.0 + float((curve >> 11) << 6);
+    const float column = float(curve & 0x7ffu);
+    return textureLod(sampler2D(curve_texture, curve_sampler),
+                      vec2(clamp((1.0 / 2048.0) * column + (1.0 / 4096.0), 0.0, 1.0),
+                           clamp((1.0 / 1024.0) * row + (1.0 / 2048.0), 0.0, 1.0)),
+                      0.0);
+}
+
+void main() {
+    uint object = gl_GlobalInvocationID.x;
+    if (active_address != 0ul) {
+        Words listing = Words(active_address);
+        if (object >= listing.words[0]) {
+            return;
+        }
+        object = listing.words[4u + object];
+    }
+    const uint64_t in_address = emitter_in_address;
+    const uint effect = Words(owner_in_address).words[object * 2u];
+    vec4 place = Vector(in_address, object, ObjectBytes, 0u);
+    vec4 turn = Vector(in_address, object, ObjectBytes, 16u);
+    uvec4 owner_words = uvec4(Word(in_address, object, ObjectBytes, 32u), effect, DeadMark, 0u);
+    uvec4 seed_words = Words4(in_address, object, ObjectBytes, 48u);
+    vec4 past_place = Vector(in_address, object, ObjectBytes, 64u);
+    vec4 past_turn = Vector(in_address, object, ObjectBytes, 80u);
+    vec4 tint = Vector(in_address, object, ObjectBytes, 96u);
+    uint hold = Word(in_address, object, ObjectBytes, 112u);
+    if (effect != 0u) {
+        const uint description = Words(owner_in_address).words[object * 2u + 1u];
+        const uvec3 last = Words4(in_address, object, ObjectBytes, 36u).xyz;
+        const uint mode = Word(description_address, description, DescriptionBytes, 16u);
+        const uint description_seed = Word(description_address, description, DescriptionBytes, 28u);
+        bool valid;
+        vec4 keep_place = past_place;
+        vec4 keep_turn = past_turn;
+        if (mode != 1u) {
+            owner_words = uvec4(0u);
+            valid = false;
+            if (mode != 0u) {
+                owner_words = uvec4(description, effect, last.y, last.z);
+                seed_words.y = mode;
+                seed_words.x = Word(description_address, description, DescriptionBytes, 24u);
+                seed_words.z = description_seed;
+                valid = true;
+                if (effect != last.x) {
+                    owner_words.yzw = uvec3(0u, 0x12fd1u, 0x4797e880u);
+                    valid = false;
+                    if (last.x == 0u) {
+                        owner_words.yzw = uvec3(effect, last.y, last.z);
+                        valid = true;
+                    }
+                }
+            }
+        } else {
+            owner_words = uvec4(description, effect, last.y, last.z);
+            seed_words.y = seed_words.x;
+            valid = true;
+            keep_place = place;
+            keep_turn = turn;
+            seed_words.x = Word(effect_in_address, effect, EffectBytes, 152u) + description_seed;
+            if (effect != last.x) {
+                owner_words.zw = uvec2(0x12fd1u, 0x4797e880u);
+                valid = false;
+                if (last.x == 0u) {
+                    owner_words.zw = last.yz;
+                    seed_words.z = ChangedMark;
+                    valid = true;
+                }
+            }
+        }
+        past_place = keep_place;
+        past_turn = keep_turn;
+        if (valid) {
+            // The effect's two keys: places (with the scale in w) and turns, and its frame and
+            // time; the description's time range, frame count and flags.
+            const uint frame = Word(effect_in_address, effect, EffectBytes, 144u);
+            const float time = Float(effect_in_address, effect, EffectBytes, 148u);
+            const vec4 place_a = Vector(effect_in_address, effect, EffectBytes, 0u);
+            const vec4 place_b = Vector(effect_in_address, effect, EffectBytes, 64u);
+            const vec4 turn_a = Vector(effect_in_address, effect, EffectBytes, 32u);
+            const vec4 turn_b = Vector(effect_in_address, effect, EffectBytes, 96u);
+            const vec4 range = Vector(description_address, description, DescriptionBytes, 0u);
+            const uint frames = floatBitsToUint(range.z);
+            const uint flags = floatBitsToUint(range.w);
+            hold = frame;
+            if (uintBitsToFloat(owner_words.w) > time) {
+                seed_words.w = 1u;
+            }
+            const bool second = (flags & 0x80u) != 0u;
+            const bool turns = (flags & 0x2u) != 0u;
+            const vec4 key_turn = second ? turn_b : turn_a;
+            vec4 q = turns ? vec4(key_turn.x, key_turn.y, key_turn.z, key_turn.w)
+                           : vec4(0.0, 0.0, 0.0, 1.0);
+            float scale = (flags & 0x4u) != 0u ? (second ? place_b.w : place_a.w) : 1.0;
+            owner_words.z = time >= range.x && time <= range.y && frame < frames ? 1u : 0u;
+            owner_words.w = floatBitsToUint(time);
+            if ((flags & 0x100u) != 0u) {
+                // Turned from up onto the move between the keys (backwards with flag 0x80), and
+                // scaled by the move's length.
+                const float sign = second ? -1.0 : 1.0;
+                const float dx = (place_b.x - place_a.x) * sign;
+                const float dy = (place_b.y - place_a.y) * sign;
+                const float dz = (place_b.z - place_a.z) * sign;
+                const float square = dz * dz + (dy * dy + dx * dx);
+                const float inverse = 1.0 / sqrt(square);
+                const float up = inverse * dy;
+                q = vec4(0.0, 0.0, 0.0, 1.0);
+                if (!(up >= uintBitsToFloat(0x3f7fff58u))) {
+                    q = vec4(1.0, 0.0, 0.0, 0.0);
+                    if (!(up <= uintBitsToFloat(0xbf7fff58u))) {
+                        const float z = inverse * dz;
+                        const float w = sqrt(0.5 * up + 0.5);
+                        const float x = -inverse * dx + 0.0;
+                        const float across = x * x + z * z;
+                        const float inverse_across = 1.0 / sqrt(across);
+                        const float k = sqrt(across) * (1.0 / (2.0 * w));
+                        q = vec4((inverse_across * z) * k, 0.0, (x * inverse_across) * k, w);
+                    }
+                }
+                // The game's program leaves the scale from before in the tint's y (which the
+                // curves below replace outside mode 1).
+                tint.y = scale;
+                scale = max(uintBitsToFloat(0x3c23d70au), sqrt(square));
+            }
+            // The time through the description's range, then the turn curve (word 45: two rows
+            // blended, negated where they point apart, unit length) and the offset curve.
+            const float s =
+                (time - range.x) * (1.0 / (uintBitsToFloat(0x3727c5acu) + (range.y - range.x)));
+            const uint set = Word(effect_in_address, effect, EffectBytes, 180u) << 6;
+            const uint turn_curve = Word(description_address, description, DescriptionBytes, 180u);
+            vec4 curve_turn = vec4(0.0, 0.0, 0.0, 1.0);
+            vec4 offset = vec4(0.0, 0.0, 0.0, 1.0);
+            if (turn_curve != 0u) {
+                const uint curve = turn_curve + set;
+                const float along = clamp(max(0.0, s), 0.0, 1.0);
+                const float row_base = float((curve >> 11) << 6);
+                const float middle = 0.5 + floor(63.0 * along);
+                const float column = float(curve & 0x7ffu);
+                const float row = row_base + middle;
+                const float blend = 63.0 * along + -middle;
+                const float exact = along * 63.0 + row_base;
+                const vec2 at = vec2(clamp((1.0 / 2048.0) * column + uintBitsToFloat(0x3a400000u),
+                                           0.0, 1.0),
+                                     clamp((1.0 / 1024.0) * row, 0.0, 1.0));
+                const vec4 a = textureLod(sampler2D(curve_texture, curve_sampler), at, 0.0);
+                offset = textureLod(sampler2D(curve_texture, curve_sampler),
+                                    vec2(clamp((1.0 / 2048.0) * column + (1.0 / 4096.0), 0.0, 1.0),
+                                         clamp((1.0 / 1024.0) * exact + (1.0 / 2048.0), 0.0, 1.0)),
+                                    0.0);
+                const vec4 b = textureLod(sampler2D(curve_texture, curve_sampler),
+                                          vec2(at.x, clamp((1.0 / 1024.0) * row + (1.0 / 1024.0),
+                                                           0.0, 1.0)),
+                                          0.0);
+                const float dot_ab = b.w * a.w + (b.z * a.z + (b.y * a.y + b.x * a.x));
+                vec4 mixed;
+                if (0.0 < dot_ab) {
+                    mixed = vec4((b.x - a.x) * blend + a.x, blend * (b.y - a.y) + a.y,
+                                 (b.z - a.z) * blend + a.z, (b.w - a.w) * blend + a.w);
+                } else {
+                    mixed = vec4((-b.x + -a.x) * blend + a.x, blend * (-b.y + -a.y) + a.y,
+                                 (-b.z + -a.z) * blend + a.z, (-b.w + -a.w) * blend + a.w);
+                }
+                const float length_square =
+                    mixed.w * mixed.w +
+                    (mixed.z * mixed.z + (mixed.y * mixed.y + mixed.x * mixed.x));
+                const float inverse = 1.0 / sqrt(length_square);
+                curve_turn = vec4(inverse * mixed.x, inverse * mixed.y, inverse * mixed.z,
+                                  inverse * mixed.w);
+            }
+            // The place: the key's place (with flag 1) plus the offset turned by q and scaled;
+            // the scale times the offset's w; the turn q times the curve's turn.
+            const vec3 key_place = second ? place_b.xyz : place_a.xyz;
+            const vec3 base = (flags & 0x1u) != 0u ? key_place : vec3(0.0);
+            const float ty = offset.y * q.w + (offset.z * -q.x + q.z * offset.x);
+            const float tz = offset.z * q.w + (offset.x * -q.y + q.x * offset.y);
+            const float tx = offset.x * q.w + (offset.y * -q.z + q.y * offset.z);
+            const float d = offset.z * q.z + (offset.y * q.y + q.x * offset.x);
+            const float rx = q.x * d + (tx * q.w + (tz * q.y + -q.z * ty));
+            const float ry = q.y * d + (ty * q.w + (tx * q.z + -q.x * tz));
+            const float rz = q.z * d + (q.w * tz + (ty * q.x + -q.y * tx));
+            place = vec4(rx * scale + base.x, ry * scale + base.y, rz * scale + base.z,
+                         scale * offset.w);
+            turn = vec4(curve_turn.w * q.x +
+                            (curve_turn.x * q.w + (curve_turn.y * -q.z + q.y * curve_turn.z)),
+                        q.y * curve_turn.w +
+                            (curve_turn.y * q.w + (curve_turn.z * -q.x + q.z * curve_turn.x)),
+                        curve_turn.w * q.z +
+                            (q.w * curve_turn.z + (curve_turn.x * -q.y + q.x * curve_turn.y)),
+                        q.w * curve_turn.w +
+                            -(q.z * curve_turn.z + (q.y * curve_turn.y + q.x * curve_turn.x)));
+            if (mode != 1u) {
+                // The description's three more curves (words 46, 48 and 47), or its words 20,
+                // 28 and 32 without them.
+                const uint curve_a = Word(description_address, description, DescriptionBytes, 184u);
+                past_place = Vector(description_address, description, DescriptionBytes, 80u);
+                if (curve_a != 0u) {
+                    past_place = DescriptionCurve(curve_a + set, s);
+                }
+                const uint curve_b = Word(description_address, description, DescriptionBytes, 192u);
+                past_turn = Vector(description_address, description, DescriptionBytes, 112u);
+                if (curve_b != 0u) {
+                    past_turn = DescriptionCurve(curve_b + set, s);
+                }
+                const uint curve_c = Word(description_address, description, DescriptionBytes, 188u);
+                tint = Vector(description_address, description, DescriptionBytes, 128u);
+                if (curve_c != 0u) {
+                    tint = DescriptionCurve(curve_c + set, s);
+                }
+            } else {
+                past_place = place;
+                past_turn = turn;
+                if (ChangedMark != seed_words.z) {
+                    past_place = keep_place;
+                    past_turn = keep_turn;
+                }
+            }
+        }
+    }
+    const uvec3 tail = Words4(in_address, object, ObjectBytes, 116u).xyz;
+    Words out_words = Words(emitter_out_address);
+    const uint at = (object * ObjectBytes) >> 2;
+    const uvec4 out_place = floatBitsToUint(place);
+    const uvec4 out_turn = floatBitsToUint(turn);
+    const uvec4 out_past_place = floatBitsToUint(past_place);
+    const uvec4 out_past_turn = floatBitsToUint(past_turn);
+    const uvec4 out_tint = floatBitsToUint(tint);
+    for (uint k = 0u; k < 4u; k++) {
+        out_words.words[at + k] = out_place[k];
+        out_words.words[at + 4u + k] = out_turn[k];
+        out_words.words[at + 16u + k] = out_past_place[k];
+        out_words.words[at + 8u + k] = owner_words[k];
+        out_words.words[at + 12u + k] = seed_words[k];
+        out_words.words[at + 20u + k] = out_past_turn[k];
+        out_words.words[at + 24u + k] = out_tint[k];
+    }
+    out_words.words[at + 28u] = hold;
+    out_words.words[at + 29u] = tail.x;
+    out_words.words[at + 30u] = tail.y;
+    out_words.words[at + 31u] = tail.z;
+}
