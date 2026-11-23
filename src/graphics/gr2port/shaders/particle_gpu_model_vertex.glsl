@@ -15,7 +15,8 @@ struct ParticleModelPoint {
     vec4 color;
     // For the outputs past the position: the particle's emitter, material, seed (the first
     // material plus the particle's), age t and time elapsed; its turn, the spin's cosines and
-    // sines (where the turned point spun), and the emitter's turn where its frame applies.
+    // sines (where the turned point spun), the emitter's turn where its frame applies, and the
+    // world position where the turned point spun.
     uint emitter;
     uint material;
     uint seed;
@@ -26,12 +27,13 @@ struct ParticleModelPoint {
     vec3 spin_sin;
     bool emitter_frame;
     vec4 emitter_turn;
+    vec3 world;
 };
 
 ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_position) {
     ParticleModelPoint point = ParticleModelPoint(false, false, vec3(0.0), vec4(0.0), 0u, 0u, 0u,
                                                   0.0, 0.0, vec4(0.0), vec3(0.0), vec3(0.0),
-                                                  false, vec4(0.0));
+                                                  false, vec4(0.0), vec3(0.0));
     vec4 color = vec4(0.0);
     const float left = ParticleFloat(particle, 7u);
     if (!(left <= 0.0)) {
@@ -158,11 +160,16 @@ ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_positio
                     q = vec4(fma(sy_sx, sin_z, cos_z * cy_cx), fma(sy_cx, sin_z, cos_z * cy_sx),
                              fma(cy_sx, sin_z, cos_z * sy_cx), fma(sy_sx, cos_z, sin_z * cy_cx));
                 }
-                // The mesh point scaled by the particle's size and the scale, turned.
+                // The mesh point scaled by the particle's size and the scale, turned. With
+                // PARTICLE_MODEL_SIZED_MESH the size scales the mesh point first on every axis.
                 const vec4 place = ParticleVector(particle, 0u);
+#ifdef PARTICLE_MODEL_SIZED_MESH
+                const vec3 local = (place.w * mesh_position) * scale;
+#else
                 const vec3 local = vec3((mesh_position.x * place.w) * scale.x,
                                         (place.w * scale.y) * mesh_position.y,
                                         (place.w * scale.z) * mesh_position.z);
+#endif
                 const vec3 turned = Turned(q, local);
                 point.turn = q;
                 const bool emitter_frame = DescriptionWord(description, 18u) == 1u;
@@ -234,6 +241,7 @@ ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_positio
                         position = fma(vec3(place_scale), Turned(emitter_turn, position),
                                        emitter_place.xyz);
                     }
+                    point.world = position;
                     point.view = ViewPosition(position, ViewTranslation());
                 }
             }
@@ -269,6 +277,17 @@ vec3 MovedView(ParticleModelPoint point) {
                     MatrixRow(56u, moved, DrawFloat(59u)));
     }
     return view;
+}
+
+// The world position: where the turned point was added in view space or the depth moved, the
+// (moved) view position back through the first three rows of c_viewMat's inverse (word 32).
+vec3 WorldPosition(ParticleModelPoint point) {
+    if (point.view_turn || DrawFloat(74u) != 0.0) {
+        const vec3 view = MovedView(point);
+        return vec3(MatrixRow(32u, view, DrawFloat(35u)), MatrixRow(36u, view, DrawFloat(39u)),
+                    MatrixRow(40u, view, DrawFloat(43u)));
+    }
+    return point.world;
 }
 
 // A gem's clip position: the moved view position projected.

@@ -16,14 +16,13 @@ uint GameDivide(uint n, uint d) {
     return d != 0u ? n / d : 0xffffffffu;
 }
 
-// The texture coordinates at the mesh's (in 1/1024 units) within a window of the map. The
-// window's time is the age t through the material's power curve (word 116: t^p from p = 0,
-// 1 - (1 - t)^-p below), or with flag 2 of word 120 the time elapsed. With word 120's bits 6 and
-// 7 the window scrolls: a random start in words 52 to 55 and 84 to 87 plus a random speed in 68
-// to 71 and 100 to 103 times the time; else it is the frame of a flipbook of bits 8 to 15
-// frames across and 16 to 23 down, the frame word 44 (plus with flag 1 a random share of all
-// frames) plus word 48 times the time.
-vec2 SurfaceCoordinates(ParticleModelPoint point, ivec2 texcoord) {
+// The window of the map the texture coordinates span. Its time is the age t through the
+// material's power curve (word 116: t^p from p = 0, 1 - (1 - t)^-p below), or with flag 2 of
+// word 120 the time elapsed. With word 120's bits 6 and 7 the window scrolls: a random start in
+// words 52 to 55 and 84 to 87 plus a random speed in 68 to 71 and 100 to 103 times the time;
+// else it is the frame of a flipbook of bits 8 to 15 frames across and 16 to 23 down, the frame
+// word 44 (plus with flag 1 a random share of all frames) plus word 48 times the time.
+vec4 SurfaceWindow(ParticleModelPoint point) {
     const uint material = point.material;
     const float power = MaterialFloat(material, 116u);
     float curved;
@@ -62,6 +61,12 @@ vec2 SurfaceCoordinates(ParticleModelPoint point, ivec2 texcoord) {
         precise const float next_row = float(row) * to_down + to_down;
         window = vec4(float(column) * to_across, float(row) * to_down, next_column, next_row);
     }
+    return window;
+}
+
+// The texture coordinates at the mesh's (in 1/1024 units) within the window.
+vec2 SurfaceCoordinates(ParticleModelPoint point, ivec2 texcoord) {
+    const vec4 window = SurfaceWindow(point);
     const vec2 place = (1.0 / 1024.0) * vec2(texcoord);
     return vec2(fma(place.x, window.z - window.x, window.x),
                 fma(place.y, window.w - window.y, window.y));
