@@ -13,10 +13,25 @@ struct ParticleModelPoint {
     bool view_turn;
     vec3 view;
     vec4 color;
+    // For the outputs past the position: the particle's emitter, material, seed (the first
+    // material plus the particle's), age t and time elapsed; its turn, the spin's cosines and
+    // sines (where the turned point spun), and the emitter's turn where its frame applies.
+    uint emitter;
+    uint material;
+    uint seed;
+    float t;
+    float elapsed;
+    vec4 turn;
+    vec3 spin_cos;
+    vec3 spin_sin;
+    bool emitter_frame;
+    vec4 emitter_turn;
 };
 
 ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_position) {
-    ParticleModelPoint point = ParticleModelPoint(false, false, vec3(0.0), vec4(0.0));
+    ParticleModelPoint point = ParticleModelPoint(false, false, vec3(0.0), vec4(0.0), 0u, 0u, 0u,
+                                                  0.0, 0.0, vec4(0.0), vec3(0.0), vec3(0.0),
+                                                  false, vec4(0.0));
     vec4 color = vec4(0.0);
     const float left = ParticleFloat(particle, 7u);
     if (!(left <= 0.0)) {
@@ -49,6 +64,11 @@ ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_positio
                 const uint set = EffectWord(EmitterWord(emitter, 9u), 45u) << 6;
                 const uint material = first_material + set;
                 point.shown = true;
+                point.emitter = emitter;
+                point.material = material;
+                point.seed = seed;
+                point.t = t;
+                point.elapsed = elapsed;
                 // The model's scale: the material's curve 124, or a random mix of its words 24
                 // to 26 and 28 to 30.
                 vec3 scale;
@@ -144,8 +164,11 @@ ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_positio
                                         (place.w * scale.y) * mesh_position.y,
                                         (place.w * scale.z) * mesh_position.z);
                 const vec3 turned = Turned(q, local);
+                point.turn = q;
                 const bool emitter_frame = DescriptionWord(description, 18u) == 1u;
                 const vec4 emitter_turn = EmitterVector(emitter, 4u);
+                point.emitter_frame = emitter_frame;
+                point.emitter_turn = emitter_turn;
                 if ((MaterialWord(material, 136u) & 0x8u) != 0u) {
                     // The material's flag 8: the turned point is added in view space, and the
                     // depth moves.
@@ -198,6 +221,8 @@ ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_positio
                     const float cos_z =
                         sin(6.283185307 * fract(to_turns * (k * angles.z + quarter)));
                     const float sin_z = sin(6.283185307 * fract(to_turns * (k * angles.z)));
+                    point.spin_cos = vec3(cos_x, cos_y, cos_z);
+                    point.spin_sin = vec3(sin_x, sin_y, sin_z);
                     // About x, then y, then z, onto the particle's place.
                     const float u = fma(cos_x, turned.z, turned.y * -sin_x);
                     const float v = fma(cos_y, turned.x, sin_y * -u);
@@ -248,4 +273,29 @@ vec4 GemClip(ParticleModelPoint point) {
                     MatrixRow(56u, moved, DrawFloat(59u)));
     }
     return ClipPosition(view);
+}
+
+// A direction at the mesh point (n from -1 to 1) as the point turns: turned by the particle,
+// then where it spun, spun (without the place), in the emitter's frame where that applies,
+// through c_viewMat's rotation and normalized. Where the turned point was added in view space,
+// only turned.
+vec3 ParticleNormal(ParticleModelPoint point, vec3 n) {
+    const vec3 turned = Turned(point.turn, n);
+    if (point.view_turn) {
+        return turned;
+    }
+    const vec3 c = point.spin_cos;
+    const vec3 s = point.spin_sin;
+    const float u = fma(c.x, turned.z, turned.y * -s.x);
+    const float v = fma(c.y, turned.x, s.y * -u);
+    const float w = fma(turned.z, s.x, c.x * turned.y);
+    vec3 spun = vec3(fma(w, s.z, v * c.z), fma(c.z, w, s.z * -v), fma(turned.x, s.y, u * c.y));
+    if (point.emitter_frame) {
+        spun = Turned(point.emitter_turn, spun);
+    }
+    const vec3 view =
+        vec3(fma(DrawFloat(2u), spun.z, fma(DrawFloat(1u), spun.y, DrawFloat(0u) * spun.x)),
+             fma(DrawFloat(6u), spun.z, fma(DrawFloat(5u), spun.y, DrawFloat(4u) * spun.x)),
+             fma(DrawFloat(10u), spun.z, fma(DrawFloat(9u), spun.y, DrawFloat(8u) * spun.x)));
+    return (1.0 / sqrt(fma(view.z, view.z, fma(view.y, view.y, view.x * view.x)))) * view;
 }
