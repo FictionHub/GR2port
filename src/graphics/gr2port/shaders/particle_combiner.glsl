@@ -112,13 +112,11 @@ void CombinerStage(ParticleDraw draw, inout Layers layers, int a, int b, uint in
     layers.luminance_alpha[into] = LuminanceAlpha(result);
 }
 
-// The particle's colour and alpha from its maps: map 0 at the first coordinates, each further map
-// at its own moved by the maps before it (2 * red and green - 1 times the material's strengths),
-// mixed by three stages; c_gpufxUsed.x's bits 27 and 24 pick the layers of the colour and the
-// alpha (7 for white), c_gpufxUsed.z's bits 31 and 30 add the colour layer's colour and its
-// luminance times alpha, bits 29 and 28 the alpha layer's alpha and its luminance times alpha.
-vec4 CombinedMaps(ParticleDraw draw, uint material_index, vec2 place0, vec2 place1, vec2 place2,
-                  vec2 place3) {
+// The layers of the particle's maps: map 0 at the first coordinates, each further map at its own
+// moved by the maps before it (2 * red and green - 1 times the material's strengths), then the
+// three stages' results.
+Layers CombinerLayers(ParticleDraw draw, uint material_index, vec2 place0, vec2 place1,
+                      vec2 place2, vec2 place3) {
     const uint material = draw.gpufx_used[3] + material_index;
     Layers layers;
     layers.color[0] = CombinerMap(draw, 0u, place0);
@@ -145,7 +143,14 @@ vec4 CombinedMaps(ParticleDraw draw, uint material_index, vec2 place0, vec2 plac
     CombinerStage(draw, layers, 15, 27, 4u);
     CombinerStage(draw, layers, 9, 18, 5u);
     CombinerStage(draw, layers, 3, 9, 6u);
+    return layers;
+}
 
+// The particle's colour and alpha from the layers: c_gpufxUsed.x's bits 27 and 24 pick the layers
+// of the colour and the alpha (7 for white), c_gpufxUsed.z's bits 31 and 30 add the colour
+// layer's colour and its luminance times alpha, bits 29 and 28 the alpha layer's alpha and its
+// luminance times alpha.
+vec4 Combined(ParticleDraw draw, Layers layers) {
     vec3 color = vec3(1.0);
     const uint color_layer = bitfieldExtract(draw.gpufx_used[0], 27, 3);
     if (color_layer < 7u) {
@@ -163,6 +168,12 @@ vec4 CombinedMaps(ParticleDraw draw, uint material_index, vec2 place0, vec2 plac
                         float(bitfieldExtract(draw.gpufx_used[2], 29, 1)));
     }
     return vec4(color, alpha);
+}
+
+// The particle's colour and alpha from its maps through the combiner.
+vec4 CombinedMaps(ParticleDraw draw, uint material_index, vec2 place0, vec2 place1, vec2 place2,
+                  vec2 place3) {
+    return Combined(draw, CombinerLayers(draw, material_index, place0, place1, place2, place3));
 }
 
 // The colour and alpha faded by the depth behind the particle and coloured by its curve, the
