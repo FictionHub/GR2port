@@ -83,12 +83,13 @@ vec4 ParticleEffectVertex() {
         tangent = vec4(ParticleNormal(point, mesh_tangent.xyz), mesh_tangent.w);
         world = WorldPosition(point);
         view = MovedView(point);
-        coordinates = FlippedCoordinates(MapWindow(point, 0u), mesh_texcoord);
+        coordinates = FlippedCoordinates(
+            MapWindow(point.material, point.seed, point.t, point.elapsed, 0u), mesh_texcoord);
         vec4 vertex_color = vec4(1.0);
         if ((flags & EffectFlagColor) != 0u) {
             vertex_color = clamp(max(vec4(0.0), mesh_color), 0.0, 1.0);
         }
-        color = ListedColor(point, vertex_color * point.color);
+        color = ListedColor(point.emitter, vertex_color * point.color);
         t = point.t;
         const uint set = point.material - DrawWords().words[87];
         set_bits = uvec4(set, set, set + 0x8000u, 0u);

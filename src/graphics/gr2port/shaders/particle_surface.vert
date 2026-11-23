@@ -48,7 +48,7 @@ void main() {
         coordinates = MapCoordinates(point, 0u, mesh_texcoord);
         shown = 1.0;
         fog = HeightFog(mesh_position.y);
-        color = ListedColor(point, color);
+        color = ListedColor(point.emitter, color);
     }
     attr3 = vec4(fog.y, fog.z, color.a, 0.0);
     attr2 = vec4(normal, fog.x);

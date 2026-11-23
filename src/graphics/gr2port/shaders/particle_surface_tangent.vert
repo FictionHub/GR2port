@@ -53,7 +53,7 @@ void main() {
         parallax = ParallaxShift(MovedView(point), normal, tangent);
         shown = 1.0;
         fog = HeightFog(mesh_position.y);
-        color = ListedColor(point, color);
+        color = ListedColor(point.emitter, color);
     }
     attr4 = vec4(fog.y, fog.z, color.a, 0.0);
     attr3 = vec4(normal, fog.x);

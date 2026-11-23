@@ -23,20 +23,19 @@ uint GameDivide(uint n, uint d) {
 // times the time; else it is the frame of a flipbook of bits 8 to 15 frames across and 16 to
 // 23 down, the frame word 44 + map (plus with flag 1 a random share of all frames) plus word
 // 48 + map times the time.
-vec4 MapWindow(ParticleModelPoint point, uint map) {
-    const uint material = point.material;
+vec4 MapWindow(uint material, uint seed, float t, float elapsed, uint map) {
     const float power = MaterialFloat(material, 116u + map);
     float curved;
     if (0.0 <= power) {
-        curved = exp2(power * log2(abs(point.t)));
+        curved = exp2(power * log2(abs(t)));
     } else {
-        curved = 1.0 - exp2(-power * log2(abs(clamp(1.0 - point.t, 0.0, 1.0))));
+        curved = 1.0 - exp2(-power * log2(abs(clamp(1.0 - t, 0.0, 1.0))));
     }
     const uint flags = MaterialWord(material, 120u + map);
-    const float time = bitfieldExtract(flags, 2, 1) > 0u ? point.elapsed : curved;
+    const float time = bitfieldExtract(flags, 2, 1) > 0u ? elapsed : curved;
     vec4 window;
     if (bitfieldExtract(flags, 6, 2) != 0u) {
-        const float random = SeedRandom(point.seed + 0x1a8eu);
+        const float random = SeedRandom(seed + 0x1a8eu);
         const uint words = 4u * map;
         const vec4 speed_low = MaterialVector(material, 68u + words);
         const vec4 start_low = MaterialVector(material, 52u + words);
@@ -51,7 +50,7 @@ vec4 MapWindow(ParticleModelPoint point, uint map) {
         float first = 0.0;
         if (bitfieldExtract(flags, 1, 1) != 0u) {
             first = uintBitsToFloat(0x3ec01c14u) *
-                    (SeedHash(point.seed + 0x1a8eu) * float(across * down));
+                    (SeedHash(seed + 0x1a8eu) * float(across * down));
         }
         const float to_across = 1.0 / float(across);
         const float to_down = 1.0 / float(down);
@@ -70,7 +69,7 @@ vec4 MapWindow(ParticleModelPoint point, uint map) {
 
 // Map 0 to 3's texture coordinates at the mesh's (in 1/1024 units) within its window.
 vec2 MapCoordinates(ParticleModelPoint point, uint map, ivec2 texcoord) {
-    const vec4 window = MapWindow(point, map);
+    const vec4 window = MapWindow(point.material, point.seed, point.t, point.elapsed, map);
     const vec2 place = (1.0 / 1024.0) * vec2(texcoord);
     return vec2(fma(place.x, window.z - window.x, window.x),
                 fma(place.y, window.w - window.y, window.y));
@@ -104,10 +103,10 @@ vec2 ParallaxShift(vec3 view, vec3 normal, vec4 tangent) {
 
 // The colour times the emitter's entry in the colour list (16 bytes an emitter) where
 // c_materialAttr2.x reaches 1 - 2^-23.
-vec4 ListedColor(ParticleModelPoint point, vec4 color) {
+vec4 ListedColor(uint emitter, vec4 color) {
     if (DrawFloat(76u) >= uintBitsToFloat(0x3f7ffffeu)) {
         RecordWords list = RecordWords(color_address);
-        const uint at = (point.emitter << 4) >> 2;
+        const uint at = (emitter << 4) >> 2;
         const vec3 listed =
             uintBitsToFloat(uvec3(list.words[at], list.words[at + 1u], list.words[at + 2u]));
         color.rgb = listed * color.rgb;

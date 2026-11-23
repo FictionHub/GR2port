@@ -145,22 +145,7 @@ ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_positio
                                  cos(6.283185307 * fract(abs(turns))));
                     }
                 } else {
-                    // Half angles; cos = sin(a + pi/2) with the add left to the driver.
-                    const float k = uintBitsToFloat(0x3c0efa35u);
-                    const float to_turns = uintBitsToFloat(0x3e22f983u);
-                    const float quarter = uintBitsToFloat(0x3fc90fdbu);
-                    const float cos_y = sin(6.283185307 * fract(to_turns * (k * turn.y + quarter)));
-                    const float cos_x = sin(6.283185307 * fract(to_turns * (k * turn.x + quarter)));
-                    const float sin_y = sin(6.283185307 * fract(to_turns * (k * turn.y)));
-                    const float sin_x = sin(6.283185307 * fract(to_turns * (k * turn.x)));
-                    const float cos_z = sin(6.283185307 * fract(to_turns * (k * turn.z + quarter)));
-                    const float sin_z = sin(6.283185307 * fract(to_turns * (k * turn.z)));
-                    const float cy_cx = cos_y * cos_x;
-                    const float cy_sx = cos_y * sin_x;
-                    const float sy_cx = sin_y * cos_x;
-                    const float sy_sx = sin_y * sin_x;
-                    q = vec4(fma(sy_sx, sin_z, cos_z * cy_cx), fma(sy_cx, sin_z, cos_z * cy_sx),
-                             fma(cy_sx, sin_z, cos_z * sy_cx), fma(sy_sx, cos_z, sin_z * cy_cx));
+                    q = EulerTurn(turn.xyz);
                 }
                 // The mesh point scaled by the particle's size and the scale, turned. With
                 // PARTICLE_MODEL_SIZED_MESH the size scales the mesh point first on every axis.
