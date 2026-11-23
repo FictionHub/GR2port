@@ -82,7 +82,6 @@ constexpr std::array Writers{
     Hooks::Entry{0x415f50, 6, Hooks::FramePrologueR14},
     Hooks::Entry{0x416730, 6, Hooks::FramePrologue},
     Hooks::Entry{0x416b40, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x429b40, 6, Hooks::FramePrologue},
 };
 
 // push rbp; mov rbp, rsp.
@@ -114,6 +113,11 @@ constexpr std::array Returning{
     Hooks::Entry{0x4144a0, 4, PushFrame}, // sceGnmSetVgtControl
     Hooks::Entry{0x429130, 5, {0xe9, 0xfb, 0xee, 0x3c, 0x01}}, // sceGnmFlushGarlic
     Hooks::Entry{0x4291b0, 5, {0xe9, 0xcb, 0xec, 0x3c, 0x01}}, // sceGnmSubmitDone
+    // A compute command buffer's cache invalidation and shader control, and its submit to a
+    // compute queue, whose result the game leaves unused. Nothing runs the compute queues.
+    Hooks::Entry{0x429b40, 4, PushFrame},
+    Hooks::Entry{0x4112d0, 4, PushFrame},
+    Hooks::Entry{0x42ab60, 4, PushFrame},
     // The frame graph's depth sort orders the G2_BG_Main keys for the draw loop. Capture reads the
     // keys when the frame graph starts.
     Hooks::Entry{0x1441460, 4, PushFrame},
