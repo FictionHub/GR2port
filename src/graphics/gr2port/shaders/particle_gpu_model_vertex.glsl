@@ -230,3 +230,22 @@ vec4 ModelClip(ParticleModelPoint point) {
     }
     return clip;
 }
+
+// A gem's clip position: the view position projected; where the point spun and c_materialAttr.z
+// is not 0, its depth moved first by a trip through c_projMat's and c_projInvMat's first three
+// rows.
+vec4 GemClip(ParticleModelPoint point) {
+    if (!point.shown) {
+        return vec4(0.0);
+    }
+    vec3 view = point.view;
+    if (!point.view_turn && DrawFloat(74u) != 0.0) {
+        const vec3 projected = vec3(MatrixRow(16u, view, DrawFloat(19u)),
+                                    MatrixRow(20u, view, DrawFloat(23u)),
+                                    MatrixRow(24u, view, DrawFloat(27u)));
+        const vec3 moved = vec3(projected.xy, 2.0 * DepthOffset() + projected.z);
+        view = vec3(MatrixRow(48u, moved, DrawFloat(51u)), MatrixRow(52u, moved, DrawFloat(55u)),
+                    MatrixRow(56u, moved, DrawFloat(59u)));
+    }
+    return ClipPosition(view);
+}
