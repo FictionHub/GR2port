@@ -15,8 +15,9 @@ struct ParticleModelPoint {
     vec4 color;
     // For the outputs past the position: the particle's emitter, material, seed (the first
     // material plus the particle's), age t and time elapsed; its turn, the spin's cosines and
-    // sines (where the turned point spun), the emitter's turn where its frame applies, and the
-    // world position where the turned point spun.
+    // sines (where the turned point spun), the emitter's turn where its frame applies, the
+    // world position where the turned point spun, and the particle's size (times the emitter's
+    // scale in its frame).
     uint emitter;
     uint material;
     uint seed;
@@ -28,12 +29,13 @@ struct ParticleModelPoint {
     bool emitter_frame;
     vec4 emitter_turn;
     vec3 world;
+    float size;
 };
 
 ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_position) {
     ParticleModelPoint point = ParticleModelPoint(false, false, vec3(0.0), vec4(0.0), 0u, 0u, 0u,
                                                   0.0, 0.0, vec4(0.0), vec3(0.0), vec3(0.0),
-                                                  false, vec4(0.0), vec3(0.0));
+                                                  false, vec4(0.0), vec3(0.0), 0.0);
     vec4 color = vec4(0.0);
     const float left = ParticleFloat(particle, 7u);
     if (!(left <= 0.0)) {
@@ -176,6 +178,7 @@ ParticleModelPoint ParticleModel(uint particle, uint instance, vec3 mesh_positio
                 const vec4 emitter_turn = EmitterVector(emitter, 4u);
                 point.emitter_frame = emitter_frame;
                 point.emitter_turn = emitter_turn;
+                point.size = emitter_frame ? place.w * place_scale : place.w;
                 if ((MaterialWord(material, 136u) & 0x8u) != 0u) {
                     // The material's flag 8: the turned point is added in view space, and the
                     // depth moves.

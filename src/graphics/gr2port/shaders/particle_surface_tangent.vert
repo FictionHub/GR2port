@@ -49,7 +49,7 @@ void main() {
     if (point.shown) {
         normal = ParticleNormal(point, 2.0 * mesh_normal + -1.0);
         tangent = vec4(ParticleNormal(point, mesh_tangent.xyz), mesh_tangent.w);
-        coordinates = SurfaceCoordinates(point, mesh_texcoord);
+        coordinates = MapCoordinates(point, 0u, mesh_texcoord);
         parallax = ParallaxShift(MovedView(point), normal, tangent);
         shown = 1.0;
         fog = HeightFog(mesh_position.y);

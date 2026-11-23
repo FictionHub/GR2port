@@ -83,7 +83,7 @@ vec4 ParticleEffectVertex() {
         tangent = vec4(ParticleNormal(point, mesh_tangent.xyz), mesh_tangent.w);
         world = WorldPosition(point);
         view = MovedView(point);
-        coordinates = FlippedCoordinates(SurfaceWindow(point), mesh_texcoord);
+        coordinates = FlippedCoordinates(MapWindow(point, 0u), mesh_texcoord);
         vec4 vertex_color = vec4(1.0);
         if ((flags & EffectFlagColor) != 0u) {
             vertex_color = clamp(max(vec4(0.0), mesh_color), 0.0, 1.0);

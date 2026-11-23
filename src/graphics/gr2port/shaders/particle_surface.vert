@@ -45,7 +45,7 @@ void main() {
     float shown = 0.0;
     if (point.shown) {
         normal = ParticleNormal(point, 2.0 * mesh_normal + -1.0);
-        coordinates = SurfaceCoordinates(point, mesh_texcoord);
+        coordinates = MapCoordinates(point, 0u, mesh_texcoord);
         shown = 1.0;
         fog = HeightFog(mesh_position.y);
         color = ListedColor(point, color);

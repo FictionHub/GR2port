@@ -16,30 +16,34 @@ uint GameDivide(uint n, uint d) {
     return d != 0u ? n / d : 0xffffffffu;
 }
 
-// The window of the map the texture coordinates span. Its time is the age t through the
-// material's power curve (word 116: t^p from p = 0, 1 - (1 - t)^-p below), or with flag 2 of
-// word 120 the time elapsed. With word 120's bits 6 and 7 the window scrolls: a random start in
-// words 52 to 55 and 84 to 87 plus a random speed in 68 to 71 and 100 to 103 times the time;
-// else it is the frame of a flipbook of bits 8 to 15 frames across and 16 to 23 down, the frame
-// word 44 (plus with flag 1 a random share of all frames) plus word 48 times the time.
-vec4 SurfaceWindow(ParticleModelPoint point) {
+// The window of map 0 to 3 that its texture coordinates span. Its time is the age t through
+// the material's power curve (word 116 + map: t^p from p = 0, 1 - (1 - t)^-p below), or with
+// flag 2 of word 120 + map the time elapsed. With that word's bits 6 and 7 the window scrolls:
+// a random start in words 52 and 84 (+ 4 map) plus a random speed in 68 and 100 (+ 4 map)
+// times the time; else it is the frame of a flipbook of bits 8 to 15 frames across and 16 to
+// 23 down, the frame word 44 + map (plus with flag 1 a random share of all frames) plus word
+// 48 + map times the time.
+vec4 MapWindow(ParticleModelPoint point, uint map) {
     const uint material = point.material;
-    const float power = MaterialFloat(material, 116u);
+    const float power = MaterialFloat(material, 116u + map);
     float curved;
     if (0.0 <= power) {
         curved = exp2(power * log2(abs(point.t)));
     } else {
         curved = 1.0 - exp2(-power * log2(abs(clamp(1.0 - point.t, 0.0, 1.0))));
     }
-    const uint flags = MaterialWord(material, 120u);
+    const uint flags = MaterialWord(material, 120u + map);
     const float time = bitfieldExtract(flags, 2, 1) > 0u ? point.elapsed : curved;
     vec4 window;
     if (bitfieldExtract(flags, 6, 2) != 0u) {
         const float random = SeedRandom(point.seed + 0x1a8eu);
-        const vec4 speed_low = MaterialVector(material, 68u);
-        const vec4 start_low = MaterialVector(material, 52u);
-        const vec4 speed = fma(vec4(random), MaterialVector(material, 100u) - speed_low, speed_low);
-        const vec4 start = fma(vec4(random), MaterialVector(material, 84u) - start_low, start_low);
+        const uint words = 4u * map;
+        const vec4 speed_low = MaterialVector(material, 68u + words);
+        const vec4 start_low = MaterialVector(material, 52u + words);
+        const vec4 speed =
+            fma(vec4(random), MaterialVector(material, 100u + words) - speed_low, speed_low);
+        const vec4 start =
+            fma(vec4(random), MaterialVector(material, 84u + words) - start_low, start_low);
         window = fma(vec4(time), speed, start);
     } else {
         const uint across = bitfieldExtract(flags, 8, 8);
@@ -51,8 +55,8 @@ vec4 SurfaceWindow(ParticleModelPoint point) {
         }
         const float to_across = 1.0 / float(across);
         const float to_down = 1.0 / float(down);
-        const uint frame = GameUintOf(fma(time, MaterialFloat(material, 48u),
-                                          MaterialFloat(material, 44u) + first));
+        const uint frame = GameUintOf(fma(time, MaterialFloat(material, 48u + map),
+                                          MaterialFloat(material, 44u + map) + first));
         const uint line = GameDivide(frame, across);
         const uint column = frame - line * across;
         const uint row = line - GameDivide(line, down) * down;
@@ -64,9 +68,9 @@ vec4 SurfaceWindow(ParticleModelPoint point) {
     return window;
 }
 
-// The texture coordinates at the mesh's (in 1/1024 units) within the window.
-vec2 SurfaceCoordinates(ParticleModelPoint point, ivec2 texcoord) {
-    const vec4 window = SurfaceWindow(point);
+// Map 0 to 3's texture coordinates at the mesh's (in 1/1024 units) within its window.
+vec2 MapCoordinates(ParticleModelPoint point, uint map, ivec2 texcoord) {
+    const vec4 window = MapWindow(point, map);
     const vec2 place = (1.0 / 1024.0) * vec2(texcoord);
     return vec2(fma(place.x, window.z - window.x, window.x),
                 fma(place.y, window.w - window.y, window.y));

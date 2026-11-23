@@ -45,7 +45,7 @@ void main() {
         view = MovedView(point);
         normal = ParticleNormal(point, 2.0 * mesh_normal + -1.0);
         tangent = vec4(ParticleNormal(point, mesh_tangent.xyz), mesh_tangent.w);
-        coordinates = SurfaceCoordinates(point, mesh_texcoord);
+        coordinates = MapCoordinates(point, 0u, mesh_texcoord);
     }
     attr3 = vec4(point.color.a, 0.0, 0.0, 0.0);
     attr2 = vec4(view.yz, coordinates);
