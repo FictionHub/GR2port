@@ -1,0 +1,864 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's compute program 0x1c7b7f0, the GPU particles' emitter spawn: each emitter object of
+// kind 1 whose description lets it spawns into its ring of particles. A fresh emitter first
+// clears its ring. An emitter with a parent spawns one block of its ring per particle of the
+// parent's ring, as that particle moves (or at its birth); others spawn by rate, distance or
+// burst from their own place. Each new particle takes a random place, velocity, size, life and
+// turn from the description's ranges and curves, the description's two shapes and its seed.
+#version 460
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0) uniform texture2D curve_texture;
+layout(set = 0, binding = 1) uniform sampler curve_sampler;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
+    uint words[];
+};
+layout(push_constant) uniform Push {
+    uint64_t effect_in_address;
+    uint64_t description_address;
+    uint64_t particle_out_address;
+    uint64_t emitter_out_address;
+    // The active list: the count at word 0, the objects from word 4; 0 runs every object.
+    uint64_t active_address;
+};
+
+// The emitter's mark of a ring to clear.
+const uint FreshMark = 0x27bc86abu;
+
+uint EffectWord(uint effect, uint word) {
+    return Words(effect_in_address).words[(effect * 192u + word * 4u) >> 2];
+}
+
+float EffectFloat(uint effect, uint word) {
+    return uintBitsToFloat(EffectWord(effect, word));
+}
+
+uint DescriptionWord(uint description, uint word) {
+    return Words(description_address).words[(description * 256u + word * 4u) >> 2];
+}
+
+float DescriptionFloat(uint description, uint word) {
+    return uintBitsToFloat(DescriptionWord(description, word));
+}
+
+vec4 DescriptionVector(uint description, uint word) {
+    return vec4(DescriptionFloat(description, word), DescriptionFloat(description, word + 1u),
+                DescriptionFloat(description, word + 2u), DescriptionFloat(description, word + 3u));
+}
+
+uint EmitterWord(uint emitter, uint word) {
+    return Words(emitter_out_address).words[(emitter * 128u + word * 4u) >> 2];
+}
+
+float EmitterFloat(uint emitter, uint word) {
+    return uintBitsToFloat(EmitterWord(emitter, word));
+}
+
+vec4 EmitterVector(uint emitter, uint word) {
+    return vec4(EmitterFloat(emitter, word), EmitterFloat(emitter, word + 1u),
+                EmitterFloat(emitter, word + 2u), EmitterFloat(emitter, word + 3u));
+}
+
+void SetEmitterWord(uint emitter, uint word, uint value) {
+    Words(emitter_out_address).words[(emitter * 128u + word * 4u) >> 2] = value;
+}
+
+uint ParticleWord(uint particle, uint word) {
+    return Words(particle_out_address).words[(particle * 64u + word * 4u) >> 2];
+}
+
+float ParticleFloat(uint particle, uint word) {
+    return uintBitsToFloat(ParticleWord(particle, word));
+}
+
+vec4 ParticleVector(uint particle, uint word) {
+    return vec4(ParticleFloat(particle, word), ParticleFloat(particle, word + 1u),
+                ParticleFloat(particle, word + 2u), ParticleFloat(particle, word + 3u));
+}
+
+uvec4 ParticleWords(uint particle, uint word) {
+    return floatBitsToUint(ParticleVector(particle, word));
+}
+
+void SetParticleWord(uint particle, uint word, uint value) {
+    Words(particle_out_address).words[(particle * 64u + word * 4u) >> 2] = value;
+}
+
+void SetParticleWords(uint particle, uint word, uvec4 value) {
+    const uint at = (particle * 64u + word * 4u) >> 2;
+    Words(particle_out_address).words[at] = value.x;
+    Words(particle_out_address).words[at + 1u] = value.y;
+    Words(particle_out_address).words[at + 2u] = value.z;
+    Words(particle_out_address).words[at + 3u] = value.w;
+}
+
+void SetParticleVector(uint particle, uint word, vec4 value) {
+    SetParticleWords(particle, word, floatBitsToUint(value));
+}
+
+// The game's unsigned division: all ones for a divisor of 0.
+uint GameDivide(uint n, uint d) {
+    return d != 0u ? n / d : 0xffffffffu;
+}
+
+// The remainder that goes with GameDivide: n itself for a divisor of 0.
+uint GameModulo(uint n, uint d) {
+    return n - GameDivide(n, d) * d;
+}
+
+// The game's float to uint: NaN gives 0, the rest clamps.
+uint GameUintOf(float value) {
+    return isnan(value) ? 0u : uint(clamp(value, 0.0, 4294967040.0));
+}
+
+// The next state of the game's random sequence: a 20-bit shift register whose bits 0 and 3 feed
+// bit 19.
+uint NextState(uint state) {
+    return bitfieldExtract(state, 1, 19) | ((bitCount(state & 9u) & 1u) << 19);
+}
+
+// The game's hash of a state, from 0 to 2.66514: fract(|0.00146566 n|) times 2.66514 of n, the
+// state's bits xor 0xc6395 as a float. Its sign is n / 256's, which a float of a uint never makes
+// negative. The sign flips on the bits, as in the game's program: through a float negate the
+// driver would fold the 2.66514 into the products that take the hash.
+float StateHash(uint state) {
+    const float n = float(0xc6395u ^ state);
+    uint hash = floatBitsToUint(uintBitsToFloat(0x402a91b9u) *
+                                fract(abs(uintBitsToFloat(0x3ac01c14u) * n)));
+    if (0.0 > uintBitsToFloat(0x3b800000u) * n) {
+        hash ^= 0x80000000u;
+    }
+    return uintBitsToFloat(hash);
+}
+
+// A random share from 0 to 1: the hash times 0.375214.
+float StateRandom(uint state) {
+    return uintBitsToFloat(0x3ec01c14u) * StateHash(state);
+}
+
+// low plus range times the state's random share, rounded in the game's order (precise: the
+// driver would otherwise move the 0.375214 onto the range).
+float RandomIn(float low, float range, uint state) {
+    precise float spread = range * StateHash(state);
+    return spread * uintBitsToFloat(0x3ec01c14u) + low;
+}
+
+// The game's sine and cosine of an angle in turns.
+float TurnSin(float turns) {
+    return sin(6.283185307 * fract(turns));
+}
+
+float TurnCos(float turns) {
+    return cos(6.283185307 * fract(abs(turns)));
+}
+
+// The point p turned by the quaternion q (x, y, z, w) in the steps of the game's program and in
+// their order, the driver left to fuse each product into its add as there (fma calls would pick
+// other products for some of them).
+vec3 SpawnTurned(vec4 q, vec3 p) {
+    const float xz = p.x * q.z;
+    const float xy = q.x * p.y;
+    const float zy = p.z * q.y;
+    const float ty_cross = -q.x * p.z + xz;
+    const float tz_cross = -p.x * q.y + xy;
+    const float tx_cross = q.z * -p.y + zy;
+    const float tx = p.x * q.w + tx_cross;
+    const float ty = q.w * p.y + ty_cross;
+    const float tz = q.w * p.z + tz_cross;
+    const float x_back = -q.z * ty;
+    const float dot_x = q.x * p.x;
+    const float y_back = -q.x * tz;
+    const float z_back = -q.y * tx;
+    const float x_cross = q.y * tz + x_back;
+    const float y_cross = q.z * tx + y_back;
+    const float dot_xy = q.y * p.y + dot_x;
+    const float z_cross = ty * q.x + z_back;
+    const float x_turned = tx * q.w + x_cross;
+    const float d = q.z * p.z + dot_xy;
+    const float y_turned = ty * q.w + y_cross;
+    const float z_turned = tz * q.w + z_cross;
+    return vec3(d * q.x + x_turned, q.y * d + y_turned, q.z * d + z_turned);
+}
+
+// The quaternion of angles in degrees about x, then y, then z (half angles; cos = sin(a + pi/2)
+// with the add left to the driver).
+vec4 EulerTurn(vec3 degrees) {
+    const float k = uintBitsToFloat(0x3c0efa35u);
+    const float to_turns = uintBitsToFloat(0x3e22f983u);
+    const float quarter = uintBitsToFloat(0x3fc90fdbu);
+    const float cos_y = sin(6.283185307 * fract(to_turns * (k * degrees.y + quarter)));
+    const float cos_x = sin(6.283185307 * fract(to_turns * (k * degrees.x + quarter)));
+    const float sin_y = sin(6.283185307 * fract(to_turns * (k * degrees.y)));
+    const float sin_x = sin(6.283185307 * fract(to_turns * (k * degrees.x)));
+    const float cos_z = sin(6.283185307 * fract(to_turns * (k * degrees.z + quarter)));
+    const float sin_z = sin(6.283185307 * fract(to_turns * (k * degrees.z)));
+    const float cy_cx = cos_y * cos_x;
+    const float cy_sx = cos_y * sin_x;
+    const float sy_cx = sin_y * cos_x;
+    const float sy_sx = sin_y * sin_x;
+    return vec4(fma(sy_sx, sin_z, cos_z * cy_cx), fma(sy_cx, sin_z, cos_z * cy_sx),
+                fma(cy_sx, sin_z, cos_z * sy_cx), fma(sy_sx, cos_z, sin_z * cy_cx));
+}
+
+// A curve's texture u at its column (the low 11 bits of curve + set), from 0 to 1.
+float CurveU(uint column) {
+    return clamp(uintBitsToFloat(0x3a000000u) * float(column) + uintBitsToFloat(0x39800000u), 0.0,
+                 1.0);
+}
+
+// A curve's texture v at t from 0 to 1 within its block of 64 rows (curve >> 11).
+float CurveV(float block_row, float t) {
+    const float row = clamp(max(0.0, t), 0.0, 1.0) * 63.0 + block_row;
+    return clamp(uintBitsToFloat(0x3a800000u) * row + uintBitsToFloat(0x3a000000u), 0.0, 1.0);
+}
+
+vec4 Curve(float u, float v) {
+    return textureLod(sampler2D(curve_texture, curve_sampler), vec2(u, v), 0.0);
+}
+
+// The point of a description shape at s (0 to 1 along it), before its size: 2 and 3 a circle in
+// x and z, 4 and 5 a sphere, 6 and 7 the edges of a square in x and z, 8 and 9 the faces of a
+// cube; else 0.
+vec3 ShapePoint(uint shape, float s) {
+    vec3 p = vec3(0.0);
+    if (shape == 2u || shape == 3u) {
+        const float turns = uintBitsToFloat(0x3e22f983u) * (uintBitsToFloat(0x40c90fdbu) * s);
+        p = vec3(TurnCos(turns), 0.0, TurnSin(turns));
+    } else if (shape == 4u || shape == 5u) {
+        const float a = fract(uintBitsToFloat(0x441d1463u) * s);
+        const float around = uintBitsToFloat(0x3e22f983u) * (uintBitsToFloat(0x40c90fdbu) * a);
+        const float up = uintBitsToFloat(0x3e22f983u) * (uintBitsToFloat(0x40c90fdbu) * s);
+        const float cos_up = TurnCos(up);
+        p = vec3(cos_up * TurnCos(around), cos_up * TurnSin(around), TurnSin(up));
+    } else if (shape == 6u || shape == 7u) {
+        const uint side = GameUintOf(uintBitsToFloat(0x438a8000u) * s) & 3u;
+        const float sign = side > 1u ? -1.0 : 1.0;
+        const float along = 2.0 * s + -1.0;
+        p = (side > 1u ? side - 2u : side) != 0u ? vec3(along, 0.0, sign) : vec3(sign, 0.0, along);
+    } else if (shape == 8u || shape == 9u) {
+        const float a = fract(uintBitsToFloat(0x441d1463u) * s);
+        const uint face = GameUintOf(uintBitsToFloat(0x438c8000u) * a) % 6u;
+        const uint axis = face > 2u ? face - 3u : face;
+        const float sign = face > 2u ? -1.0 : 1.0;
+        const float u = 2.0 * a + -1.0;
+        const float v = 2.0 * s + -1.0;
+        p = axis == 0u ? vec3(sign, u, v) : axis == 1u ? vec3(u, v, sign) : vec3(v, sign, u);
+    }
+    return p;
+}
+
+// An angle from -2 pi to 2 pi brought into -pi to pi.
+float WrapAngle(float a) {
+    float wrapped = uintBitsToFloat(0xc0c90fdbu) + a;
+    if (!(a >= uintBitsToFloat(0x40490fdbu))) {
+        wrapped = a;
+        if (uintBitsToFloat(0xc0490fdbu) >= a) {
+            wrapped = uintBitsToFloat(0x40c90fdbu) + a;
+        }
+    }
+    return wrapped;
+}
+
+// A new particle's random draws from the state before it: its place offset in the box from low to
+// low + range (x, y and z from the third to fifth states on), its size (w, the sixth), its
+// velocity in its box (the tenth to twelfth); the state moves on 13 steps.
+struct Draw {
+    vec3 offset;
+    float size;
+    vec3 velocity;
+    uint state;
+};
+
+Draw DrawParticle(uint state, vec4 place_low, vec4 place_range, vec3 velocity_low,
+                  vec3 velocity_range) {
+    const uint s1 = NextState(state);
+    const uint s2 = NextState(s1);
+    const uint s3 = NextState(s2);
+    const uint s4 = NextState(s3);
+    const uint s5 = NextState(s4);
+    const uint s6 = NextState(s5);
+    const uint s7 = NextState(s6);
+    const uint s8 = NextState(s7);
+    const uint s9 = NextState(s8);
+    const uint s10 = NextState(s9);
+    const uint s11 = NextState(s10);
+    const uint s12 = NextState(s11);
+    Draw draw;
+    draw.offset = vec3(RandomIn(place_low.x, place_range.x, s3),
+                       RandomIn(place_low.y, place_range.y, s4),
+                       RandomIn(place_low.z, place_range.z, s5));
+    draw.size = RandomIn(place_low.w, place_range.w, s6);
+    draw.velocity = vec3(RandomIn(velocity_low.x, velocity_range.x, s10),
+                         RandomIn(velocity_low.y, velocity_range.y, s11),
+                         RandomIn(velocity_low.z, velocity_range.z, s12));
+    draw.state = NextState(s12);
+    return draw;
+}
+
+// The turn of a new particle by the description's turn mode (word 49's low byte): 0 its velocity,
+// 1 the effect's move at its share along the step, 2 a random axis height and two angles, 3 its
+// random turn range, 4 its place before the offset, 5 all 0; else none.
+vec4 SpawnTurn(uint mode, vec3 velocity, vec3 move, vec3 place, vec4 range_turn, uint state) {
+    vec4 turn = vec4(velocity, 1.0);
+    if (mode != 0u) {
+        if (mode != 1u) {
+            if (mode != 2u) {
+                turn = range_turn;
+                if (mode != 3u) {
+                    turn = vec4(place, 1.0);
+                    if (mode != 4u) {
+                        turn = mode == 5u ? vec4(0.0) : vec4(0.0, 0.0, 0.0, 1.0);
+                    }
+                }
+            } else {
+                const float u = uintBitsToFloat(0x3f401c14u) * StateHash(state + 0xe21u) + -1.0;
+                const float a = uintBitsToFloat(0x3f90150fu) * StateHash(state + 0xfefu) +
+                                uintBitsToFloat(0xbfc00000u);
+                const float b = uintBitsToFloat(0x40281892u) * StateHash(state + 0xa39u) +
+                                uintBitsToFloat(0xc0600000u);
+                turn = vec4(u, sqrt(-u * u + 1.0), WrapAngle(a), WrapAngle(b));
+            }
+        } else {
+            turn.xyz = move;
+        }
+    }
+    return turn;
+}
+
+// The turn of mode 3: low plus range times the state's random share.
+vec4 RangeTurn(uint state, vec4 low, vec4 range) {
+    const float share = StateRandom(state);
+    return vec4(range.x * share + low.x, range.y * share + low.y, range.z * share + low.z,
+                range.w * share + low.w);
+}
+
+// The quaternion that turns a parent particle's new children by the parent description's turn
+// mode (word 49's low byte) with the turn words t (8 to 11): 5 euler degrees, 2 an axis (x, y
+// and the z that makes it unit length) and angle, 3 none, else from up to t's direction.
+vec4 ParentTurn(uint mode, vec4 t) {
+    vec4 q = vec4(0.0, 0.0, 0.0, 1.0);
+    if (mode != 5u) {
+        if (mode != 2u) {
+            if (mode != 3u) {
+                const float inverse = 1.0 / sqrt(fma(t.z, t.z, fma(t.y, t.y, t.x * t.x)));
+                const float y = inverse * t.y;
+                if (!(y >= uintBitsToFloat(0x3f7fff58u))) {
+                    q = vec4(1.0, 0.0, 0.0, 0.0);
+                    if (!(y <= uintBitsToFloat(0xbf7fff58u))) {
+                        const float z = inverse * t.z;
+                        const float x = -t.x * inverse + 0.0;
+                        const float length2 = fma(x, x, z * z);
+                        const float inverse2 = 1.0 / sqrt(length2);
+                        const float w = sqrt(0.5 * y + 0.5);
+                        const float half_sin = sqrt(length2) * (1.0 / (2.0 * w));
+                        q = vec4(inverse2 * z * half_sin, 0.0, x * inverse2 * half_sin, w);
+                    }
+                }
+            }
+        } else {
+            const float half_turns = uintBitsToFloat(0x3e22f983u) * (0.5 * t.w);
+            const float s = TurnSin(half_turns);
+            q = vec4(t.x * s, t.y * s, s * sqrt(t.y * -t.y + (-t.x * t.x + 1.0)),
+                     TurnCos(half_turns));
+        }
+    } else {
+        q = EulerTurn(t.xyz);
+    }
+    return q;
+}
+
+void main() {
+    uint object = gl_GlobalInvocationID.x;
+    if (active_address != 0ul) {
+        Words listing = Words(active_address);
+        if (object >= listing.words[0]) {
+            return;
+        }
+        object = listing.words[4u + object];
+    }
+    const uint description = EmitterWord(object, 8u);
+    if (DescriptionWord(description, 4u) != 1u) {
+        return;
+    }
+    const uint self = object & 0xffffffu;
+    const uint first = EmitterWord(object, 12u);
+    const uint ring = DescriptionWord(description, 6u);
+    // Word 14: the ring's head (or the fresh mark); 15 the bursts due; 24 the share of a particle
+    // carried to the next step.
+    uint head = EmitterWord(object, 14u);
+    uint bursts = EmitterWord(object, 15u);
+    float carried = EmitterFloat(object, 24u);
+    if (head == FreshMark) {
+        for (uint k = 0u; k < ring; k++) {
+            const uint particle = k + first;
+            SetParticleWords(particle, 8u, uvec4(0x3f7fffefu, 0u, 0x3f800000u, 0u));
+            SetParticleWord(particle, 12u, self);
+            SetParticleWord(particle, 13u, 0u);
+            SetParticleWords(particle, 0u, uvec4(0u));
+            SetParticleWords(particle, 4u, uvec4(0u));
+        }
+        head = 0u;
+        bursts = 1u;
+        carried = uintBitsToFloat(0x3f7fffefu);
+    }
+    // What the spawn leaves in the emitter: word 14 the new head, 26 the last step's gain, 27 the
+    // parent plus 0.4, 29 the head before, 30 the particles spawned, 31 the last particle's share
+    // along the step.
+    uint new_head = head;
+    uint gain = EmitterWord(object, 26u);
+    uint parent_word = EmitterWord(object, 27u);
+    uint spawned = 0u;
+    uint last_along = EmitterWord(object, 31u);
+    if (EmitterWord(object, 10u) == 1u) {
+        const uint effect = EmitterWord(object, 9u);
+        // The effect's time step (words 40 and 41) and intensity (42).
+        const float step = EffectFloat(effect, 40u) * EffectFloat(effect, 41u);
+        const float intensity = EffectFloat(effect, 42u);
+        if (0.0 < min(step, intensity)) {
+            const uint parent_offset = DescriptionWord(description, 16u);
+            // The spawn mode: 0 by rate, 1 by distance moved, 2 bursts, 3 a burst when the
+            // parent particle's word 14 is odd.
+            const uint mode = DescriptionWord(description, 17u);
+            const uint frame = DescriptionWord(description, 18u);
+            const float rate = DescriptionFloat(description, 19u);
+            const uint flags = DescriptionWord(description, 3u);
+            const vec4 shape_size = DescriptionVector(description, 20u);
+            vec4 place_low = DescriptionVector(description, 24u);
+            vec4 place_high = DescriptionVector(description, 28u);
+            const vec4 shape2_size = DescriptionVector(description, 32u);
+            vec4 velocity_low = DescriptionVector(description, 36u);
+            vec4 velocity_high = DescriptionVector(description, 40u);
+            const float inherit = DescriptionFloat(description, 44u);
+            const uint shape_word = DescriptionWord(description, 52u);
+            const uint shape2_word = DescriptionWord(description, 53u);
+            const bool ordered = 0u < DescriptionWord(description, 54u);
+            const uint shape2_seed = DescriptionWord(description, 55u);
+            const vec4 turn_low = DescriptionVector(description, 56u);
+            const vec4 turn_range = DescriptionVector(description, 60u) - turn_low;
+            const uint set = EffectWord(effect, 45u) << 6;
+            const uvec3 curves = uvec3(DescriptionWord(description, 46u),
+                                       DescriptionWord(description, 47u),
+                                       DescriptionWord(description, 48u));
+            const uint turn_mode = DescriptionWord(description, 49u) & 0xffu;
+            const vec3 move = vec3(EffectFloat(effect, 16u) - EffectFloat(effect, 0u),
+                                   EffectFloat(effect, 17u) - EffectFloat(effect, 1u),
+                                   EffectFloat(effect, 18u) - EffectFloat(effect, 2u));
+            const vec3 past_move = vec3(EffectFloat(effect, 20u) - EffectFloat(effect, 4u),
+                                        EffectFloat(effect, 21u) - EffectFloat(effect, 5u),
+                                        EffectFloat(effect, 22u) - EffectFloat(effect, 6u));
+            // precise: the driver would otherwise make another lerp of move + along * change.
+            precise vec3 move_change = past_move - move;
+            const uint seed_base =
+                GameUintOf(uintBitsToFloat(0x49800000u) * EffectFloat(effect, 37u));
+            const uint seed_offset = EffectWord(effect, 32u);
+            const bool fixed_size = (flags & 0x100u) != 0u;
+            // Each shape plus 0x8000 (0x7fff for the second) is on; the second only with the
+            // first.
+            const bool shape_on = 0x8000u <= shape_word;
+            const bool shape2_on = 0x8000u <= shape2_word;
+            const uint shape = shape_word + 0xffff8000u;
+            const uint shape2 = shape2_word + 0xffff8001u;
+            const uvec3 columns = (curves + set) & 0x7ffu;
+            const vec3 block_rows = vec3(((curves + set) >> 11) << 6);
+            const float life_low = velocity_low.w;
+            const float life_range = velocity_high.w - velocity_low.w;
+            if (parent_offset != 0xffu) {
+                // Spawning by a parent emitter's particles: one block of per particles of the ring
+                // per particle of the parent's ring, its first the block's header (the carried
+                // share, the parent's time left as last seen, its age t; the head of the rest in
+                // word 13, the parent's place before in words 0 to 3). On the parent particle's
+                // birth the game's program also marks the old head as a chain's end (word 12
+                // bits 24 to 27 set, word 7 cleared) when it lies within the particle buffer's
+                // record count; GR2port's buffers carry no record count and keep both words.
+                const float burst = mode == 2u ? floor(rate) : 0.0;
+                const float rate_intensity = rate * intensity;
+                const float rated = step * rate_intensity;
+                const float to_step = 1.0 / (uintBitsToFloat(0x38d1b717u) + step);
+                const float ring_count = float(ring);
+                const uint parent = EffectWord(effect, 46u) - parent_offset;
+                const uint parent_description = EmitterWord(parent, 8u);
+                const vec4 parent_place = EmitterVector(parent, 0u);
+                const vec4 parent_turn = EmitterVector(parent, 4u);
+                const uint parent_first = EmitterWord(parent, 12u);
+                parent_word = floatBitsToUint(uintBitsToFloat(0x3ecccccdu) + float(parent));
+                const uint parent_ring = DescriptionWord(parent_description, 6u);
+                const float parent_life_low = DescriptionFloat(parent_description, 39u);
+                const float parent_life_range =
+                    DescriptionFloat(parent_description, 43u) - parent_life_low;
+                const uint parent_turn_mode = DescriptionWord(parent_description, 49u) & 0xffu;
+                const bool parent_frame =
+                    DescriptionWord(parent_description, 18u) == 1u && frame == 0u;
+                const uint per = GameDivide(ring, parent_ring);
+                const uint per_rest = per + 0xffffffffu;
+                const float rest_count = float(per_rest);
+                const float to_share_count = 1.0 / (mode == 2u ? max(1.0, rate) : rest_count);
+                const float scaled_count = intensity * rest_count;
+                const float place_u = CurveU(columns.x);
+                const float place_next_u = CurveU(columns.x + 1u);
+                const float velocity_u = CurveU(columns.y);
+                const float velocity_next_u = CurveU(columns.y + 1u);
+                const float gain_u = CurveU(columns.z);
+                gain = 0u;
+                last_along = 0u;
+                for (uint k = 0u; k < parent_ring; k++) {
+                    const uint base = first + k * per;
+                    const uint source = k + parent_first;
+                    const vec3 header = ParticleVector(base, 8u).xyz;
+                    vec4 anchor = ParticleVector(base, 0u);
+                    const uvec4 header_words = ParticleWords(base, 12u);
+                    vec4 place = ParticleVector(source, 0u);
+                    const vec4 source_turn = ParticleVector(source, 8u);
+                    if (parent_frame) {
+                        const vec3 turned = SpawnTurned(parent_turn, place.xyz);
+                        place = vec4(parent_place.w * turned.x + parent_place.x,
+                                     parent_place.w * turned.y + parent_place.y,
+                                     parent_place.w * turned.z + parent_place.z,
+                                     place.w * parent_place.w);
+                    }
+                    float carry = uintBitsToFloat(0x3f7ff972u);
+                    const uvec3 source_words = ParticleWords(source, 12u).xyz;
+                    const float left = ParticleFloat(source, 7u);
+                    const float life =
+                        RandomIn(parent_life_low, parent_life_range, source_words.y);
+                    const float t = (1.0 / life) * (life - left);
+                    float header_t = t;
+                    uint cursor = header_words.y;
+                    if (0.0 < left) {
+                        float extra = 0.0;
+                        float carry_in = header.x;
+                        if (header.y < left) {
+                            cursor = GameModulo(cursor + 1u, per_rest);
+                            extra = burst;
+                            anchor = place;
+                            carry_in = uintBitsToFloat(0x3f7ff972u);
+                            header_t = 0.0;
+                        }
+                        vec4 high = place_high;
+                        vec4 low = place_low;
+                        if (curves.x != 0u) {
+                            const float v = CurveV(block_rows.x, t);
+                            high = Curve(place_next_u, v);
+                            low = Curve(place_u, v);
+                        }
+                        vec3 velocity_top = velocity_high.xyz;
+                        vec3 velocity_bottom = velocity_low.xyz;
+                        if (curves.y != 0u) {
+                            const float v = CurveV(block_rows.y, t);
+                            velocity_top = Curve(velocity_next_u, v).xyz;
+                            velocity_bottom = Curve(velocity_u, v).xyz;
+                        }
+                        const vec3 travel = place.xyz - anchor.xyz;
+                        float count;
+                        float fraction;
+                        if (curves.z != 0u) {
+                            const float c = clamp(
+                                max(0.0, Curve(gain_u, CurveV(block_rows.z, t)).x), 0.0, 1.0);
+                            const float scaled = scaled_count * c;
+                            carry = scaled_count * c + -fract(scaled);
+                            const float gained = min(scaled_count * c + -carry_in, ring_count);
+                            fraction = fract(gained);
+                            count = gained - fraction;
+                        } else {
+                            float total = carry_in + rated;
+                            if (mode != 0u) {
+                                if (mode != 1u) {
+                                    total = carry_in;
+                                    if (mode == 3u) {
+                                        const float odd =
+                                            (source_words.z & 1u) != 0u ? rate : 0.0;
+                                        total = intensity * odd + carry_in;
+                                    }
+                                } else {
+                                    const float distance =
+                                        sqrt(fma(travel.z, travel.z,
+                                                 fma(travel.y, travel.y, travel.x * travel.x)));
+                                    const float to_size =
+                                        1.0 / max(uintBitsToFloat(0x3727c5acu), place.w);
+                                    total = rate_intensity * min(1.0, distance * to_size) +
+                                            carry_in;
+                                }
+                            }
+                            const float capped = min(total, ring_count);
+                            count = floor(capped);
+                            fraction = capped - count;
+                            carry = fraction;
+                        }
+                        vec4 q = vec4(0.0, 0.0, 0.0, 1.0);
+                        if ((flags & 0x20u) != 0u) {
+                            q = ParentTurn(parent_turn_mode, source_turn);
+                        }
+                        const float total = count + fraction;
+                        const float increment = total - carry_in;
+                        gain = floatBitsToUint(increment);
+                        last_along = floatBitsToUint(
+                            total != carry_in ? (1.0 / increment) * (-1.0 + total) : 0.0);
+                        const uint ids =
+                            0xfffffffu & ((bitfieldExtract(source_words.x, 28, 3) << 24) | self);
+                        const float size_from = (flags & 0x40u) != 0u ? place.w : 1.0;
+                        const vec3 inherited = vec3(inherit * (travel.x * to_step),
+                                                    inherit * (travel.y * to_step),
+                                                    inherit * (travel.z * to_step));
+                        const float spawns = extra + count;
+                        const vec3 back = anchor.xyz - place.xyz;
+                        const float size_change =
+                            ((flags & 0x40u) != 0u ? anchor.w : 1.0) - size_from;
+                        const vec4 place_range = high - low;
+                        const vec3 velocity_range = velocity_top - velocity_bottom;
+                        const float to_increment = 1.0 / increment;
+                        for (float i = 0.0; i < spawns; i = 1.0 + i) {
+                            const uint next_cursor = GameModulo(cursor + 1u, per_rest);
+                            float along = 0.0;
+                            if (mode != 2u) {
+                                along = to_increment * (-1.0 + (total - i));
+                            }
+                            const Draw draw =
+                                DrawParticle(seed_base ^ ~(next_cursor + seed_offset), low,
+                                             place_range, velocity_bottom, velocity_range);
+                            const float scale = along * size_change + size_from;
+                            const vec3 from = vec3(along * back.x + place.x,
+                                                   along * back.y + place.y,
+                                                   along * back.z + place.z);
+                            const vec3 turned_velocity = SpawnTurned(q, draw.velocity);
+                            vec3 velocity = vec3(scale * turned_velocity.x + inherited.x,
+                                                 scale * turned_velocity.y + inherited.y,
+                                                 scale * turned_velocity.z + inherited.z);
+                            const vec3 turned_offset = SpawnTurned(q, draw.offset);
+                            vec3 spot = vec3(scale * turned_offset.x + from.x,
+                                             scale * turned_offset.y + from.y,
+                                             scale * turned_offset.z + from.z);
+                            uint state = draw.state;
+                            vec4 range_turn = vec4(0.0);
+                            if (turn_mode == 3u) {
+                                state = NextState(state);
+                                range_turn = RangeTurn(state, turn_low, turn_range);
+                            }
+                            if (shape_on) {
+                                const float share = float(cursor) * to_share_count;
+                                const float s = ordered ? share : StateRandom(state);
+                                const vec3 point = SpawnTurned(
+                                    q, shape_size.xyz * ShapePoint(shape, shape_size.w * s));
+                                spot = vec3(point.x * scale + spot.x, point.y * scale + spot.y,
+                                            point.z * scale + spot.z);
+                                if (shape2_on) {
+                                    const float s2 =
+                                        ordered ? share : StateRandom(shape2_seed + state);
+                                    const vec3 point2 =
+                                        SpawnTurned(q, shape2_size.xyz *
+                                                           ShapePoint(shape2, shape2_size.w * s2));
+                                    velocity = vec3(point2.x * scale + velocity.x,
+                                                    point2.y * scale + velocity.y,
+                                                    point2.z * scale + velocity.z);
+                                }
+                            }
+                            const vec4 turn = SpawnTurn(turn_mode, velocity,
+                                                        along * move_change + move, from,
+                                                        range_turn, state);
+                            const float size = (fixed_size ? 1.0 : scale) * draw.size;
+                            const float life_out = RandomIn(life_low, life_range, state);
+                            const uint slot = 1u + (cursor + base);
+                            SetParticleVector(slot, 0u, vec4(spot, size));
+                            const uint generation =
+                                bitfieldExtract(ParticleWord(slot, 12u), 28, 3);
+                            SetParticleVector(slot, 4u, vec4(velocity, life_out));
+                            SetParticleVector(slot, 8u, turn);
+                            SetParticleWords(slot, 12u,
+                                             uvec4((((1u + generation) & 7u) << 28) | ids, state,
+                                                   0u, 0u));
+                            cursor = next_cursor;
+                        }
+                    }
+                    SetParticleVector(base, 0u, place);
+                    SetParticleVector(base, 8u, vec4(carry, left, header.z, header_t));
+                    SetParticleWords(base, 12u, uvec4(header_words.x, cursor, header_words.zw));
+                    SetParticleWords(base, 4u, uvec4(0u));
+                }
+                new_head = head;
+            } else {
+                // Spawning from the emitter's own place: a running random state seeded by the
+                // description's seed (word 7), particles from the ring's head on.
+                const float low_time = DescriptionFloat(description, 0u);
+                const float time = (EmitterFloat(object, 11u) - low_time) *
+                                   (1.0 / (uintBitsToFloat(0x3727c5acu) +
+                                           (DescriptionFloat(description, 1u) - low_time)));
+                if (curves.x != 0u) {
+                    const float v = CurveV(block_rows.x, time);
+                    place_high = Curve(CurveU(1u + columns.x), v);
+                    place_low = Curve(CurveU(columns.x), v);
+                }
+                if (curves.y != 0u) {
+                    const float v = CurveV(block_rows.y, time);
+                    velocity_high.xyz = Curve(CurveU(1u + columns.y), v).xyz;
+                    velocity_low.xyz = Curve(CurveU(columns.y), v).xyz;
+                }
+                const vec4 now = EmitterVector(object, 0u);
+                const vec4 before = EmitterVector(object, 16u);
+                const vec3 travel = vec3(now.x - before.x, now.y - before.y, now.z - before.z);
+                float count;
+                float fraction;
+                float carry;
+                if (curves.z != 0u) {
+                    const float c = Curve(CurveU(columns.z), CurveV(block_rows.z, time)).x;
+                    const float ring_count = float(ring);
+                    const float amount = intensity * ring_count;
+                    const float c_clamped = clamp(max(0.0, c), 0.0, 1.0);
+                    const float gained = min(amount * c_clamped + -carried, ring_count);
+                    fraction = fract(gained);
+                    count = gained - fraction;
+                    carry = amount * c_clamped + -fract(amount * c_clamped);
+                } else {
+                    float total;
+                    if (mode != 2u) {
+                        const float rate_intensity = rate * intensity;
+                        total = rate_intensity * step + carried;
+                        if (mode != 0u) {
+                            total = carried;
+                            if (mode == 1u) {
+                                const float distance =
+                                    sqrt(fma(travel.z, travel.z,
+                                             fma(travel.y, travel.y, travel.x * travel.x)));
+                                const float to_size =
+                                    1.0 / max(uintBitsToFloat(0x38d1b717u), now.w);
+                                total = rate_intensity * min(1.0, distance * to_size) + carried;
+                            }
+                        }
+                    } else {
+                        total = floor(rate * intensity) * float(bursts) + carried;
+                    }
+                    const float capped = min(total, float(ring));
+                    fraction = fract(capped);
+                    count = capped - fraction;
+                    carry = fraction;
+                    bursts = 0u;
+                }
+                const float total = count + fraction;
+                const float increment = total - carried;
+                const float to_increment = 1.0 / increment;
+                const float to_step = 1.0 / (uintBitsToFloat(0x38d1b717u) + step);
+                const float share_count = mode == 2u ? max(1.0, rate) : float(ring);
+                const float along_last =
+                    total == carried ? 0.0 : to_increment * (-1.0 + total);
+                const vec3 inherited = vec3(inherit * (travel.x * to_step),
+                                            inherit * (travel.y * to_step),
+                                            inherit * (travel.z * to_step));
+                const vec4 back = before - now;
+                const vec4 place_range = place_high - place_low;
+                const vec3 velocity_range = velocity_high.xyz - velocity_low.xyz;
+                const uint ids =
+                    0xfffffffu & ((((EffectWord(effect, 36u) % 15u + 1u) & 0xfu) << 24) | self);
+                uint state = (seed_base ^ ~(DescriptionWord(description, 7u) + seed_offset)) &
+                             0xfffffu;
+                const float to_share_count = 1.0 / share_count;
+                const vec4 turn = EmitterVector(object, 4u);
+                gain = 0u;
+                last_along = 0u;
+                uint cursor = head;
+                for (float i = 0.0; i < count; i = 1.0 + i) {
+                    const uint next_cursor = GameModulo(cursor + 1u, ring);
+                    const float along = to_increment * (-1.0 + (total - i));
+                    const float share = float(cursor) * to_share_count;
+                    const Draw draw = DrawParticle(state, place_low, place_range, velocity_low.xyz,
+                                                   velocity_range);
+                    state = draw.state;
+                    vec3 spot = draw.offset;
+                    vec3 velocity = draw.velocity;
+                    float size = draw.size;
+                    vec3 from = vec3(0.0);
+                    vec4 range_turn = vec4(0.0);
+                    if (frame != 1u) {
+                        // In the world: turned and scaled by the emitter, from its place along
+                        // the step.
+                        const float scale = back.w * along + now.w;
+                        from = vec3(back.x * along + now.x, back.y * along + now.y,
+                                    back.z * along + now.z);
+                        const vec3 turned_velocity = SpawnTurned(turn, draw.velocity);
+                        velocity = vec3(scale * turned_velocity.x + inherited.x,
+                                        scale * turned_velocity.y + inherited.y,
+                                        scale * turned_velocity.z + inherited.z);
+                        const vec3 turned_offset = SpawnTurned(turn, draw.offset);
+                        spot = vec3(scale * turned_offset.x + from.x,
+                                    scale * turned_offset.y + from.y,
+                                    scale * turned_offset.z + from.z);
+                        size = (fixed_size ? 1.0 : scale) * draw.size;
+                        if (turn_mode == 3u) {
+                            state = NextState(state);
+                            range_turn = RangeTurn(state, turn_low, turn_range);
+                        }
+                        if (shape_on) {
+                            const float s = ordered ? share : StateRandom(state);
+                            const vec3 point = SpawnTurned(
+                                turn, shape_size.xyz * ShapePoint(shape, shape_size.w * s));
+                            spot = vec3(point.x * scale + spot.x, point.y * scale + spot.y,
+                                        point.z * scale + spot.z);
+                            if (shape2_on) {
+                                const float s2 =
+                                    ordered ? share : StateRandom(shape2_seed + state);
+                                const vec3 point2 = SpawnTurned(
+                                    turn, shape2_size.xyz * ShapePoint(shape2, shape2_size.w * s2));
+                                velocity = vec3(point2.x * scale + velocity.x,
+                                                point2.y * scale + velocity.y,
+                                                point2.z * scale + velocity.z);
+                            }
+                        }
+                    } else {
+                        // In the emitter's frame: the draws as they are.
+                        if (turn_mode == 3u) {
+                            state = NextState(state);
+                            range_turn = RangeTurn(state, turn_low, turn_range);
+                        }
+                        if (shape_on) {
+                            const float s = ordered ? share : StateRandom(state);
+                            const vec3 point = ShapePoint(shape, shape_size.w * s);
+                            spot = vec3(point.x * shape_size.x + spot.x,
+                                        point.y * shape_size.y + spot.y,
+                                        point.z * shape_size.z + spot.z);
+                            if (shape2_on) {
+                                const float s2 =
+                                    ordered ? share : StateRandom(shape2_seed + state);
+                                const vec3 point2 = ShapePoint(shape2, shape2_size.w * s2);
+                                velocity = vec3(point2.x * shape2_size.x + velocity.x,
+                                                point2.y * shape2_size.y + velocity.y,
+                                                point2.z * shape2_size.z + velocity.z);
+                            }
+                        }
+                    }
+                    const vec4 particle_turn = SpawnTurn(turn_mode, velocity,
+                                                         along * move_change + move, from,
+                                                         range_turn, state);
+                    const float life_out =
+                        along * -step + RandomIn(life_low, life_range, state);
+                    const uint slot = first + cursor;
+                    const uint generation = bitfieldExtract(ParticleWord(slot, 12u), 28, 3);
+                    SetParticleVector(slot, 4u, vec4(velocity, life_out));
+                    SetParticleVector(slot, 0u, vec4(spot, size));
+                    SetParticleVector(slot, 8u, particle_turn);
+                    SetParticleWords(slot, 12u,
+                                     uvec4((((1u + generation) & 7u) << 28) | ids, state, 0u, 0u));
+                    last_along = floatBitsToUint(along_last);
+                    cursor = next_cursor;
+                    gain = floatBitsToUint(increment);
+                }
+                new_head = cursor;
+                carried = carry;
+                parent_word = 0u;
+                // The count spawned, kept by word 50's bit 0 or a first shape up to 0x8000.
+                spawned = GameUintOf(count);
+                if ((DescriptionWord(description, 50u) & 1u) == 0u && !(0x8000u >= shape_word)) {
+                    spawned = 0u;
+                }
+            }
+        }
+    }
+    SetEmitterWord(object, 14u, new_head);
+    SetEmitterWord(object, 15u, bursts);
+    SetEmitterWord(object, 24u, floatBitsToUint(carried));
+    SetEmitterWord(object, 26u, gain);
+    SetEmitterWord(object, 27u, parent_word);
+    SetEmitterWord(object, 29u, head);
+    SetEmitterWord(object, 30u, spawned);
+    SetEmitterWord(object, 31u, last_along);
+}
