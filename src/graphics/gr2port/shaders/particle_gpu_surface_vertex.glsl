@@ -77,6 +77,22 @@ vec3 HeightFog(float height) {
     return fma(high - low, vec3(fade), low);
 }
 
+// The parallax shift of a view position on a surface: its shares along the tangent and along
+// the bitangent (cross(normal, tangent) times the tangent's w) over its share along the normal,
+// times 0.1. Plain products and sums: the driver fuses them as it does the game's.
+vec2 ParallaxShift(vec3 view, vec3 normal, vec4 tangent) {
+    const float to_normal = 1.0 / (view.x * normal.x + (normal.y * view.y + view.z * normal.z));
+    const vec3 bitangent = vec3(normal.z * -tangent.y + tangent.z * normal.y,
+                                normal.x * -tangent.z + tangent.x * normal.z,
+                                normal.y * -tangent.x + tangent.y * normal.x);
+    const float along_tangent =
+        tangent.x * view.x + (tangent.y * view.y + view.z * tangent.z);
+    const float along_bitangent =
+        view.x * bitangent.x + (view.y * bitangent.y + bitangent.z * view.z);
+    return vec2(0.1 * (to_normal * along_tangent),
+                0.1 * ((tangent.w * to_normal) * along_bitangent));
+}
+
 // The colour times the emitter's entry in the colour list (16 bytes an emitter) where
 // c_materialAttr2.x reaches 1 - 2^-23.
 vec4 ListedColor(ParticleModelPoint point, vec4 color) {

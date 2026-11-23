@@ -256,13 +256,9 @@ vec4 ModelClip(ParticleModelPoint point) {
     return clip;
 }
 
-// A gem's clip position: the view position projected; where the point spun and c_materialAttr.z
-// is not 0, its depth moved first by a trip through c_projMat's and c_projInvMat's first three
-// rows.
-vec4 GemClip(ParticleModelPoint point) {
-    if (!point.shown) {
-        return vec4(0.0);
-    }
+// The view position; where the point spun and c_materialAttr.z is not 0, its depth moved by a
+// trip through c_projMat's and c_projInvMat's first three rows.
+vec3 MovedView(ParticleModelPoint point) {
     vec3 view = point.view;
     if (!point.view_turn && DrawFloat(74u) != 0.0) {
         const vec3 projected = vec3(MatrixRow(16u, view, DrawFloat(19u)),
@@ -272,7 +268,15 @@ vec4 GemClip(ParticleModelPoint point) {
         view = vec3(MatrixRow(48u, moved, DrawFloat(51u)), MatrixRow(52u, moved, DrawFloat(55u)),
                     MatrixRow(56u, moved, DrawFloat(59u)));
     }
-    return ClipPosition(view);
+    return view;
+}
+
+// A gem's clip position: the moved view position projected.
+vec4 GemClip(ParticleModelPoint point) {
+    if (!point.shown) {
+        return vec4(0.0);
+    }
+    return ClipPosition(MovedView(point));
 }
 
 // A direction at the mesh point (n from -1 to 1) as the point turns: turned by the particle,
