@@ -15,8 +15,8 @@ class CodeGenerator;
 // game's command buffers and there is no command processor: Gr2Port::GpuWrites makes their fences,
 // and a flip goes to the video out at its submit. The game's per-item draw loop returns at once,
 // and the draws and dispatches the frame graph asks for are dropped: they are for the world's
-// picture, which nothing reads. The screen drawing after the frame graph keeps the packets
-// UiCapture reads.
+// picture, which nothing reads. The screen drawing after the frame graph keeps its draws, which
+// UiCapture records in place of their writers.
 namespace Gr2Port::FrameGraphDraws {
 
 /// When the executable loads, with its base address. Stubs are written by c within capacity bytes
@@ -26,5 +26,8 @@ void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 /// On the game's draw thread: if running is true, the frame graph begins; otherwise it has
 /// returned.
 void SetFrameGraphRunning(bool running);
+
+/// On the game's draw thread: whether the frame graph runs.
+bool FrameGraphRunning();
 
 } // namespace Gr2Port::FrameGraphDraws

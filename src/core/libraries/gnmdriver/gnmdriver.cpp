@@ -26,9 +26,9 @@ struct ComputeRing {
 static std::array<ComputeRing, NumComputePipes * NumQueuesPerPipe> compute_rings{};
 static u32 mapped_rings = 0;
 
-// GR2port: Gr2Port::UiCapture reads the low words of the programs' addresses from what the shader
-// functions write; every program the game binds lies below 1 TiB, so the high words stay 0. A
-// shader function writes the low word and a NOP over the rest of the space the game reserved.
+// GR2port: every program the game binds lies below 1 TiB, so the high words of the programs'
+// addresses stay 0. A shader function writes the low word and a NOP over the rest of the space the
+// game reserved.
 static s32 WriteProgram(u32* cmdbuf, u32 size, u32 reg, u32 address) {
     cmdbuf[0] = 0xc0017600u; // SET_SH_REG of one register.
     cmdbuf[1] = reg;
@@ -43,8 +43,7 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
     *ring.read_pointer = next_offs_dw & (ring.size_dwords - 1);
 }
 
-// GR2port: the draw packets cover the space the game reserved, with the words Gr2Port::UiCapture
-// reads.
+// GR2port: the draw packets cover the space the game reserved.
 s32 PS4_SYSV_ABI sceGnmDrawIndexAuto(u32* cmdbuf, u32 size, u32 index_count, u32 flags) {
     cmdbuf[0] = 0xc0002d00u | (size - 2) << 16; // DRAW_INDEX_AUTO
     cmdbuf[1] = index_count;

@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <array>
-#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -17,6 +16,7 @@
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/capture_math.h"
+#include "graphics/gr2port/frame_graph_draws.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/marker_fit.h"
 #include "graphics/gr2port/photo_ui.h"
@@ -30,15 +30,11 @@ namespace {
 
 using Capture::Load;
 
-// The draw thread's contexts and the indices of the frame's and the last frame's. A context begins
-// with its command stream: its first word, its end and where the next command goes.
+// The draw thread's contexts and the indices of the frame's and the last frame's.
 constexpr VAddr Contexts = 0x1f315d8;
 constexpr u64 ContextBytes = 0xcff8;
 constexpr VAddr ContextIndex = 0x1f585f0;
 constexpr VAddr PreviousContextIndex = 0x1f585f4;
-constexpr u64 StreamBegin = 0x0;
-constexpr u64 StreamEnd = 0x8;
-constexpr u64 StreamNext = 0x10;
 // A context's cached state, which it sends only when it changes: the viewport's x, y, width and
 // height, whether colour blends, the blend's two operations and four factors, the primitive type,
 // and the index buffer's type and address.
@@ -81,19 +77,45 @@ constexpr std::array FinderTextures{
     FinderTexture{1280, 256, 41},
 };
 
-// Command packets.
-constexpr u32 PacketType2 = 2;
-constexpr u32 PacketType3 = 3;
-constexpr u32 OpIndexBase = 0x26;
-constexpr u32 OpDrawIndex2 = 0x27;
-constexpr u32 OpIndexType = 0x2a;
-constexpr u32 OpDrawIndexAuto = 0x2d;
-constexpr u32 OpDrawIndexOffset2 = 0x35;
-constexpr u32 OpSetContextReg = 0x69;
-constexpr u32 OpSetShReg = 0x76;
-constexpr u32 OpSetUconfigReg = 0x79;
+// The game's writers of the screen drawing's state and draws. Each writes only its packet, which
+// nothing reads, so UiCapture keeps what each sets in its place. FUN_00413c90 and
+// FUN_00413d50(commands, registers) set and update the pixel shader, FUN_00413db0 and FUN_00413e90
+// (commands, registers, modifier) the vertex shader, and FUN_00413f00 the export shader, through
+// the driver, whose packet sets the low word of the program's address to the registers' first
+// word.
+constexpr Hooks::Entry PsProgramWriter{0x413c90, 6, Hooks::FramePrologueR14};
+constexpr Hooks::Entry PsProgramUpdater{0x413d50, 6, Hooks::FramePrologueR14};
+constexpr Hooks::Entry VsProgramWriter{0x413db0, 6, Hooks::FramePrologue};
+constexpr Hooks::Entry VsProgramUpdater{0x413e90, 6, Hooks::FramePrologue};
+constexpr Hooks::Entry EsProgramWriter{0x413f00, 6, Hooks::FramePrologue};
+// FUN_00414ec0(commands, stage, slot, value) sets two user data registers of a stage to a 64-bit
+// value, and FUN_00414fe0(commands, stage, slot, values, count) count of them. A stage's user data
+// begin at its entry of the table at 0x17f9e50, an offset from 0x2c00.
+constexpr Hooks::Entry UserDataPairWriter{0x414ec0, 6, Hooks::FramePrologue};
+constexpr Hooks::Entry UserDataWriter{0x414fe0, 6, Hooks::FramePrologue};
+constexpr VAddr StageUserData = 0x17f9e50;
+constexpr u32 ShFirst = 0x2c00;
+// FUN_00411610(commands, slot, value) sets a target's blend, FUN_00411d60(commands, slot, target)
+// a colour target, when FUN_00425d50(target) finds it valid, FUN_00415120(commands, viewport,
+// scale, offset) a viewport's x, y and z scales and offsets, and FUN_004152c0(commands, left, top,
+// right, bottom) the screen scissor. The engine sets the screen scissor to the viewport, and to
+// the target's whole size right after it sets a target.
+constexpr Hooks::Entry BlendWriter{0x411610, 6, Hooks::FramePrologue};
+constexpr Hooks::Entry TargetWriter{0x411d60, 6, Hooks::FramePrologue};
+constexpr VAddr TargetCheck = 0x425d50;
+constexpr Hooks::Entry ViewportWriter{0x415120, 6, Hooks::FramePrologue};
+constexpr Hooks::Entry ScissorWriter{0x4152c0, 6, Hooks::FramePrologue};
+// FUN_00412520(commands, type) sets the primitive type, FUN_00413b90(commands, address) the index
+// buffer, and FUN_00413b10(commands, size, policy) the index size, 32 bits for a size other than 0.
+constexpr Hooks::Entry PrimitiveWriter{0x412520, 6, Hooks::FramePrologueR14};
+constexpr Hooks::Entry IndexBaseWriter{0x413b90, 6, Hooks::FramePrologueR14};
+constexpr Hooks::Entry IndexTypeWriter{0x413b10, 6, Hooks::FramePrologue};
+// FUN_00412820(commands, count, flags) draws count vertices, FUN_00412c50(commands, first, count,
+// flags) count indices from first on.
+constexpr Hooks::Entry DrawWriter{0x412820, 6, Hooks::FramePrologue};
+constexpr Hooks::Entry IndexedDrawWriter{0x412c50, 6, Hooks::FramePrologue};
 
-// Registers, as offsets from the first of their kind.
+// Shader registers, as offsets from the first.
 constexpr u32 Registers = 0x400;
 constexpr u32 ShPgmLoPs = 0x08;
 constexpr u32 ShPgmHiPs = 0x09;
@@ -105,16 +127,9 @@ constexpr u32 ShUserDataGs = 0x8c;
 constexpr u32 ShPgmLoEs = 0xc8;
 constexpr u32 ShPgmHiEs = 0xc9;
 constexpr u32 ShUserDataEs = 0xcc;
-// The engine sets the screen scissor to the viewport, and to the target's whole size right after
-// it sets a target.
-constexpr u32 ContextScreenScissor = 0x0c;
-constexpr u32 ContextViewportScaleX = 0x10f;
-constexpr u32 ContextViewportOffsetX = 0x110;
-constexpr u32 ContextViewportScaleY = 0x111;
-constexpr u32 ContextViewportOffsetY = 0x112;
-constexpr u32 ContextBlend0 = 0x1e0;
-constexpr u32 ContextColor0Base = 0x318;
-constexpr u32 UconfigPrimitive = 0x242;
+// The user data a draw reads of the vertex, export and pixel stages, and of the geometry stage.
+constexpr u32 UserData = 16;
+constexpr u32 GsUserData = 4;
 
 // A vertex program's user data: the fetch program, the table of its inputs' buffers, its constants
 // and its palette. A pixel program's: a T#, an S#, and its constants, or with a second texture a
@@ -219,43 +234,53 @@ u32 g_shared_generation = 0;
 // TextureHandle's answer for a texture the renderer does not have yet.
 constexpr u32 NotReady = ~0u;
 
+// The state a draw of the screen drawing reads besides its programs and user data: the viewport's
+// x scale and offset, then its y scale and offset, the first target's blend and its address in
+// units of 256 bytes, the primitive type, the size of an index and the index buffer's address.
+struct DrawContext {
+    std::array<float, 4> viewport{};
+    u32 blend = 0;
+    u32 color0_base = 0;
+    u32 primitive = 0;
+    u32 index_bits = 16;
+    u64 index_base = 0;
+    // The size the engine gave the current target, 0 until it sets the scissor after the target.
+    u32 target_width = 0;
+    u32 target_height = 0;
+};
+
+// A draw of the screen drawing, with the state the game had set for it. An indexed draw reads
+// count indices from first on. A kept draw stays while the screen drawing is hidden.
+struct RecordedDraw {
+    DrawContext context;
+    u64 vs_program;
+    u64 ps_program;
+    u64 es_program;
+    std::array<u32, UserData> vs_user;
+    std::array<u32, UserData> es_user;
+    std::array<u32, UserData> ps_user;
+    std::array<u32, GsUserData> gs_user;
+    bool indexed;
+    u32 first;
+    u32 count;
+    bool kept;
+};
+
+// The draw thread alone uses what follows: the shader registers and the rest of the state as the
+// game last set them, the draws since the last Write or Skip, whether the frame graph ran in the
+// frame, and whether the draws made now stay while the screen drawing is hidden.
 VAddr g_base = 0;
-VAddr g_context = 0;
-VAddr g_start = 0;
 std::array<u32, Registers> g_sh{};
-std::array<u32, Registers> g_context_registers{};
-std::array<u32, Registers> g_uconfig{};
-u64 g_index_base = 0;
-u32 g_index_bits = 16;
-// The size the engine gave the current target, 0 until it sets the scissor after the target.
-u32 g_target_width = 0;
-u32 g_target_height = 0;
+DrawContext g_state;
+std::vector<RecordedDraw> g_recorded;
+bool g_frame_graph = false;
+bool g_keeping = false;
 
 // Kept through the run, as the renderer keeps an image per target.
 std::array<Scene::UiTarget, Scene::MaxUiTargets> g_targets{};
 u32 g_target_count = 0;
 
 std::array<Scene::UiRun, Scene::MaxUiRuns> g_runs;
-// The commands that stay while the screen drawing is hidden, in the order the game wrote them, in
-// each of the game's three contexts and in the frame being written. The draw thread alone uses
-// them.
-struct KeptCommands {
-    struct Range {
-        const u32* first;
-        const u32* end;
-    };
-    u32 count = 0;
-    std::array<Range, 32> ranges{};
-
-    bool Holds(const u32* command) const {
-        return std::ranges::any_of(std::span{ranges}.first(count), [&](const Range& range) {
-            return command >= range.first && command < range.end;
-        });
-    }
-};
-std::array<KeptCommands, 3> g_kept;
-KeptCommands g_frame_kept;
-const u32* g_kept_first = nullptr;
 // Per target, the frame that last wrote it, plus one. A write after FreshGap frames without one
 // is fresh: the game keeps what it drew there for later frames.
 constexpr u64 FreshGap = 16;
@@ -277,13 +302,11 @@ u32 g_frames = 0;
 u32 g_world_frames = 0;
 u64 g_draws = 0;
 u64 g_runs_total = 0;
-u64 g_words = 0;
 u64 g_bytes = 0;
 u64 g_unknown = 0;
 u64 g_unported = 0;
 u64 g_dropped = 0;
 u64 g_write_ns = 0;
-u32 g_unread = 0;
 // Whether this frame, and the last, drew the viewfinder's guide frame: the camera's view, whose
 // draws of the other FinderTextures are the viewfinder's. Gameplay and the pause menu draw the
 // vignette too, and the pause menu draws textures of other pieces' shapes.
@@ -344,11 +367,133 @@ u64 SharpAddress(const u32* sharp) {
     return (u64{sharp[1] & 0xff} << 32 | sharp[0]) << 8;
 }
 
-void Store(std::array<u32, Registers>& registers, const u32* body, u32 values) {
-    const u32 first = body[0] & 0xffff;
-    if (first < Registers && first + values <= Registers) {
-        std::memcpy(&registers[first], body + 1, values * sizeof(u32));
+// The writers below keep nothing while the frame graph runs: its state and draws are for the
+// world's picture, which nothing reads.
+bool Recording() {
+    return !FrameGraphDraws::FrameGraphRunning();
+}
+
+void SetUserData(u32 stage, u32 slot, const u32* values, u32 count) {
+    if (!Recording()) {
+        return;
     }
+    const u32 stage_first =
+        Load<u16>(g_base + StageUserData - Hooks::CodeBase + u64{stage} * sizeof(u16));
+    const u32 first = (stage_first - ShFirst + slot) & 0xffff;
+    if (first < Registers && first + count <= Registers) {
+        std::memcpy(&g_sh[first], values, count * sizeof(u32));
+    }
+}
+
+template <size_t Count>
+std::array<u32, Count> UserDataAt(u32 first) {
+    std::array<u32, Count> values;
+    std::memcpy(values.data(), &g_sh[first], sizeof(values));
+    return values;
+}
+
+void Record(bool indexed, u32 first, u32 count) {
+    if (!Recording()) {
+        return;
+    }
+    g_recorded.push_back({
+        .context = g_state,
+        .vs_program = ProgramAddress(g_sh[ShPgmLoVs], g_sh[ShPgmHiVs]),
+        .ps_program = ProgramAddress(g_sh[ShPgmLoPs], g_sh[ShPgmHiPs]),
+        .es_program = ProgramAddress(g_sh[ShPgmLoEs], g_sh[ShPgmHiEs]),
+        .vs_user = UserDataAt<UserData>(ShUserDataVs),
+        .es_user = UserDataAt<UserData>(ShUserDataEs),
+        .ps_user = UserDataAt<UserData>(ShUserDataPs),
+        .gs_user = UserDataAt<GsUserData>(ShUserDataGs),
+        .indexed = indexed,
+        .first = first,
+        .count = count,
+        .kept = g_keeping,
+    });
+}
+
+// In place of the writers above.
+void PS4_SYSV_ABI OnPsProgram(VAddr, const u32* registers) {
+    if (Recording()) {
+        g_sh[ShPgmLoPs] = registers != nullptr ? registers[0] : 0;
+    }
+}
+
+void PS4_SYSV_ABI OnVsProgram(VAddr, const u32* registers) {
+    if (Recording()) {
+        g_sh[ShPgmLoVs] = registers[0];
+    }
+}
+
+void PS4_SYSV_ABI OnEsProgram(VAddr, const u32* registers) {
+    if (Recording()) {
+        g_sh[ShPgmLoEs] = registers[0];
+    }
+}
+
+void PS4_SYSV_ABI OnUserDataPair(VAddr, u32 stage, u32 slot, u64 value) {
+    const std::array<u32, 2> values{static_cast<u32>(value), static_cast<u32>(value >> 32)};
+    SetUserData(stage, slot, values.data(), static_cast<u32>(values.size()));
+}
+
+void PS4_SYSV_ABI OnUserData(VAddr, u32 stage, u32 slot, const u32* values, u32 count) {
+    SetUserData(stage, slot, values, count);
+}
+
+void PS4_SYSV_ABI OnBlend(VAddr, u32 slot, u32 value) {
+    if (Recording() && slot == 0) {
+        g_state.blend = value & 0xffff1fff;
+    }
+}
+
+void PS4_SYSV_ABI OnTarget(VAddr, u32 slot, const u32* target) {
+    using Check = u32 PS4_SYSV_ABI (*)(const u32*);
+    if (!Recording() || slot != 0 || target == nullptr ||
+        reinterpret_cast<Check>(g_base + TargetCheck - Hooks::CodeBase)(target) == 0) {
+        return;
+    }
+    g_state.color0_base = target[0];
+    g_state.target_width = 0;
+    g_state.target_height = 0;
+}
+
+void PS4_SYSV_ABI OnViewport(VAddr, u32 viewport, const float* scale, const float* offset) {
+    if (Recording() && viewport == 0) {
+        g_state.viewport = {scale[0], offset[0], scale[1], offset[1]};
+    }
+}
+
+void PS4_SYSV_ABI OnScissor(VAddr, u32, u32, u32 right, u32 bottom) {
+    if (Recording() && g_state.target_width == 0) {
+        g_state.target_width = right & 0xffff;
+        g_state.target_height = bottom & 0xffff;
+    }
+}
+
+void PS4_SYSV_ABI OnPrimitive(VAddr, u32 type) {
+    if (Recording()) {
+        g_state.primitive = type & 0x3f;
+    }
+}
+
+void PS4_SYSV_ABI OnIndexBase(VAddr, u64 address) {
+    if (Recording()) {
+        g_state.index_base = address & 0xff'ffff'fffe;
+    }
+}
+
+void PS4_SYSV_ABI OnIndexType(VAddr, u32 size) {
+    if (Recording()) {
+        g_state.index_bits = (size & 3) != 0 ? 32 : 16;
+    }
+}
+
+void PS4_SYSV_ABI OnDraw(VAddr, u32 count) {
+    Record(false, 0, count);
+}
+
+void PS4_SYSV_ABI OnIndexedDraw(VAddr, u32 first, u32 count) {
+    Record(true, first, count);
 }
 
 u32 FindTarget(u64 base, u32 width, u32 height) {
@@ -397,7 +542,7 @@ public:
         g_shared_generation++;
     }
 
-    void Draw(u32 opcode, const u32* body);
+    void Draw(const RecordedDraw& recorded);
     void Shape(std::span<const float> vertices, u32 target);
     void Finish();
 
@@ -576,9 +721,10 @@ void Writer::AddRun(const Scene::UiRun& state) {
     g_runs[ui.runs++] = state;
 }
 
-void Writer::Draw(u32 opcode, const u32* body) {
-    const u64 vs = ProgramAddress(g_sh[ShPgmLoVs], g_sh[ShPgmHiVs]);
-    const u64 ps = ProgramAddress(g_sh[ShPgmLoPs], g_sh[ShPgmHiPs]);
+void Writer::Draw(const RecordedDraw& recorded) {
+    const DrawContext& context = recorded.context;
+    const u64 vs = recorded.vs_program;
+    const u64 ps = recorded.ps_program;
     if (vs == 0 || ps == 0) {
         ui.dropped++;
         if (g_logged_drops < LoggedUnknowns) {
@@ -594,7 +740,7 @@ void Writer::Draw(u32 opcode, const u32* body) {
     const auto pixel_program = std::ranges::find(PixelPrograms, ps_hash, &PixelProgram::hash);
     const auto vertex_index = static_cast<u32>(vertex_program - VertexPrograms.begin());
     const bool stroke = vertex_index == static_cast<u32>(Scene::UiVertexProgram::Stroke);
-    const u64 es = ProgramAddress(g_sh[ShPgmLoEs], g_sh[ShPgmHiEs]);
+    const u64 es = recorded.es_program;
     const u32 es_hash = stroke && es != 0 ? Load<u32>(es + ProgramHash) : 0;
     if (vertex_program == VertexPrograms.end() || pixel_program == PixelPrograms.end() ||
         (stroke && es_hash != StrokeExportHash)) {
@@ -614,7 +760,7 @@ void Writer::Draw(u32 opcode, const u32* body) {
                      vs_hash, ps_hash);
         }
     };
-    const u32 primitive = g_uconfig[UconfigPrimitive];
+    const u32 primitive = context.primitive;
     if (ui.draws == Scene::MaxUiDraws || ui.runs == Scene::MaxUiRuns ||
         (primitive != Scene::UiPrimitiveList && primitive != Scene::UiPrimitiveStrip)) {
         ui.dropped++;
@@ -626,40 +772,29 @@ void Writer::Draw(u32 opcode, const u32* body) {
         }
         return;
     }
-    const auto viewport_value = [](u32 reg) {
-        return std::bit_cast<float>(g_context_registers[reg]);
-    };
-    const float scale_x = viewport_value(ContextViewportScaleX);
-    const float scale_y = viewport_value(ContextViewportScaleY);
-    const float offset_x = viewport_value(ContextViewportOffsetX);
-    const float offset_y = viewport_value(ContextViewportOffsetY);
-    const bool sized = g_target_width != 0;
-    const u32 target =
-        FindTarget(u64{g_context_registers[ContextColor0Base]} << 8,
-                   sized ? g_target_width : static_cast<u32>(2.0f * std::abs(scale_x) + 0.5f),
-                   sized ? g_target_height : static_cast<u32>(2.0f * std::abs(scale_y) + 0.5f));
+    const auto [scale_x, offset_x, scale_y, offset_y] = context.viewport;
+    const bool sized = context.target_width != 0;
+    const u32 target = FindTarget(
+        u64{context.color0_base} << 8,
+        sized ? context.target_width : static_cast<u32>(2.0f * std::abs(scale_x) + 0.5f),
+        sized ? context.target_height : static_cast<u32>(2.0f * std::abs(scale_y) + 0.5f));
     if (target == Scene::MaxUiTargets) {
         drop("no target");
         return;
     }
 
-    u32 count = 0;
+    const u32 count = recorded.count;
     // The vertices the draw reads: from first_vertex on, vertices of them.
     u32 first_vertex = 0;
     u32 vertices = 0;
     Scene::UiDraw draw{};
-    if (opcode == OpDrawIndexAuto) {
-        count = body[0];
+    if (!recorded.indexed) {
         vertices = count;
     } else {
-        // DRAW_INDEX_OFFSET_2 reads the index buffer the engine set, DRAW_INDEX_2 its own.
-        const bool offset = opcode == OpDrawIndexOffset2;
-        count = offset ? body[2] : body[3];
-        draw.index_bits = g_index_bits;
+        draw.index_bits = context.index_bits;
         u32 highest = 0;
-        draw.indices =
-            CopyIndices(offset ? g_index_base : u64{body[1]} | u64{body[2]} << 32,
-                        offset ? body[1] : 0, count, g_index_bits, first_vertex, highest);
+        draw.indices = CopyIndices(context.index_base, recorded.first, count, context.index_bits,
+                                   first_vertex, highest);
         if (draw.indices == 0) {
             drop("no indices");
             return;
@@ -667,8 +802,8 @@ void Writer::Draw(u32 opcode, const u32* body) {
         vertices = highest - first_vertex + 1;
     }
 
-    const u32* const vs_user = stroke ? &g_sh[ShUserDataEs] : &g_sh[ShUserDataVs];
-    const u32* const ps_user = &g_sh[ShUserDataPs];
+    const u32* const vs_user = stroke ? recorded.es_user.data() : recorded.vs_user.data();
+    const u32* const ps_user = recorded.ps_user.data();
     if (vertex_program->inputs != 0 &&
         !CopyInputs(u64{vs_user[VsUserTable]} | u64{vs_user[VsUserTable + 1]} << 32,
                     vertex_program->inputs, first_vertex, vertices, draw)) {
@@ -706,7 +841,7 @@ void Writer::Draw(u32 opcode, const u32* body) {
         }
     }
     if (vertex_program->palette) {
-        draw.vs_palette = constants_of(stroke ? &g_sh[ShUserDataGs] : vs_user + VsUserPalette);
+        draw.vs_palette = constants_of(stroke ? recorded.gs_user.data() : vs_user + VsUserPalette);
         if (draw.vs_palette == 0) {
             drop("no palette");
             return;
@@ -799,12 +934,12 @@ void Writer::Draw(u32 opcode, const u32* body) {
         .target = target,
         .vertex = static_cast<u32>(vertex_program - VertexPrograms.begin()),
         .pixel = static_cast<u32>(pixel_program - PixelPrograms.begin()),
-        .blend = g_context_registers[ContextBlend0],
+        .blend = context.blend,
         .topology = primitive,
         .viewport = {offset_x - scale_x, offset_y - scale_y, 2.0f * scale_x, 2.0f * scale_y},
         .first = ui.draws,
         .count = 1,
-        .kept = g_frame_kept.Holds(body) ? 1u : 0u,
+        .kept = recorded.kept ? 1u : 0u,
     });
     g_commands[ui.draws] = {
         .vertex_count = count,
@@ -869,61 +1004,33 @@ void Writer::Finish() {
     std::memcpy(packet + Scene::UiDynamicOffset, g_dynamic.data(), ui.dynamic * sizeof(u32));
 }
 
-void Scan(const u32* at, const u32* stop, Writer& writer) {
-    g_words += static_cast<u64>(stop - at);
-    while (at < stop) {
-        const u32 header = *at;
-        const u32 type = header >> 30;
-        if (type == PacketType2) {
-            at++;
-            continue;
-        }
-        const u32 count = header >> 16 & 0x3fff;
-        if (type == PacketType3) {
-            const u32 opcode = header >> 8 & 0xff;
-            const u32* const body = at + 1;
-            switch (opcode) {
-            case OpSetShReg:
-                Store(g_sh, body, count);
-                break;
-            case OpSetContextReg: {
-                Store(g_context_registers, body, count);
-                const u32 first = body[0] & 0xffff;
-                if (first <= ContextColor0Base && ContextColor0Base < first + count) {
-                    g_target_width = 0;
-                    g_target_height = 0;
-                } else if (first == ContextScreenScissor && count >= 2 && g_target_width == 0) {
-                    g_target_width = body[2] & 0xffff;
-                    g_target_height = body[2] >> 16;
-                }
-                break;
-            }
-            case OpSetUconfigReg:
-                Store(g_uconfig, body, count);
-                break;
-            case OpIndexBase:
-                g_index_base = u64{body[0]} | u64{body[1] & 0xffff} << 32;
-                break;
-            case OpIndexType:
-                g_index_bits = (body[0] & 3) != 0 ? 32 : 16;
-                break;
-            case OpDrawIndexAuto:
-            case OpDrawIndexOffset2:
-            case OpDrawIndex2:
-                writer.Draw(opcode, body);
-                break;
-            default:
-                break;
-            }
-        }
-        at += count + 2;
-    }
-}
-
 } // namespace
 
-void Install(VAddr module_base) {
+void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     g_base = module_base;
+    const auto replace = [&](const Hooks::Entry& entry, auto* recorder) {
+        if (!Hooks::Hooked(Hooks::Replace(module_base, entry, c, capacity,
+                                          reinterpret_cast<const void*>(recorder)))) {
+            LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
+                      entry.address);
+        }
+    };
+    replace(PsProgramWriter, &OnPsProgram);
+    replace(PsProgramUpdater, &OnPsProgram);
+    replace(VsProgramWriter, &OnVsProgram);
+    replace(VsProgramUpdater, &OnVsProgram);
+    replace(EsProgramWriter, &OnEsProgram);
+    replace(UserDataPairWriter, &OnUserDataPair);
+    replace(UserDataWriter, &OnUserData);
+    replace(BlendWriter, &OnBlend);
+    replace(TargetWriter, &OnTarget);
+    replace(ViewportWriter, &OnViewport);
+    replace(ScissorWriter, &OnScissor);
+    replace(PrimitiveWriter, &OnPrimitive);
+    replace(IndexBaseWriter, &OnIndexBase);
+    replace(IndexTypeWriter, &OnIndexType);
+    replace(DrawWriter, &OnDraw);
+    replace(IndexedDrawWriter, &OnIndexedDraw);
 }
 
 void SetScrollBar(const ScrollBar& bar) {
@@ -934,58 +1041,41 @@ void SetScrollBar(const ScrollBar& bar) {
 
 void OnFrameGraphEnd() {
     const u32 index = Load<u32>(g_base + ContextIndex - Hooks::CodeBase);
-    g_context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
-    g_start = Load<VAddr>(g_context + StreamNext);
-    // The state the screen drawing does not send again.
-    const auto viewport = Load<std::array<s32, 4>>(g_context + ContextViewport);
+    const VAddr context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
+    g_frame_graph = true;
+    // The state the screen drawing does not set again.
+    const auto viewport = Load<std::array<s32, 4>>(context + ContextViewport);
     const float half_width = 0.5f * static_cast<float>(viewport[2]);
     const float half_height = 0.5f * static_cast<float>(viewport[3]);
-    g_context_registers[ContextViewportScaleX] = std::bit_cast<u32>(half_width);
-    g_context_registers[ContextViewportOffsetX] =
-        std::bit_cast<u32>(static_cast<float>(viewport[0]) + half_width);
-    g_context_registers[ContextViewportScaleY] = std::bit_cast<u32>(-half_height);
-    g_context_registers[ContextViewportOffsetY] =
-        std::bit_cast<u32>(static_cast<float>(viewport[1]) + half_height);
+    g_state.viewport = {half_width, static_cast<float>(viewport[0]) + half_width, -half_height,
+                        static_cast<float>(viewport[1]) + half_height};
     u32 blend = 0;
-    if (Load<u8>(g_context + ContextBlendOn) != 0) {
-        const auto ops = Load<std::array<u32, 2>>(g_context + ContextBlendOps);
-        const auto factors = Load<std::array<u32, 4>>(g_context + ContextBlendFactors);
+    if (Load<u8>(context + ContextBlendOn) != 0) {
+        const auto ops = Load<std::array<u32, 2>>(context + ContextBlendOps);
+        const auto factors = Load<std::array<u32, 4>>(context + ContextBlendFactors);
         constexpr u32 SeparateAlpha = 1u << 29;
         constexpr u32 Enable = 1u << 30;
         blend = factors[0] | ops[0] << 5 | factors[1] << 8 | factors[2] << 16 | ops[1] << 21 |
                 factors[3] << 24 | SeparateAlpha | Enable;
     }
-    g_context_registers[ContextBlend0] = blend;
-    g_uconfig[UconfigPrimitive] = Load<u32>(g_context + ContextPrimitive);
-    g_index_bits = Load<u32>(g_context + ContextIndexType) != 0 ? 32 : 16;
-    g_index_base = Load<VAddr>(g_context + ContextIndexBase);
+    g_state.blend = blend;
+    g_state.primitive = Load<u32>(context + ContextPrimitive);
+    g_state.index_bits = Load<u32>(context + ContextIndexType) != 0 ? 32 : 16;
+    g_state.index_base = Load<VAddr>(context + ContextIndexBase);
 }
 
 void Skip() {
-    g_context = 0;
+    g_frame_graph = false;
+    g_recorded.clear();
     PhotoUi::ForgetItems(Load<u32>(g_base + PreviousContextIndex - Hooks::CodeBase));
 }
 
 void BeginKept() {
-    const u32 index = Load<u32>(g_base + ContextIndex - Hooks::CodeBase);
-    const VAddr context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
-    g_kept_first = reinterpret_cast<const u32*>(Load<VAddr>(context + StreamNext));
+    g_keeping = true;
 }
 
 void EndKept() {
-    const u32 index = Load<u32>(g_base + ContextIndex - Hooks::CodeBase);
-    const VAddr context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
-    const auto* const end = reinterpret_cast<const u32*>(Load<VAddr>(context + StreamNext));
-    KeptCommands& kept = g_kept[index];
-    // A context's commands start over each time the game uses it.
-    if (kept.count != 0 && g_kept_first < kept.ranges[kept.count - 1].end) {
-        kept.count = 0;
-    }
-    if (kept.count != 0 && g_kept_first == kept.ranges[kept.count - 1].end) {
-        kept.ranges[kept.count - 1].end = end;
-    } else if (end > g_kept_first && kept.count < kept.ranges.size()) {
-        kept.ranges[kept.count++] = {g_kept_first, end};
-    }
+    g_keeping = false;
 }
 
 namespace {
@@ -1073,15 +1163,8 @@ void MarkTargets(Scene::Header& header) {
 void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     const auto start = std::chrono::steady_clock::now();
     const u32 index = Load<u32>(g_base + PreviousContextIndex - Hooks::CodeBase);
-    const VAddr context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
-    const VAddr begin = Load<VAddr>(context + StreamBegin);
-    const VAddr end = Load<VAddr>(context + StreamEnd);
-    const VAddr next = Load<VAddr>(context + StreamNext);
-    const VAddr from = context == g_context ? g_start : begin;
-    g_world_frames += context == g_context ? 1 : 0;
-    g_context = 0;
-    g_frame_kept = g_kept[index];
-    g_kept[index].count = 0;
+    g_world_frames += g_frame_graph ? 1 : 0;
+    g_frame_graph = false;
     PhotoUi::ForgetItems(index);
 
     Scene::UiHeader& ui = header.ui;
@@ -1096,11 +1179,10 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     g_finder_frame = false;
     g_back_buffers |= picture != Scene::MaxUiTargets ? 1u << picture : 0;
     Writer writer{packet, address, ui};
-    if (begin != 0 && from >= begin && from <= next && next <= end) {
-        Scan(reinterpret_cast<const u32*>(from), reinterpret_cast<const u32*>(next), writer);
-    } else {
-        g_unread++;
+    for (const RecordedDraw& recorded : g_recorded) {
+        writer.Draw(recorded);
     }
+    g_recorded.clear();
     if (picture != Scene::MaxUiTargets) {
         AddScrollBar(writer, picture);
     }
@@ -1121,26 +1203,23 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     if (++g_frames == ReportFrames) {
         constexpr double Frames = ReportFrames;
         LOG_INFO(Render_Vulkan,
-                 "GR2port UI: per frame {:.1f} draws in {:.1f} runs, {:.0f} command words, {:.0f} "
-                 "bytes copied, {:.1f} us to write; {:.1f} reads of textures not ready, {:.1f} "
-                 "draws not ported, {:.1f} dropped; {} frames unread, {} with the frame graph, {} "
-                 "targets",
+                 "GR2port UI: per frame {:.1f} draws in {:.1f} runs, {:.0f} bytes copied, {:.1f} "
+                 "us to write; {:.1f} reads of textures not ready, {:.1f} draws not ported, {:.1f} "
+                 "dropped; {} with the frame graph, {} targets",
                  static_cast<double>(g_draws) / Frames, static_cast<double>(g_runs_total) / Frames,
-                 static_cast<double>(g_words) / Frames, static_cast<double>(g_bytes) / Frames,
+                 static_cast<double>(g_bytes) / Frames,
                  static_cast<double>(g_write_ns) * 1e-3 / Frames,
                  static_cast<double>(g_unknown) / Frames, static_cast<double>(g_unported) / Frames,
-                 static_cast<double>(g_dropped) / Frames, g_unread, g_world_frames, g_target_count);
+                 static_cast<double>(g_dropped) / Frames, g_world_frames, g_target_count);
         g_frames = 0;
         g_world_frames = 0;
         g_draws = 0;
         g_runs_total = 0;
-        g_words = 0;
         g_bytes = 0;
         g_unknown = 0;
         g_unported = 0;
         g_dropped = 0;
         g_write_ns = 0;
-        g_unread = 0;
     }
 }
 

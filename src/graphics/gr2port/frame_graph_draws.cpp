@@ -17,13 +17,10 @@ namespace {
 constexpr Hooks::Entry DrawLoop{0x14214e0, 6, Hooks::FramePrologue};
 
 // What the game calls for each draw and dispatch on a graphics context. FUN_0042dc50 binds a
-// draw's shaders and writes their constants, FUN_0042da70 does the same for a dispatch, and the
-// others write the draw packets.
+// draw's shaders and writes their constants, and FUN_0042da70 does the same for a dispatch.
 constexpr std::array Writers{
     Hooks::Entry{0x42dc50, 6, Hooks::FramePrologue},
     Hooks::Entry{0x42da70, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x412c50, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x412820, 6, Hooks::FramePrologue},
     // The binders copy a stage's constant buffers, buffers, read-write buffers, textures,
     // read-write textures and samplers for its next draw on a graphics context, then for the next
     // dispatch on a compute queue.
@@ -39,55 +36,16 @@ constexpr std::array Writers{
     Hooks::Entry{0x42d410, 6, Hooks::FramePrologue},
     Hooks::Entry{0x42d4d0, 6, Hooks::FramePrologue},
     Hooks::Entry{0x42d590, 6, Hooks::FramePrologue},
-    // The writers of what the frame graph's passes still send: the registers of the draw
-    // wrappers' state flush FUN_01614150, the targets and viewports of FUN_016137a0,
-    // FUN_01616ee0, FUN_0161b3e0 and FUN_0161b760, the index buffer of FUN_01616e10, and the
-    // pipeline events. Each writes its packet and nothing else; the callers keep the engine's
-    // copy of the state, which UiCapture reads.
-    Hooks::Entry{0x411550, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x411610, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x411680, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
-    Hooks::Entry{0x411710, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x4118a0, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x411920, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x411980, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x4119e0, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x411a40, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
-    Hooks::Entry{0x411aa0, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
-    Hooks::Entry{0x411b10, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
-    Hooks::Entry{0x411b70, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x411bd0, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x411c50, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
-    Hooks::Entry{0x411d60, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x411e50, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x412520, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x412590, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x413b10, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x413b90, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x413bf0, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x4148e0, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x415120, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x4152c0, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x4154b0, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x415690, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x415b10, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x415b70, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x415bd0, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x415d10, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x415d80, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
-    Hooks::Entry{0x415df0, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
-    Hooks::Entry{0x415e60, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x415ed0, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x415f50, 6, Hooks::FramePrologueR14},
 };
 
 // push rbp; mov rbp, rsp.
 constexpr std::array<u8, 11> PushFrame{0x55, 0x48, 0x89, 0xe5};
 
-// UiCapture reads the programs, registers and draws of the screen drawing. The functions below
-// write none of them, so they return at once: a compute queue's dispatch, FUN_0042cfb0 and
-// FUN_00413560, the functions that reserve room for one packet, call the driver and advance, and
-// the thunks of two driver functions whose results the game leaves unused.
+// UiCapture keeps the programs, registers and draws of the screen drawing in place of their
+// writers. The functions below set none of them, so they return at once: a compute queue's
+// dispatch, FUN_0042cfb0 and FUN_00413560, the functions that reserve room for one packet, call
+// the driver and advance, and the thunks of two driver functions whose results the game leaves
+// unused.
 constexpr std::array Returning{
     Hooks::Entry{0x42cfb0, 4, PushFrame},
     Hooks::Entry{0x413560, 4, PushFrame},
@@ -121,6 +79,44 @@ constexpr std::array Returning{
     Hooks::Entry{0x416730, 4, PushFrame},
     Hooks::Entry{0x416b40, 4, PushFrame},
     Hooks::Entry{0x4170d0, 4, PushFrame},
+    // The writers of the registers UiCapture does not keep, which the frame graph's passes and
+    // the screen drawing send: the registers of the draw wrappers' state flush FUN_01614150, the
+    // targets and viewports of FUN_016137a0, FUN_01616ee0, FUN_0161b3e0 and FUN_0161b760, the
+    // index buffer's size of FUN_01616e10, the pipeline events, the shader stages of
+    // FUN_00414b70, and the pixel inputs and the DMA of constants of FUN_0042dc50. Each writes
+    // its packet and nothing else; the callers keep the engine's copy of the state, which
+    // UiCapture reads when the frame graph returns.
+    Hooks::Entry{0x411550, 4, PushFrame},
+    Hooks::Entry{0x411680, 4, PushFrame},
+    Hooks::Entry{0x411710, 4, PushFrame},
+    Hooks::Entry{0x4118a0, 4, PushFrame},
+    Hooks::Entry{0x411920, 4, PushFrame},
+    Hooks::Entry{0x411980, 4, PushFrame},
+    Hooks::Entry{0x4119e0, 4, PushFrame},
+    Hooks::Entry{0x411a40, 4, PushFrame},
+    Hooks::Entry{0x411aa0, 4, PushFrame},
+    Hooks::Entry{0x411b10, 4, PushFrame},
+    Hooks::Entry{0x411b70, 4, PushFrame},
+    Hooks::Entry{0x411bd0, 4, PushFrame},
+    Hooks::Entry{0x411c50, 4, PushFrame},
+    Hooks::Entry{0x411e50, 4, PushFrame},
+    Hooks::Entry{0x412410, 4, PushFrame},
+    Hooks::Entry{0x412590, 4, PushFrame},
+    Hooks::Entry{0x413800, 4, PushFrame},
+    Hooks::Entry{0x413bf0, 4, PushFrame},
+    Hooks::Entry{0x4148e0, 4, PushFrame},
+    Hooks::Entry{0x414b70, 4, PushFrame},
+    Hooks::Entry{0x4154b0, 4, PushFrame},
+    Hooks::Entry{0x415690, 4, PushFrame},
+    Hooks::Entry{0x415b10, 4, PushFrame},
+    Hooks::Entry{0x415b70, 4, PushFrame},
+    Hooks::Entry{0x415bd0, 4, PushFrame},
+    Hooks::Entry{0x415d10, 4, PushFrame},
+    Hooks::Entry{0x415d80, 4, PushFrame},
+    Hooks::Entry{0x415df0, 4, PushFrame},
+    Hooks::Entry{0x415e60, 4, PushFrame},
+    Hooks::Entry{0x415ed0, 4, PushFrame},
+    Hooks::Entry{0x415f50, 4, PushFrame},
     // The frame graph's depth sort orders the G2_BG_Main keys for the draw loop. Capture reads the
     // keys when the frame graph starts.
     Hooks::Entry{0x1441460, 4, PushFrame},
@@ -186,6 +182,10 @@ void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
 
 void SetFrameGraphRunning(bool running) {
     t_frame_graph = running;
+}
+
+bool FrameGraphRunning() {
+    return t_frame_graph;
 }
 
 } // namespace Gr2Port::FrameGraphDraws

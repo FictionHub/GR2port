@@ -143,7 +143,7 @@ void Install(VAddr module_base) {
         LOG_ERROR(Render_Vulkan, "GR2port: the frame graph's entry is not the expected code");
         return;
     }
-    UiCapture::Install(module_base);
+    UiCapture::Install(module_base, c, StubAreaSize);
     PhotoUi::Install(module_base);
     HudParts::Install(module_base);
     MouseCamera::Install(module_base, c, StubAreaSize);
