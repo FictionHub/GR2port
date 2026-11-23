@@ -325,6 +325,7 @@
     "Audio Device": "อุปกรณ์เสียง",
     "DS4 Speaker Device": "ลำโพง DS4",
     "Default Device": "อุปกรณ์เริ่มต้น",
-    "Audio Backend": "แบ็กเอนด์เสียง"
+    "Audio Backend": "แบ็กเอนด์เสียง",
+    "Upscaler Sharpening": "ความคมชัดการอัปสเกล"
   }
 }

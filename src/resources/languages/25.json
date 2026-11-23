@@ -325,6 +325,7 @@
     "Audio Device": "Συσκευή ήχου",
     "DS4 Speaker Device": "Ηχείο DS4",
     "Default Device": "Προεπιλεγμένη συσκευή",
-    "Audio Backend": "Υποσύστημα ήχου"
+    "Audio Backend": "Υποσύστημα ήχου",
+    "Upscaler Sharpening": "Ευκρίνεια αναβάθμισης"
   }
 }

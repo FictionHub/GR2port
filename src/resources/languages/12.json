@@ -325,6 +325,7 @@
     "Audio Device": "Äänilaite",
     "DS4 Speaker Device": "DS4-kaiutin",
     "Default Device": "Oletuslaite",
-    "Audio Backend": "Äänen taustaosa"
+    "Audio Backend": "Äänen taustaosa",
+    "Upscaler Sharpening": "Skaalauksen terävyys"
   }
 }

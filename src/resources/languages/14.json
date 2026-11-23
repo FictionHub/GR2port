@@ -325,6 +325,7 @@
     "Audio Device": "Lydenhed",
     "DS4 Speaker Device": "DS4-højttaler",
     "Default Device": "Standardenhed",
-    "Audio Backend": "Lyd-backend"
+    "Audio Backend": "Lyd-backend",
+    "Upscaler Sharpening": "Opskaleringsskarphed"
   }
 }

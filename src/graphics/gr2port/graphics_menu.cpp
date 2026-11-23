@@ -304,6 +304,7 @@ void ApplyPreset(Values& values, const Settings::Preset& preset) {
     graphics.screen_shake = values.graphics.screen_shake;
     graphics.upscaler = values.graphics.upscaler;
     graphics.upscale_quality = values.graphics.upscale_quality;
+    graphics.upscale_sharpening = values.graphics.upscale_sharpening;
     graphics.texture_streaming_mb = preset.texture_streaming_mb != 0
                                         ? preset.texture_streaming_mb
                                         : values.graphics.texture_streaming_mb;
@@ -374,7 +375,7 @@ constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
 
-const std::array<Setting, 29> Table{{
+const std::array<Setting, 30> Table{{
     {"Preset",
      [](const Values&) {
          Names names;
@@ -537,6 +538,20 @@ const std::array<Setting, 29> Table{{
      [](const Values& values) { return static_cast<int>(values.graphics.upscale_quality); },
      [](Values& values, int choice) {
          values.graphics.upscale_quality = static_cast<Settings::UpscaleQuality>(choice);
+     }},
+    {"Upscaler Sharpening",
+     [](const Values&) {
+         Names names;
+         for (const u32 level : Settings::UpscaleSharpeningLevels) {
+             names.push_back(level == 0 ? std::string{"Off"} : std::to_string(level) + "%");
+         }
+         return names;
+     },
+     [](const Values& values) {
+         return IndexOf(Settings::UpscaleSharpeningLevels, values.graphics.upscale_sharpening, 0);
+     },
+     [](Values& values, int choice) {
+         values.graphics.upscale_sharpening = Settings::UpscaleSharpeningLevels[choice];
      }},
     {"Aspect Ratio",
      [](const Values&) {

@@ -325,6 +325,7 @@
     "Audio Device": "‫جهاز الصوت‬",
     "DS4 Speaker Device": "‫سماعة DS4‬",
     "Default Device": "‫الجهاز الافتراضي‬",
-    "Audio Backend": "‫الواجهة الخلفية للصوت‬"
+    "Audio Backend": "‫الواجهة الخلفية للصوت‬",
+    "Upscaler Sharpening": "‫حدة رفع الدقة‬"
   }
 }

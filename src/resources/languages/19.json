@@ -325,6 +325,7 @@
     "Audio Device": "Ses Aygıtı",
     "DS4 Speaker Device": "DS4 Hoparlörü",
     "Default Device": "Varsayılan Aygıt",
-    "Audio Backend": "Ses Arka Ucu"
+    "Audio Backend": "Ses Arka Ucu",
+    "Upscaler Sharpening": "Yükseltme Keskinliği"
   }
 }

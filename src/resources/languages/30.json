@@ -325,6 +325,7 @@
     "Audio Device": "Аудіопристрій",
     "DS4 Speaker Device": "Динамік DS4",
     "Default Device": "Типовий пристрій",
-    "Audio Backend": "Аудіобекенд"
+    "Audio Backend": "Аудіобекенд",
+    "Upscaler Sharpening": "Різкість апскейлера"
   }
 }

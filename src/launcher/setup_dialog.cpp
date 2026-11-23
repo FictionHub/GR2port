@@ -102,6 +102,9 @@ enum Control : int {
     IdUpscaler,
     IdUpscaleQualityLabel,
     IdUpscaleQuality,
+    IdUpscaleSharpeningLabel,
+    IdUpscaleSharpening,
+    IdUpscaleSharpeningValue,
     IdLanguageLabel,
     IdLanguage,
     IdVolumeLabel,
@@ -466,9 +469,9 @@ struct Row {
     int top;
 };
 
-// Rows RowStep pixels apart below the check boxes, then the volume, the audio backend, the HDR
-// rows, the GPU Crash Catcher check box in line with a row and the audio device rows. The page
-// scrolls to the ones below the tenth row, down to DisplayPageBottom.
+// Rows RowStep pixels apart below the check boxes, then the upscaler's sharpening, the language,
+// the volume, the audio backend, the HDR rows, the GPU Crash Catcher check box in line with a row
+// and the audio device rows. The page scrolls down to DisplayPageBottom.
 constexpr int RowStep = 28;
 constexpr std::array Rows{
     Row{IdMonitorLabel, IdMonitor, L"Monitor", 140},
@@ -480,21 +483,22 @@ constexpr std::array Rows{
     Row{IdRenderSizeLabel, IdRenderSize, L"Render Resolution", 308},
     Row{IdUpscalerLabel, IdUpscaler, L"Upscaler", 336},
     Row{IdUpscaleQualityLabel, IdUpscaleQuality, L"Upscaler Quality", 364},
-    Row{IdLanguageLabel, IdLanguage, L"Language", 392},
 };
-constexpr int VolumeTop = 420;
-constexpr Row AudioBackendRow{IdAudioBackendLabel, IdAudioBackend, L"Audio Backend", 468};
+constexpr int UpscaleSharpeningTop = 392;
+constexpr Row LanguageRow{IdLanguageLabel, IdLanguage, L"Language", 440};
+constexpr int VolumeTop = 468;
+constexpr Row AudioBackendRow{IdAudioBackendLabel, IdAudioBackend, L"Audio Backend", 516};
 constexpr std::array HdrRows{
-    Row{IdHdrLabel, IdHdr, L"HDR", 496},
-    Row{IdHdrPeakLabel, IdHdrPeak, L"HDR Peak Brightness", 524},
-    Row{IdHdrWhiteLabel, IdHdrWhite, L"HDR Paper White", 552},
+    Row{IdHdrLabel, IdHdr, L"HDR", 544},
+    Row{IdHdrPeakLabel, IdHdrPeak, L"HDR Peak Brightness", 572},
+    Row{IdHdrWhiteLabel, IdHdrWhite, L"HDR Paper White", 600},
 };
-constexpr int CrashCatcherTop = 582;
+constexpr int CrashCatcherTop = 630;
 constexpr std::array AudioRows{
-    Row{IdAudioDeviceLabel, IdAudioDevice, L"Audio Device", 608},
-    Row{IdPadSpeakerDeviceLabel, IdPadSpeakerDevice, L"DS4 Speaker Device", 636},
+    Row{IdAudioDeviceLabel, IdAudioDevice, L"Audio Device", 656},
+    Row{IdPadSpeakerDeviceLabel, IdPadSpeakerDevice, L"DS4 Speaker Device", 684},
 };
-constexpr int DisplayPageBottom = 674;
+constexpr int DisplayPageBottom = 722;
 
 // In the order of Settings::VSync.
 constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
@@ -1100,6 +1104,10 @@ void ShowSliderValue(const Dialog& dialog, HWND bar) {
     if (GetDlgCtrlID(bar) == IdVolume) {
         SetWindowTextW(Item(dialog, IdVolumeValue), Percent(value).c_str());
     }
+    if (GetDlgCtrlID(bar) == IdUpscaleSharpening) {
+        SetWindowTextW(Item(dialog, IdUpscaleSharpeningValue),
+                       Percent(value * Settings::UpscaleSharpeningStep).c_str());
+    }
     for (const Stick& stick : Sticks) {
         for (const Slider& slider : stick.sliders) {
             if (slider.bar == GetDlgCtrlID(bar)) {
@@ -1478,7 +1486,8 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdDistortion), graphics.distortion ? 0 : 1);
 }
 
-// The field of view, the screen shake, the upscaler and its quality, which presets leave.
+// The field of view, the screen shake, the upscaler, its quality and its sharpening, which presets
+// leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdFieldOfView),
            IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
@@ -1486,6 +1495,10 @@ void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
            IndexOf(Settings::ScreenShakeLevels, graphics.screen_shake, OwnScreenShake));
     Select(Item(dialog, IdUpscaler), static_cast<int>(graphics.upscaler));
     Select(Item(dialog, IdUpscaleQuality), static_cast<int>(graphics.upscale_quality));
+    SendMessageW(Item(dialog, IdUpscaleSharpening), TBM_SETPOS, TRUE,
+                 graphics.upscale_sharpening / Settings::UpscaleSharpeningStep);
+    SetWindowTextW(Item(dialog, IdUpscaleSharpeningValue),
+                   Percent(graphics.upscale_sharpening).c_str());
 }
 
 // The passes as shown, with the preset they and the Display tab's sizes match.
@@ -1526,6 +1539,9 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     if (upscale_quality >= 0 && upscale_quality < static_cast<int>(UpscaleQualityChoices.size())) {
         graphics.upscale_quality = static_cast<Settings::UpscaleQuality>(upscale_quality);
     }
+    graphics.upscale_sharpening =
+        static_cast<u32>(SendMessageW(Item(dialog, IdUpscaleSharpening), TBM_GETPOS, 0, 0)) *
+        Settings::UpscaleSharpeningStep;
     const int texture_streaming = Selected(Item(dialog, IdTextureStreaming));
     if (texture_streaming >= 0 &&
         texture_streaming < static_cast<int>(dialog.texture_streaming.size())) {
@@ -1893,22 +1909,30 @@ void Build(HWND window, Dialog& dialog) {
                                          CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, row.combo,
                                          ComboLeft, row.top, ComboWidth, ComboListHeight));
     };
+    const auto add_slider = [&](const wchar_t* text, int label, int slider, int value, int top,
+                                int high) {
+        const int right = ComboLeft + ComboWidth;
+        page_order.push_back(MakeControl(dialog, display_page, page_origin, WC_STATICW, text,
+                                         SS_LEFT, label, LabelLeft, top,
+                                         right - SliderValueWidth - LabelLeft, InfoHeight));
+        page_order.push_back(MakeControl(dialog, display_page, page_origin, WC_STATICW, L"",
+                                         SS_RIGHT, value, right - SliderValueWidth, top,
+                                         SliderValueWidth, InfoHeight));
+        const HWND bar =
+            MakeControl(dialog, display_page, page_origin, TRACKBAR_CLASSW, L"",
+                        TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, slider, LabelLeft - SliderOverhang,
+                        top + SliderTop, right - LabelLeft + 2 * SliderOverhang, SliderHeight);
+        SendMessageW(bar, TBM_SETRANGE, FALSE, MAKELPARAM(0, high));
+        page_order.push_back(bar);
+    };
     for (const Row& row : Rows) {
         add_row(row);
     }
-    const int volume_right = ComboLeft + ComboWidth;
-    page_order.push_back(MakeControl(dialog, display_page, page_origin, WC_STATICW, L"Volume",
-                                     SS_LEFT, IdVolumeLabel, LabelLeft, VolumeTop,
-                                     volume_right - SliderValueWidth - LabelLeft, InfoHeight));
-    page_order.push_back(MakeControl(dialog, display_page, page_origin, WC_STATICW, L"", SS_RIGHT,
-                                     IdVolumeValue, volume_right - SliderValueWidth, VolumeTop,
-                                     SliderValueWidth, InfoHeight));
-    const HWND volume_bar = MakeControl(
-        dialog, display_page, page_origin, TRACKBAR_CLASSW, L"",
-        TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, IdVolume, LabelLeft - SliderOverhang,
-        VolumeTop + SliderTop, volume_right - LabelLeft + 2 * SliderOverhang, SliderHeight);
-    SendMessageW(volume_bar, TBM_SETRANGE, FALSE, MAKELPARAM(0, MaxVolume));
-    page_order.push_back(volume_bar);
+    add_slider(L"Upscaler Sharpening", IdUpscaleSharpeningLabel, IdUpscaleSharpening,
+               IdUpscaleSharpeningValue, UpscaleSharpeningTop,
+               static_cast<int>(Settings::UpscaleSharpeningLevels.size()) - 1);
+    add_row(LanguageRow);
+    add_slider(L"Volume", IdVolumeLabel, IdVolume, IdVolumeValue, VolumeTop, MaxVolume);
     add_row(AudioBackendRow);
     for (const Row& row : HdrRows) {
         add_row(row);

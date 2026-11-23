@@ -273,9 +273,9 @@ struct Pad {
     std::string guid;
 };
 
-// The Display tab's rows, 28 pixels apart below the check boxes, then the volume, the audio
-// backend, the HDR rows, the GPU Crash Catcher check box in line with a row and the audio device
-// rows. The page scrolls to the ones below the tenth row, down to DisplayPageBottom.
+// The Display tab's rows, 28 pixels apart below the check boxes, then the upscaler's sharpening,
+// the language, the volume, the audio backend, the HDR rows, the GPU Crash Catcher check box in
+// line with a row and the audio device rows. The page scrolls down to DisplayPageBottom.
 constexpr int MonitorTop = 140;
 constexpr int ResolutionTop = 168;
 constexpr int RefreshTop = 196;
@@ -285,16 +285,17 @@ constexpr int AspectTop = 280;
 constexpr int RenderSizeTop = 308;
 constexpr int UpscalerTop = 336;
 constexpr int UpscaleQualityTop = 364;
-constexpr int LanguageTop = 392;
-constexpr int VolumeTop = 420;
-constexpr int AudioBackendTop = 468;
-constexpr int HdrTop = 496;
-constexpr int HdrPeakTop = 524;
-constexpr int HdrWhiteTop = 552;
-constexpr int CrashCatcherTop = 582;
-constexpr int AudioDeviceTop = 608;
-constexpr int PadSpeakerDeviceTop = 636;
-constexpr int DisplayPageBottom = 674;
+constexpr int UpscaleSharpeningTop = 392;
+constexpr int LanguageTop = 440;
+constexpr int VolumeTop = 468;
+constexpr int AudioBackendTop = 516;
+constexpr int HdrTop = 544;
+constexpr int HdrPeakTop = 572;
+constexpr int HdrWhiteTop = 600;
+constexpr int CrashCatcherTop = 630;
+constexpr int AudioDeviceTop = 656;
+constexpr int PadSpeakerDeviceTop = 684;
+constexpr int DisplayPageBottom = 722;
 
 // In the order of Settings::VSync.
 constexpr std::array<std::string_view, 3> VSyncNames{"Off", "Double Buffered", "Triple Buffered"};
@@ -447,6 +448,7 @@ struct Dialog {
     QComboBox* upscaler = nullptr;
     QComboBox* upscale_quality = nullptr;
     QComboBox* language = nullptr;
+    QSlider* upscale_sharpening = nullptr;
     QSlider* volume = nullptr;
     QComboBox* hdr = nullptr;
     QLabel* hdr_peak_label = nullptr;
@@ -975,7 +977,8 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.distortion->setCurrentIndex(graphics.distortion ? 0 : 1);
 }
 
-// The field of view, the screen shake, the upscaler and its quality, which presets leave.
+// The field of view, the screen shake, the upscaler, its quality and its sharpening, which presets
+// leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.field_of_view->setCurrentIndex(
         IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
@@ -985,6 +988,8 @@ void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.upscaler->setCurrentIndex(upscaler < static_cast<int>(UpscalerChoices.size()) ? upscaler
                                                                                          : 0);
     dialog.upscale_quality->setCurrentIndex(static_cast<int>(graphics.upscale_quality));
+    dialog.upscale_sharpening->setValue(
+        static_cast<int>(graphics.upscale_sharpening / Settings::UpscaleSharpeningStep));
 }
 
 // The passes as shown, with the preset they and the Display tab's sizes match.
@@ -1023,6 +1028,8 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     if (upscale_quality >= 0 && upscale_quality < static_cast<int>(UpscaleQualityChoices.size())) {
         graphics.upscale_quality = static_cast<Settings::UpscaleQuality>(upscale_quality);
     }
+    graphics.upscale_sharpening =
+        static_cast<u32>(dialog.upscale_sharpening->value()) * Settings::UpscaleSharpeningStep;
     const int texture_streaming = dialog.texture_streaming_list->currentIndex();
     if (texture_streaming >= 0 &&
         texture_streaming < static_cast<int>(dialog.texture_streaming.size())) {
@@ -1288,7 +1295,7 @@ QComboBox* MakeRow(Dialog& dialog, QWidget* page, const Phrase& text, int top,
 // A slider between left and right with its label above it and its value at the label's right,
 // which follows the slider with suffix after the number.
 QSlider* MakeSlider(Dialog& dialog, QWidget* page, const Phrase& text, int left, int right, int top,
-                    int low, int high, const QString& suffix) {
+                    int low, int high, const QString& suffix, int unit = 1) {
     MakeLabel(dialog, page, text, Qt::AlignLeft | Qt::AlignTop,
               Place(page, left, top, right - SliderValueWidth - left, InfoHeight));
     QLabel* const value =
@@ -1298,10 +1305,10 @@ QSlider* MakeSlider(Dialog& dialog, QWidget* page, const Phrase& text, int left,
     bar->setGeometry(Place(page, left - SliderOverhang, top + SliderTop,
                            right - left + 2 * SliderOverhang, SliderHeight));
     bar->setRange(low, high);
-    QObject::connect(bar, &QSlider::valueChanged, value, [value, suffix](int position) {
-        value->setText(QString::number(position) + suffix);
+    QObject::connect(bar, &QSlider::valueChanged, value, [value, suffix, unit](int position) {
+        value->setText(QString::number(position * unit) + suffix);
     });
-    value->setText(QString::number(bar->value()) + suffix);
+    value->setText(QString::number(bar->value() * unit) + suffix);
     return bar;
 }
 
@@ -1371,6 +1378,10 @@ void BuildDisplay(Dialog& dialog, QWidget* page) {
     dialog.render_size = MakeRow(dialog, page, "Render Resolution", RenderSizeTop);
     dialog.upscaler = MakeRow(dialog, page, "Upscaler", UpscalerTop);
     dialog.upscale_quality = MakeRow(dialog, page, "Upscaler Quality", UpscaleQualityTop);
+    dialog.upscale_sharpening = MakeSlider(
+        dialog, page, "Upscaler Sharpening", LabelLeft, ComboLeft + ComboWidth,
+        UpscaleSharpeningTop, 0, static_cast<int>(Settings::UpscaleSharpeningLevels.size()) - 1,
+        "%", static_cast<int>(Settings::UpscaleSharpeningStep));
     dialog.language = MakeRow(dialog, page, "Language", LanguageTop);
     dialog.volume = MakeSlider(dialog, page, "Volume", LabelLeft, ComboLeft + ComboWidth, VolumeTop,
                                0, MaxVolume, "%");

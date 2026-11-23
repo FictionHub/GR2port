@@ -561,7 +561,7 @@ void Thread::TakeSettings() {
         !Textures::SetAnisotropy(now.anisotropic_filtering)) {
         now.anisotropic_filtering = graphics.anisotropic_filtering;
     }
-    Look::Choose(now.bloom, now.antialiasing);
+    Look::Choose(now.bloom, now.antialiasing, now.upscale_sharpening);
     World::Choose(now.decals);
     // The light reads the last lines and the last occlusion.
     constexpr auto Off = Settings::Quality::Off;
@@ -1937,6 +1937,7 @@ Settings::Values Live(const Settings::Values& started, const Settings::Values& w
     to.texture_streaming_mb = from.texture_streaming_mb;
     to.field_of_view = from.field_of_view;
     to.screen_shake = from.screen_shake;
+    to.upscale_sharpening = from.upscale_sharpening;
     live.display.vsync = wanted.display.vsync;
     // The window takes these at once; Window::Apply shows them.
     live.display.fullscreen = wanted.display.fullscreen;

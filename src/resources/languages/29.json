@@ -325,6 +325,7 @@
     "Audio Device": "Perangkat Audio",
     "DS4 Speaker Device": "Speaker DS4",
     "Default Device": "Perangkat Bawaan",
-    "Audio Backend": "Backend Audio"
+    "Audio Backend": "Backend Audio",
+    "Upscaler Sharpening": "Ketajaman Upscaler"
   }
 }

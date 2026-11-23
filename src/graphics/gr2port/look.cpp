@@ -25,6 +25,7 @@
 #include "graphics/gr2port/shaders/luminance_comp.h"
 #include "graphics/gr2port/shaders/sky_frag.h"
 #include "graphics/gr2port/shaders/tonemap_frag.h"
+#include "graphics/gr2port/shaders/upscale_sharpen_comp.h"
 #include "graphics/gr2port/shaders/vision_frag.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/ui.h"
@@ -176,6 +177,9 @@ Pipeline g_composite_hdr;
 Pipeline g_tonemap;
 Pipeline g_antialias;
 Pipeline g_antialias_off;
+// The encode of the upscaler's picture that also sharpens it, and its strength from 0 to 1.
+Pipeline g_upscale_sharpen;
+float g_sharpening = 0.0f;
 // The graphics settings' bloom and antialiasing; without bloom the game's own no-bloom path runs.
 bool g_bloom_enabled = true;
 bool g_antialias_enabled = true;
@@ -435,23 +439,26 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format) {
     const std::array antialias_set{g_antialias_layout};
     g_antialias = CreateComputePipeline(device, ANTIALIAS_COMP, sizeof(u64), antialias_set);
     g_antialias_off = CreateComputePipeline(device, ANTIALIAS_OFF_COMP, 0, antialias_set);
+    g_upscale_sharpen =
+        CreateComputePipeline(device, UPSCALE_SHARPEN_COMP, sizeof(g_sharpening), antialias_set);
     const Settings::Graphics& graphics = Settings::Get().graphics;
-    Choose(graphics.bloom, graphics.antialiasing);
+    Choose(graphics.bloom, graphics.antialiasing, graphics.upscale_sharpening);
     g_antialias_constants = memory.CreateBuffer(
         sizeof(AntialiasConstants), vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
     return g_sky.pipeline && g_luminance.pipeline && g_exposure.pipeline && g_extract.pipeline &&
            g_blur.pipeline && g_tonemap.pipeline && g_antialias.pipeline &&
-           g_antialias_off.pipeline && g_glow_depth_copy.pipeline && g_glow.pipeline &&
-           g_antialias_constants.mapped != nullptr;
+           g_antialias_off.pipeline && g_upscale_sharpen.pipeline && g_glow_depth_copy.pipeline &&
+           g_glow.pipeline && g_antialias_constants.mapped != nullptr;
 }
 
-void Choose(bool bloom, bool antialiasing) {
+void Choose(bool bloom, bool antialiasing, u32 sharpening) {
     // The tonemap adds the last bloom, so a bloom that stops leaves its images clear.
     if (g_bloom_enabled && !bloom) {
         g_bloom_cleared = false;
     }
     g_bloom_enabled = bloom;
     g_antialias_enabled = antialiasing;
+    g_sharpening = static_cast<float>(sharpening) / 100.0f;
 }
 
 bool Resize(vk::Extent2D extent, vk::Extent2D output, vk::Format picture_format,
@@ -905,9 +912,14 @@ void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
     if (Upscaler::Active()) {
         // The upscaler fills the picture from the toned scene; the encode writes its sRGB.
         Upscaler::Record(cmd);
-        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_antialias_off.pipeline, dl);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_antialias_off.layout, 0,
+        const Pipeline& encode = g_sharpening > 0.0f ? g_upscale_sharpen : g_antialias_off;
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, encode.pipeline, dl);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, encode.layout, 0,
                                g_upscaled_sets[g_antialiased_image], {}, dl);
+        if (g_sharpening > 0.0f) {
+            cmd.pushConstants(encode.layout, vk::ShaderStageFlagBits::eCompute, 0,
+                              sizeof(g_sharpening), &g_sharpening, dl);
+        }
     } else {
         const u64 constants = g_antialias_constants.address;
         const Pipeline& pipeline = g_antialias_enabled ? g_antialias : g_antialias_off;

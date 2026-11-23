@@ -325,6 +325,7 @@
     "Audio Device": "Hangeszköz",
     "DS4 Speaker Device": "DS4 hangszóró",
     "Default Device": "Alapértelmezett eszköz",
-    "Audio Backend": "Hang-háttérrendszer"
+    "Audio Backend": "Hang-háttérrendszer",
+    "Upscaler Sharpening": "Felskálázás élessége"
   }
 }

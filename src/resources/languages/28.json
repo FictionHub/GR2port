@@ -325,6 +325,7 @@
     "Audio Device": "Thiết bị âm thanh",
     "DS4 Speaker Device": "Loa DS4",
     "Default Device": "Thiết bị mặc định",
-    "Audio Backend": "Backend âm thanh"
+    "Audio Backend": "Backend âm thanh",
+    "Upscaler Sharpening": "Độ sắc nét nâng độ phân giải"
   }
 }

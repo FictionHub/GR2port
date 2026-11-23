@@ -120,6 +120,10 @@ inline constexpr std::array<u32, 4> FarDetailLevels{400, 200, 150, 100};
 /// The choices of Graphics::field_of_view, from the narrowest.
 inline constexpr std::array<u32, 15> FieldOfViewLevels{80,  85,  90,  95,  100, 105, 110, 115,
                                                        120, 125, 130, 135, 140, 145, 150};
+/// The choices of Graphics::upscale_sharpening, from none, UpscaleSharpeningStep apart.
+inline constexpr u32 UpscaleSharpeningStep = 5;
+inline constexpr std::array<u32, 21> UpscaleSharpeningLevels{
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100};
 /// The choices of Graphics::screen_shake, from none.
 inline constexpr std::array<u32, 11> ScreenShakeLevels{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 /// The choices of Display::hdr_peak_nits and hdr_paper_white_nits.
@@ -178,6 +182,9 @@ struct Graphics {
     /// The upscaler and its quality. Presets leave them.
     Upscaler upscaler{Upscaler::Off};
     UpscaleQuality upscale_quality{UpscaleQuality::Quality};
+    /// How strongly the upscaled picture is sharpened, in percent, an UpscaleSharpeningLevels
+    /// entry. 0 leaves the upscaler's picture as it is. Presets leave it.
+    u32 upscale_sharpening{0};
     /// Texture streaming: the device memory GR2port keeps within, in MB; 0 takes the budget the
     /// driver gives the process, or on an integrated GPU its share of RAM. With less, textures
     /// keep fewer mip levels. The Steam Deck preset sets 4 GB; the others leave it.
