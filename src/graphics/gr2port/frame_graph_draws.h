@@ -16,7 +16,8 @@ class CodeGenerator;
 // and a flip goes to the video out at its submit. The game's per-item draw loop returns at once,
 // and the draws and dispatches the frame graph asks for are dropped: they are for the world's
 // picture, which nothing reads. The screen drawing after the frame graph keeps its draws, which
-// UiCapture records in place of their writers.
+// UiCapture records in place of their writers. The room the game takes in its command buffers for
+// labels and constants holds them alone, without a packet.
 namespace Gr2Port::FrameGraphDraws {
 
 /// When the executable loads, with its base address. Stubs are written by c within capacity bytes

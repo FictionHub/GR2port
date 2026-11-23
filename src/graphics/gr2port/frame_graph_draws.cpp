@@ -38,6 +38,22 @@ constexpr std::array Writers{
     Hooks::Entry{0x42d590, 6, Hooks::FramePrologue},
 };
 
+// FUN_00414c00(commands, bytes, alignment) takes room in a command buffer for bytes of data,
+// aligned to 2 to the power of alignment bytes, and returns it: a label's slot, or constants a
+// binder points a program at. The game's function writes a NOP over the room, which nothing reads,
+// so the room holds the data alone.
+constexpr Hooks::Entry Allocator{0x414c00, 6, Hooks::FramePrologue};
+
+// The head of a command buffer of the game: its first word, its end, its next free word, and the
+// function that makes room for a count of words, with the argument it takes.
+struct CommandBuffer {
+    u32* begin;
+    u32* end;
+    u32* next;
+    u8 PS4_SYSV_ABI (*make_room)(CommandBuffer* commands, u32 count, u64 argument);
+    u64 argument;
+};
+
 // push rbp; mov rbp, rsp.
 constexpr std::array<u8, 11> PushFrame{0x55, 0x48, 0x89, 0xe5};
 
@@ -155,6 +171,26 @@ std::array<const void*, sizeof...(Indices)> WriterTargets(std::index_sequence<In
     return {reinterpret_cast<const void*>(&OnWriter<Indices>)...};
 }
 
+// In place of FUN_00414c00: the room from the buffer's next free word, or null if the buffer has
+// none.
+u32* PS4_SYSV_ABI OnAllocate(CommandBuffer* commands, u32 bytes, u32 alignment) {
+    const u64 words = (u64{bytes} + 3) / sizeof(u32);
+    const u64 align = u64{1} << (alignment & 31);
+    const auto start = [&] {
+        return (reinterpret_cast<VAddr>(commands->next) + align - 1) & ~(align - 1);
+    };
+    VAddr data = start();
+    if (data + words * sizeof(u32) > reinterpret_cast<VAddr>(commands->end)) {
+        if (commands->make_room(commands, static_cast<u32>(words + align / sizeof(u32)),
+                                commands->argument) == 0) {
+            return nullptr;
+        }
+        data = start();
+    }
+    commands->next = reinterpret_cast<u32*>(data) + words;
+    return reinterpret_cast<u32*>(data);
+}
+
 } // namespace
 
 void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
@@ -177,6 +213,11 @@ void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
             LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
                       entry.address);
         }
+    }
+    if (Hooks::Replace(module_base, Allocator, c, capacity,
+                       reinterpret_cast<const void*>(&OnAllocate)) != Hooks::Result::Hooked) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
+                  Allocator.address);
     }
 }
 
