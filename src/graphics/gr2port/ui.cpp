@@ -687,7 +687,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
     for (u32 i = 0; i < count; i++) {
         const Scene::UiRun& run = runs[i];
         if (!HasImage(header, run.target) ||
-            (header.ui.hidden != 0 && run.target == header.ui.picture)) {
+            (header.ui.hidden != 0 && run.kept == 0 && run.target == header.ui.picture)) {
             continue;
         }
         if (run.vertex >= VertexPrograms || run.pixel >= PixelPrograms ||

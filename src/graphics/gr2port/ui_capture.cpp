@@ -236,6 +236,26 @@ std::array<Scene::UiTarget, Scene::MaxUiTargets> g_targets{};
 u32 g_target_count = 0;
 
 std::array<Scene::UiRun, Scene::MaxUiRuns> g_runs;
+// The commands that stay while the screen drawing is hidden, in the order the game wrote them, in
+// each of the game's three contexts and in the frame being written. The draw thread alone uses
+// them.
+struct KeptCommands {
+    struct Range {
+        const u32* first;
+        const u32* end;
+    };
+    u32 count = 0;
+    std::array<Range, 32> ranges{};
+
+    bool Holds(const u32* command) const {
+        return std::ranges::any_of(std::span{ranges}.first(count), [&](const Range& range) {
+            return command >= range.first && command < range.end;
+        });
+    }
+};
+std::array<KeptCommands, 3> g_kept;
+KeptCommands g_frame_kept;
+const u32* g_kept_first = nullptr;
 // Per target, the frame that last wrote it, plus one. A write after FreshGap frames without one
 // is fresh: the game keeps what it drew there for later frames.
 constexpr u64 FreshGap = 16;
@@ -546,7 +566,7 @@ void Writer::AddRun(const Scene::UiRun& state) {
         Scene::UiRun& last = g_runs[ui.runs - 1];
         if (last.target == state.target && last.vertex == state.vertex &&
             last.pixel == state.pixel && last.blend == state.blend &&
-            last.topology == state.topology &&
+            last.topology == state.topology && last.kept == state.kept &&
             std::equal(std::begin(last.viewport), std::end(last.viewport),
                        std::begin(state.viewport))) {
             last.count++;
@@ -784,6 +804,7 @@ void Writer::Draw(u32 opcode, const u32* body) {
         .viewport = {offset_x - scale_x, offset_y - scale_y, 2.0f * scale_x, 2.0f * scale_y},
         .first = ui.draws,
         .count = 1,
+        .kept = g_frame_kept.Holds(body) ? 1u : 0u,
     });
     g_commands[ui.draws] = {
         .vertex_count = count,
@@ -826,6 +847,7 @@ void Writer::Shape(std::span<const float> vertices, u32 target) {
         .viewport = {0.0f, height, width, -height},
         .first = ui.draws,
         .count = 1,
+        .kept = 0,
     });
     g_commands[ui.draws] = {
         .vertex_count = count,
@@ -941,6 +963,29 @@ void OnFrameGraphEnd() {
 
 void Skip() {
     g_context = 0;
+    PhotoUi::ForgetItems(Load<u32>(g_base + PreviousContextIndex - Hooks::CodeBase));
+}
+
+void BeginKept() {
+    const u32 index = Load<u32>(g_base + ContextIndex - Hooks::CodeBase);
+    const VAddr context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
+    g_kept_first = reinterpret_cast<const u32*>(Load<VAddr>(context + StreamNext));
+}
+
+void EndKept() {
+    const u32 index = Load<u32>(g_base + ContextIndex - Hooks::CodeBase);
+    const VAddr context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
+    const auto* const end = reinterpret_cast<const u32*>(Load<VAddr>(context + StreamNext));
+    KeptCommands& kept = g_kept[index];
+    // A context's commands start over each time the game uses it.
+    if (kept.count != 0 && g_kept_first < kept.ranges[kept.count - 1].end) {
+        kept.count = 0;
+    }
+    if (kept.count != 0 && g_kept_first == kept.ranges[kept.count - 1].end) {
+        kept.ranges[kept.count - 1].end = end;
+    } else if (end > g_kept_first && kept.count < kept.ranges.size()) {
+        kept.ranges[kept.count++] = {g_kept_first, end};
+    }
 }
 
 namespace {
@@ -1035,6 +1080,9 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     const VAddr from = context == g_context ? g_start : begin;
     g_world_frames += context == g_context ? 1 : 0;
     g_context = 0;
+    g_frame_kept = g_kept[index];
+    g_kept[index].count = 0;
+    PhotoUi::ForgetItems(index);
 
     Scene::UiHeader& ui = header.ui;
     const u32 picture =

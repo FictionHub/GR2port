@@ -14,9 +14,9 @@ class CodeGenerator;
 
 // Gravity Rush 2's photo mode draws its dark border, the viewfinder's grid and its control lists
 // in the screen drawing over the view through Kat's camera. A press of R3 while the camera is out
-// hides all of the screen drawing over the picture, and another press shows it again. Putting the
-// camera away shows it again too. The left control list shows R3 and Hide UI under its Filter
-// Effect row, in a row of the game's own.
+// hides the screen drawing over the picture but for the gesture window, and another press shows it
+// again. Putting the camera away shows it again too. The left control list shows R3 and Hide UI
+// under its Filter Effect row, in a row of the game's own.
 namespace Gr2Port::PhotoUi {
 
 /// The start of the key of the Hide UI row's text.
@@ -37,5 +37,10 @@ void OnButtons(s32 handle, u32 buttons);
 
 /// Any thread: whether the screen drawing over the picture is hidden.
 bool Hidden();
+
+/// On the draw thread, once it has read the frame of a context: forgets which of the draw items
+/// of the pool with the context's number are the gesture window's, as the pool's memory is used
+/// again.
+void ForgetItems(u32 context);
 
 } // namespace Gr2Port::PhotoUi

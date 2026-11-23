@@ -1,20 +1,27 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
 
+#include <xbyak/xbyak.h>
+
 #include "common/logging/log.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/menu_kit.h"
 #include "graphics/gr2port/photo_ui.h"
+#include "graphics/gr2port/ui_capture.h"
 
 namespace Gr2Port::PhotoUi {
 
 namespace {
+
+using namespace Xbyak::util;
 
 // A byte that is set while the camera is out, from the press that takes it out to the press that
 // puts it away (HUD.isPhotoMode, FUN_011b0f90, reads it).
@@ -59,6 +66,23 @@ constexpr char English[] = "Hide UI";
 
 constexpr ListRow HideRow{R3Number, -1, -1, -1, RowKey, R3Icon, R3Icon};
 
+// void FUN_0171aa10(window): the gesture window's frame on the game's main thread, each frame,
+// which adds the window's draw items for the draw thread to run.
+constexpr Hooks::Entry GestureDraw{0x171aa10, 6, Hooks::FramePrologue};
+using GestureDrawFunction = void PS4_SYSV_ABI (*)(void* window);
+// The pools the game takes each frame's draw items from: the pool in use, each pool's memory, and
+// how many of its bytes are taken.
+constexpr VAddr ItemPool = 0x1f21bac;
+constexpr VAddr ItemPools = 0x1f21bf0;
+constexpr VAddr ItemPoolTaken = 0x1f21c08;
+constexpr size_t ItemPoolCount = 3;
+// The draw thread's call of a draw item's function: mov rdi, rbx; call [rax + 0x10]. rax holds the
+// item's virtual table.
+constexpr Hooks::Entry ItemCall{0x84d1fc, 6, {0x48, 0x89, 0xdf, 0xff, 0x50, 0x10}};
+constexpr VAddr ItemCallNext = 0x84d202;
+constexpr u32 ItemFunction = 0x10;
+using ItemFunctionPointer = void PS4_SYSV_ABI (*)(VAddr item);
+
 std::atomic<VAddr> g_base{0};
 std::atomic<bool> g_hidden{false};
 // The last buttons read from each pad's handle.
@@ -66,6 +90,13 @@ std::mutex g_mutex;
 std::unordered_map<s32, u32> g_last;
 std::mutex g_record_mutex;
 std::vector<u8> g_record;
+GestureDrawFunction g_gesture_draw = nullptr;
+// The draw items of the gesture window's last frame in each pool.
+struct ItemRange {
+    std::atomic<VAddr> first{0};
+    std::atomic<VAddr> end{0};
+};
+std::array<ItemRange, ItemPoolCount> g_gesture_items;
 
 // Before the list's frame: asks for the Hide UI row below the Filter Effect row while there is
 // one, and takes the row out once there is none.
@@ -78,6 +109,34 @@ void PS4_SYSV_ABI OnListFrame(u32, const Hooks::Registers* registers, u64) {
         MenuKit::Write(slots + RowSlot * sizeof(VAddr), &HideRow);
     } else if (!wanted && row == &HideRow) {
         MenuKit::Write<const ListRow*>(slots + RowSlot * sizeof(VAddr), nullptr);
+    }
+}
+
+// Notes which draw items are the gesture window's.
+void PS4_SYSV_ABI DrawGesture(void* window) {
+    const u32 pool = MenuKit::Read<u32>(MenuKit::Game(ItemPool));
+    const VAddr memory = MenuKit::Read<VAddr>(MenuKit::Game(ItemPools) + u64{pool} * sizeof(VAddr));
+    const VAddr taken = MenuKit::Game(ItemPoolTaken) + u64{pool} * sizeof(u32);
+    const VAddr first = memory + MenuKit::Read<u32>(taken);
+    g_gesture_draw(window);
+    g_gesture_items[pool].first.store(first, std::memory_order_relaxed);
+    g_gesture_items[pool].end.store(memory + MenuKit::Read<u32>(taken), std::memory_order_relaxed);
+}
+
+// While the screen drawing is hidden, in place of the draw thread's call of a draw item: the
+// commands of the gesture window's items stay.
+void PS4_SYSV_ABI RunItem(VAddr item) {
+    const bool gesture = std::ranges::any_of(g_gesture_items, [item](const ItemRange& range) {
+        return item >= range.first.load(std::memory_order_relaxed) &&
+               item < range.end.load(std::memory_order_relaxed);
+    });
+    const auto run = MenuKit::Read<ItemFunctionPointer>(MenuKit::Read<VAddr>(item) + ItemFunction);
+    if (gesture) {
+        UiCapture::BeginKept();
+    }
+    run(item);
+    if (gesture) {
+        UiCapture::EndKept();
     }
 }
 
@@ -108,6 +167,33 @@ bool AddRow(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         LOG_ERROR(Render_Vulkan, "GR2port: the photo mode's control list is not the expected code");
         return false;
     }
+    const void* gesture_draw = nullptr;
+    if (!Hooks::Hooked(Hooks::Replace(module_base, GestureDraw, c, capacity,
+                                      reinterpret_cast<const void*>(&DrawGesture),
+                                      &gesture_draw))) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the gesture window's drawing is not the expected code");
+        return false;
+    }
+    g_gesture_draw = reinterpret_cast<GestureDrawFunction>(const_cast<void*>(gesture_draw));
+
+    // Outside Hide UI the call stays the game's own.
+    const void* const item_call = c.getCurr();
+    Xbyak::Label hidden;
+    c.mov(rdi, rbx);
+    c.mov(rcx, reinterpret_cast<u64>(&g_hidden));
+    c.cmp(byte[rcx], 0);
+    c.jne(hidden);
+    c.mov(rax, qword[rax + ItemFunction]);
+    c.call(rax);
+    c.jmp(Hooks::Code(module_base, ItemCallNext), Xbyak::CodeGenerator::T_NEAR);
+    c.L(hidden);
+    c.mov(rax, reinterpret_cast<u64>(&RunItem));
+    c.call(rax);
+    c.jmp(Hooks::Code(module_base, ItemCallNext), Xbyak::CodeGenerator::T_NEAR);
+    if (Hooks::Replace(module_base, ItemCall, c, capacity, item_call) != Hooks::Result::Hooked) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the draw thread's item call is not the expected code");
+        return false;
+    }
     return true;
 }
 
@@ -128,6 +214,11 @@ u64 FindText(u64 texts, const char* key, GraphicsMenu::FindTextFunction find) {
 
 bool Hidden() {
     return g_hidden.load(std::memory_order_relaxed);
+}
+
+void ForgetItems(u32 context) {
+    g_gesture_items[context].first.store(0, std::memory_order_relaxed);
+    g_gesture_items[context].end.store(0, std::memory_order_relaxed);
 }
 
 } // namespace Gr2Port::PhotoUi

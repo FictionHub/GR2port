@@ -27,6 +27,11 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world);
 /// Instead of Write, for a frame without a packet.
 void Skip();
 
+/// On the draw thread, around one of the game's draw items: the commands it writes between the two
+/// calls stay while the screen drawing over the picture is hidden.
+void BeginKept();
+void EndKept();
+
 /// A scroll bar on the game's 1920 x 1080 canvas, whose y grows downwards: a track around x from
 /// top to bottom, of the width, and the thumb on it.
 struct ScrollBar {

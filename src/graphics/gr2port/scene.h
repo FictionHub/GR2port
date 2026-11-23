@@ -1365,6 +1365,8 @@ struct UiRun {
     float viewport[4];
     u32 first;
     u32 count;
+    /// 1 when the run stays while the screen drawing over the picture is hidden.
+    u32 kept;
 };
 
 /// A target of the game's: its address, which names it, and its size.
