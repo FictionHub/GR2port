@@ -19,20 +19,20 @@ vec2 FrameBitangent(vec3 normal, vec3 tangent) {
                 tangent.z * -normal.x + normal.z * tangent.x);
 }
 
-// The scene's colour at the position moved by the direction in the frame, times the step: x
-// along the tangent, y along the normal crossed with the tangent, z along the normal; the move's
-// y turned for the texture's.
-vec4 FrameTap(vec2 position, vec3 direction, vec3 normal, vec3 tangent, vec2 bitangent,
-              float step, vec2 inverse_size) {
-    const float along_tangent = direction.x * step;
-    const float along_bitangent = direction.y * step;
-    const float along_normal = direction.z * step;
-    const float x = along_normal * normal.x +
-                    (along_bitangent * bitangent.x + (tangent.x * along_tangent + position.x));
-    const float y = along_normal * normal.y +
-                    (along_bitangent * bitangent.y + tangent.y * along_tangent);
+// The scene's colour at the position moved in the frame: x along the tangent, y along the normal
+// crossed with the tangent, z along the normal; the move's y turned for the texture's.
+vec4 FrameMoveTap(vec2 position, vec3 move, vec3 normal, vec3 tangent, vec2 bitangent,
+                  vec2 inverse_size) {
+    const float x = move.z * normal.x + (move.y * bitangent.x + (tangent.x * move.x + position.x));
+    const float y = move.z * normal.y + (move.y * bitangent.y + tangent.y * move.x);
     return textureLod(sampler2D(background_texture, curve_sampler),
                       vec2(inverse_size.x * x, inverse_size.y * (position.y - y)), 0.0);
+}
+
+// The scene's colour at the position moved by the direction in the frame, times the step.
+vec4 FrameTap(vec2 position, vec3 direction, vec3 normal, vec3 tangent, vec2 bitangent,
+              float step, vec2 inverse_size) {
+    return FrameMoveTap(position, direction * step, normal, tangent, bitangent, inverse_size);
 }
 
 // The scene's red, green and blue, each moved ten times its own strength along the map's
