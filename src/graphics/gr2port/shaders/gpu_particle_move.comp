@@ -1,0 +1,1591 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's compute program 0x1c70cd0, the GPU particles' move: each live particle of the pool
+// moves into its emitter's ring of the next pool by the effect's time step, its life shortened by
+// the step, through the effectors its description lists (words 8 to 15): fields (type 2), the
+// scene's wind (3), turbulence (4), colliders (5) and a push along x (6). A particle stuck to a
+// collider meets only that one. The game's program has its own copy of some steps for each
+// effector type, and the driver rounds the copies differently; where a copy here rounds a step
+// its own way (Rounded, Added, an explicit fma), it is to give the game's program's results.
+#version 460
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0) uniform texture2D depth_texture;
+layout(set = 0, binding = 1) uniform sampler depth_sampler;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
+    uint words[];
+};
+layout(push_constant) uniform Push {
+    uint64_t particle_in_address;
+    uint64_t emitter_in_address;
+    uint64_t effect_in_address;
+    uint64_t description_address;
+    uint64_t particle_out_address;
+    // The scene's constants: the view projection (words 0 to 15), its inverse (16 to 31), the
+    // depth's and screen's words (32 to 39), the pool's size (46), the scene's fields (48 to 63)
+    // and wind boxes (64 to 71).
+    uint64_t per_scene_address;
+    // The game's noise table: 32 gradients, then the permutation, 16 bytes a record.
+    uint64_t noise_address;
+};
+
+// The emitter's mark of a ring to clear.
+const uint FreshMark = 0x27bc86abu;
+
+uint SceneWord(uint word) {
+    return Words(per_scene_address).words[word];
+}
+
+float med3(float a, float b, float c) {
+    return max(min(a, b), min(max(a, b), c));
+}
+
+// a * b rounded on its own: the game's program makes such a product in an earlier run than the
+// add that takes it, so the driver never fuses it there. (A precise inside a function stays
+// there.)
+float Rounded(float a, float b) {
+    precise const float product = a * b;
+    return product;
+}
+
+// a + b rounded on its own: the driver would fold a constant in b's sum into it.
+float Added(float a, float b) {
+    precise const float sum = a + b;
+    return sum;
+}
+
+float SceneFloat(uint word) {
+    return uintBitsToFloat(SceneWord(word));
+}
+
+uint EffectWord(uint effect, uint word) {
+    return Words(effect_in_address).words[(effect * 192u + word * 4u) >> 2];
+}
+
+float EffectFloat(uint effect, uint word) {
+    return uintBitsToFloat(EffectWord(effect, word));
+}
+
+uint DescriptionWord(uint description, uint word) {
+    return Words(description_address).words[(description * 256u + word * 4u) >> 2];
+}
+
+float DescriptionFloat(uint description, uint word) {
+    return uintBitsToFloat(DescriptionWord(description, word));
+}
+
+uint EmitterWord(uint emitter, uint word) {
+    return Words(emitter_in_address).words[(emitter * 128u + word * 4u) >> 2];
+}
+
+float EmitterFloat(uint emitter, uint word) {
+    return uintBitsToFloat(EmitterWord(emitter, word));
+}
+
+vec4 EmitterVector(uint emitter, uint word) {
+    return vec4(EmitterFloat(emitter, word), EmitterFloat(emitter, word + 1u),
+                EmitterFloat(emitter, word + 2u), EmitterFloat(emitter, word + 3u));
+}
+
+uvec4 ParticleWords(uint particle, uint word) {
+    const uint at = (particle * 64u + word * 4u) >> 2;
+    return uvec4(Words(particle_in_address).words[at], Words(particle_in_address).words[at + 1u],
+                 Words(particle_in_address).words[at + 2u],
+                 Words(particle_in_address).words[at + 3u]);
+}
+
+vec4 ParticleVector(uint particle, uint word) {
+    return uintBitsToFloat(ParticleWords(particle, word));
+}
+
+void SetOutWords(uint particle, uint word, uvec4 value) {
+    const uint at = (particle * 64u + word * 4u) >> 2;
+    Words(particle_out_address).words[at] = value.x;
+    Words(particle_out_address).words[at + 1u] = value.y;
+    Words(particle_out_address).words[at + 2u] = value.z;
+    Words(particle_out_address).words[at + 3u] = value.w;
+}
+
+void SetOutVector(uint particle, uint word, vec4 value) {
+    SetOutWords(particle, word, floatBitsToUint(value));
+}
+
+// A place in an effector's frame: moved less the effector's place (words 0 to 2), turned back by
+// its turn (4 to 7) and divided by its scale (3) and sizes (16 to 18). Statements in the game's
+// order; the scale and size reciprocals multiply apart (the driver would merge them), and x and
+// z round before their users, as the game's program makes them in an earlier run. The program
+// has a copy of this for each effector type and one for stuck particles (copy), each rounding a
+// few steps its own way: y's last sum but one fuses -q.z * tx in the field's, q.x * tz in the
+// others; the wind's fields and the stuck one divide by the scale and size together.
+const uint FieldCopy = 2u;
+const uint WindCopy = 3u;
+const uint TurbulenceCopy = 4u;
+const uint ColliderCopy = 5u;
+const uint StuckCopy = 7u;
+
+vec3 EffectorLocal(vec4 at, vec4 q, vec3 sizes, vec3 moved, uint copy) {
+    const float dx = moved.x - at.x;
+    const float dz = moved.z - at.z;
+    const float dy = moved.y - at.y;
+    float a1 = dx * -q.z;
+    float a2 = dy * -q.x;
+    float a3 = dz * -q.y;
+    const float bz = dx * q.y + a2;
+    const float by = q.x * dz + a1;
+    const float bx = q.z * dy + a3;
+    const float tx = dx * q.w + bx;
+    const float ty = q.w * dy + by;
+    const float tz = q.w * dz + bz;
+    float rx = q.z * ty;
+    float d = q.x * dx;
+    float c3 = q.x * tz;
+    float rz = q.y * tx;
+    rx = tz * -q.y + rx;
+    d = q.y * dy + d;
+    float ry = copy == FieldCopy ? fma(-q.z, tx, c3) : fma(q.x, tz, Rounded(-q.z, tx));
+    rz = ty * -q.x + rz;
+    const float inv_x = 1.0 / sizes.x;
+    const float inv_y = 1.0 / sizes.y;
+    const float inv_z = 1.0 / sizes.z;
+    rx = tx * q.w + rx;
+    d = q.z * dz + d;
+    const float inv_scale = 1.0 / at.w;
+    const bool merged = copy == WindCopy || copy == StuckCopy;
+    ry = ty * q.w + ry;
+    rz = tz * q.w + rz;
+    const float scale_x = merged ? 1.0 / (at.w * sizes.x) : Rounded(inv_scale, inv_x);
+    const float scale_y = merged ? 1.0 / (at.w * sizes.y) : Rounded(inv_scale, inv_y);
+    const float scale_z = merged ? 1.0 / (at.w * sizes.z) : Rounded(inv_scale, inv_z);
+    rx = d * q.x + rx;
+    ry = d * q.y + ry;
+    rz = d * q.z + rz;
+    const float lx = Rounded(scale_x, rx);
+    const float ly = scale_y * ry;
+    const float lz = Rounded(scale_z, rz);
+    return vec3(lx, ly, lz);
+}
+
+// Effector type 2, a field in the effector's frame (its place and scale, words 0 to 3, its turn
+// 4 to 7, word 14 the shape, 16 to 19 the sizes): within the shape a swirl about the field's
+// axes and a pull along the shape's direction, with strength from word 24 at the shape's edge to
+// word 25 at its centre (word 26 the edge's width), word 27 the share of the change taken as
+// velocity; the description's words 24 to 26 scale the pull by word 20. Statements in the game's
+// order: the driver fuses them as it does there. copy is the game's program's copy this runs (the
+// field's, or the wind's for the scene's fields), as the copies round a few steps their own way
+// (see EffectorLocal; the wind's also fuses k1's own product).
+void FieldEffector(uint effector, uint effector_description, inout vec3 moved,
+                   inout vec3 velocity, out vec3 next, float step, float half_step,
+                   float to_step, uint copy) {
+    const vec4 at = EmitterVector(effector, 0u);
+    const vec4 q = EmitterVector(effector, 4u);
+    const uint shape = EmitterWord(effector, 14u);
+    const vec4 sizes = EmitterVector(effector, 16u);
+    const vec4 w20 = EmitterVector(effector, 20u);
+    const vec4 w24 = EmitterVector(effector, 24u);
+    const vec3 pulls = vec3(DescriptionFloat(effector_description, 24u),
+                            DescriptionFloat(effector_description, 25u),
+                            DescriptionFloat(effector_description, 26u));
+    float strength = w24.x;
+    vec3 swirl = vec3(0.0);
+    vec3 dir = vec3(0.0);
+    if (0u != shape) {
+        // The place in the field's frame.
+        const vec3 local = EffectorLocal(at, q, sizes.xyz, moved, copy);
+        const float lx = local.x;
+        const float ly = local.y;
+        const float lz = local.z;
+        // The shape's falloff (0 at its centre, 1 at its edge), direction and two frame vectors.
+        float falloff = 0.0;
+        vec3 fa = vec3(0.0, 0.0, 1.0);
+        vec3 fb = vec3(0.0, 1.0, 0.0);
+        if (shape != 1u) {
+            if (shape != 2u) {
+                if (shape != 3u) {
+                    if (shape == 4u) {
+                        // A torus about y of radius 1, tube radius word 19.
+                        float r2 = lx * lx;
+                        r2 = lz * lz + r2;
+                        if (0.0 < sqrt(r2)) {
+                            const float inv = 1.0 / sqrt(r2);
+                            const float px = fma(-inv, lx, lx);
+                            const float pxx = px * px;
+                            float t2 = ly * ly + pxx;
+                            const float pz = fma(-inv, lz, lz);
+                            t2 = pz * pz + t2;
+                            const float dist = sqrt(t2);
+                            const float dinv = 1.0 / sqrt(t2);
+                            const bool c = 0.0 < dist;
+                            const float nx = px * dinv;
+                            const float ny = dinv * ly;
+                            const float nz = pz * dinv;
+                            dir = c ? vec3(nx, ny, nz) : vec3(0.0);
+                            const float inv_tube = 1.0 / sizes.w;
+                            fa = dir;
+                            falloff = clamp(dist * inv_tube, 0.0, 1.0);
+                            fb = vec3(-inv * lx + 0.0, 0.0, inv * lz);
+                        }
+                    }
+                } else {
+                    // A box: the largest coordinate.
+                    float l2 = lx * lx;
+                    l2 = ly * ly + l2;
+                    l2 = lz * lz + l2;
+                    const float len = sqrt(l2);
+                    const float inv = 1.0 / sqrt(l2);
+                    const bool c = 0.0 < len;
+                    const float nx = inv * lx;
+                    const float ny = inv * ly;
+                    const float nz = inv * lz;
+                    dir = c ? vec3(nx, ny, nz) : vec3(0.0);
+                    falloff = clamp(max(max(abs(lz), abs(lx)), abs(ly)), 0.0, 1.0);
+                    if (c) {
+                        fa = vec3(nx, 0.0, nz);
+                    }
+                }
+            } else {
+                // A cylinder about y: the distance in x and z, 1 past y's ends.
+                float l2 = lx * lx;
+                l2 = lz * lz + l2;
+                const float len = sqrt(l2);
+                const bool cap = abs(ly) >= 1.0;
+                const float inv = 1.0 / sqrt(l2);
+                falloff = clamp(max(0.0, len), 0.0, 1.0);
+                const float nx = inv * lx;
+                const float nz = inv * lz;
+                falloff = cap ? 1.0 : falloff;
+                const bool c = 0.0 < len;
+                dir = vec3(c ? nx : 0.0, 0.0, c ? nz : 0.0);
+                if (c) {
+                    fa = vec3(nx, 0.0, nz);
+                }
+            }
+        } else {
+            // A sphere.
+            float l2 = lx * lx;
+            l2 = ly * ly + l2;
+            l2 = lz * lz + l2;
+            const float len = sqrt(l2);
+            const float inv = 1.0 / sqrt(l2);
+            const bool c = 0.0 < len;
+            const float nx = inv * lx;
+            const float ny = inv * ly;
+            const float nz = inv * lz;
+            dir = c ? vec3(nx, ny, nz) : vec3(0.0);
+            falloff = clamp(max(0.0, len), 0.0, 1.0);
+            if (c) {
+                fa = vec3(nx, 0.0, nz);
+            }
+        }
+        // The swirl: the frame vectors' cross product turned by q; the strength's smoothstep.
+        float cx = fb.y * fa.z;
+        float cy = fb.z * fa.y;
+        float cz = fb.x * fa.x;
+        float edge = med3(uintBitsToFloat(0x3c23d70au), w24.z, 1.0);
+        edge = 1.0 - edge;
+        cx = fa.y * -fb.x + cx;
+        cy = fa.x * -fb.y + cy;
+        cz = fa.z * -fb.z + cz;
+        float m1 = q.z * cx;
+        float m2 = q.x * cz;
+        float m3 = q.y * cy;
+        float width = 1.0 - edge;
+        float ux = -q.x * cy + m1;
+        float uy = -q.y * cx + m2;
+        float uz = -q.z * cz + m3;
+        width = 1.0 / width;
+        const float past_edge = falloff - edge;
+        const float t = clamp(past_edge * width, 0.0, 1.0);
+        ux = q.w * cz + ux;
+        uy = q.w * cy + uy;
+        uz = q.w * cx + uz;
+        float n1 = -q.z * ux;
+        float dt = q.x * cx;
+        float n2 = -q.x * uy;
+        float n3 = -q.y * uz;
+        float t2 = t * t;
+        float sy = q.y * uy + n1;
+        float sz = q.z * uz + n2;
+        const float t3 = t * t2;
+        t2 = uintBitsToFloat(0x40400000u) * t2;
+        dt = cz * q.y + dt;
+        float sx = q.x * ux + n3;
+        const float range = w24.y - w24.x;
+        sy = uz * q.w + sy;
+        dt = q.z * cy + dt;
+        sz = ux * q.w + sz;
+        sx = uy * q.w + sx;
+        t2 = -2.0 * t3 + t2;
+        swirl = vec3(q.x * dt + sy, dt * q.y + sz, dt * q.z + sx);
+        strength = t2 * range + strength;
+    }
+    // The swirl moves the place about the field's centre, kept at its distance; the pull and
+    // swirl's change of place over the step, less the velocity's share, by the strength.
+    float sxw = swirl.x * w20.w;
+    const float keep = 1.0 - w24.w;
+    float hx = w24.w * sxw;
+    float ex = sxw * keep;
+    float syw = swirl.y * w20.w;
+    float hy = w24.w * syw;
+    syw = syw * keep;
+    float szw = swirl.z * w20.w;
+    ex = half_step * hx + ex;
+    ex = step * ex + moved.x;
+    float hz = w24.w * szw;
+    float ez = szw * keep;
+    float ox = moved.x - at.x;
+    syw = half_step * hy + syw;
+    float swx = ex - at.x;
+    float swy = step * syw + moved.y;
+    float r2a = ox * ox;
+    float oy = moved.y - at.y;
+    ez = half_step * hz + ez;
+    float r2b = swx * swx;
+    swy = swy - at.y;
+    ez = step * ez + moved.z;
+    float oz = moved.z - at.z;
+    r2a = oy * oy + r2a;
+    float swz = ez - at.z;
+    float ra = oz * oz + r2a;
+    r2b = swy * swy + r2b;
+    float rb = swz * swz + r2b;
+    const float dist_a = sqrt(ra);
+    const float inv_b = 1.0 / sqrt(rb);
+    const float dist_c = max(uintBitsToFloat(0x38d1b717u), dist_a);
+    float px = w20.x * pulls.x;
+    float pz = w20.x * pulls.z;
+    float py = w20.x * pulls.y;
+    const float ratio = inv_b * dist_c;
+    px = w20.z * dir.x + px;
+    pz = w20.z * dir.z + pz;
+    py = w20.z * dir.y + py;
+    const float nx = swx * ratio + at.x;
+    const float bx = at.x + ox;
+    float m1 = q.z * px;
+    float m2 = q.x * py;
+    float m3 = q.y * pz;
+    const float ny = swy * ratio + at.y;
+    const float by = at.y + oy;
+    const float nz = swz * ratio + at.z;
+    const float bz = at.z + oz;
+    const float gx = nx - bx;
+    const float share = keep * to_step;
+    float k1 = copy == WindCopy ? fma(-q.y, px, Rounded(q.x, py)) : -q.y * px + m2;
+    const float gy = ny - by;
+    const float gz = nz - bz;
+    m1 = pz * -q.x + m1;
+    m3 = py * -q.z + m3;
+    const float u1 = q.w * py + m1;
+    const float u2 = q.w * px + m3;
+    hx = gx * share + hx;
+    k1 = pz * q.w + k1;
+    hy = gy * share + hy;
+    hz = gz * share + hz;
+    float k2 = q.x * px;
+    float vy = -q.x * k1 + hy;
+    hx = u1 * -q.z + hx;
+    hz = u2 * -q.y + hz;
+    k2 = q.y * py + k2;
+    float vz = q.x * u1 + hz;
+    hx = k1 * q.y + hx;
+    vy = u2 * q.z + vy;
+    float vy2 = q.w * u1 + vy;
+    hx = u2 * q.w + hx;
+    k2 = pz * q.z + k2;
+    vz = k1 * q.w + vz;
+    hx = k2 * q.x + hx;
+    vy2 = q.y * k2 + vy2;
+    vz = q.z * k2 + vz;
+    float fx = at.w * hx;
+    float fy = at.w * vy2;
+    float fz = at.w * vz;
+    fx = w20.y * -velocity.x + fx;
+    fy = w20.y * -velocity.y + fy;
+    fz = w20.y * -velocity.z + fz;
+    fx = strength * fx;
+    fy = strength * fy;
+    fz = strength * fz;
+    const float dvx = fx * step;
+    const float dvy = fy * step;
+    const float dvz = fz * step;
+    const float qx2 = w24.w * dvx;
+    const float qy2 = w24.w * dvy;
+    const float qz2 = w24.w * dvz;
+    moved.x = qx2 * half_step + moved.x;
+    moved.y = qy2 * half_step + moved.y;
+    moved.z = qz2 * half_step + moved.z;
+    next = vec3(keep * dvx + moved.x, keep * dvy + moved.y, keep * dvz + moved.z);
+    velocity = vec3(dvx * w24.w + velocity.x, dvy * w24.w + velocity.y, dvz * w24.w + velocity.z);
+}
+
+// The particle's place before the step as the colliders' depth test sees it: its clip position
+// over w (x, y, z), its linear depth, the scene's linear depth there and just past it, whether it
+// is behind the scene, and the projection's terms the tests share (the depth scale, the inverse's
+// and the projection's offsets, a texel's size).
+struct DepthView {
+    float x;
+    float y;
+    float z;
+    float linear;
+    float scene;
+    float scene_after;
+    bool behind;
+    float depth_scale;
+    vec3 inverse_offset;
+    vec3 offset;
+    vec2 texel;
+};
+
+float SceneDepth(vec2 uv) {
+    return (vec4(1.0) - textureLod(sampler2D(depth_texture, depth_sampler), uv, 0.0)).x;
+}
+
+// The view of place p, once a particle, before its effectors; statements in the game's order.
+DepthView ViewOf(vec3 p) {
+    DepthView view;
+    const float w34 = SceneFloat(34u);
+    const float wt = w34 * SceneFloat(15u);
+    float cw = p.x * SceneFloat(3u) + wt;
+    float cx = SceneFloat(0u) * p.x;
+    float cy = SceneFloat(1u) * p.x;
+    cw = p.y * SceneFloat(7u) + cw;
+    cx = SceneFloat(4u) * p.y + cx;
+    cy = SceneFloat(5u) * p.y + cy;
+    cy = p.z * SceneFloat(9u) + cy;
+    cw = SceneFloat(11u) * p.z + cw;
+    cx = SceneFloat(8u) * p.z + cx;
+    const float to_w = 1.0 / cw;
+    cx = w34 * SceneFloat(12u) + cx;
+    cy = w34 * SceneFloat(13u) + cy;
+    view.x = to_w * cx;
+    view.y = to_w * cy;
+    const float scene = SceneDepth(vec2(0.5 * view.x + 0.5, -0.5 * view.y + 0.5));
+    float cz = SceneFloat(2u) * p.x;
+    cz = p.y * SceneFloat(6u) + cz;
+    cz = SceneFloat(10u) * p.z + cz;
+    cz = w34 * SceneFloat(14u) + cz;
+    const float near = SceneFloat(36u);
+    float to_linear = to_w * cz + -near;
+    view.depth_scale = w34 * SceneFloat(37u);
+    to_linear = 1.0 / to_linear;
+    view.linear = view.depth_scale * to_linear;
+    const float to_w34 = 1.0 / w34;
+    view.z = to_w * cz;
+    view.inverse_offset = vec3(SceneFloat(28u) * to_w34, SceneFloat(29u) * to_w34,
+                               SceneFloat(30u) * to_w34);
+    view.offset = vec3(w34 * SceneFloat(12u), w34 * SceneFloat(13u), w34 * SceneFloat(14u));
+    view.texel = vec2(1.0 / SceneFloat(32u), 1.0 / SceneFloat(33u));
+    float to_scene = scene - near;
+    to_scene = 1.0 / to_scene;
+    view.scene = view.depth_scale * to_scene;
+    view.behind = view.linear > view.scene;
+    view.scene_after = view.depth_scale * to_scene + 1.0;
+    return view;
+}
+
+// The step of the random sequence on a full word (the shift keeps the high bits).
+uint NextWordState(uint state) {
+    return (state >> 1) | ((bitCount(state & 9u) & 1u) << 19);
+}
+
+// The game's hash of a state, with its sign flip on the bits (gpu_emitter_spawn.comp's StateHash
+// on a full word).
+float WordHash(uint state) {
+    const float n = float(0xc6395u ^ state);
+    uint hash = floatBitsToUint(uintBitsToFloat(0x402a91b9u) *
+                                fract(abs(uintBitsToFloat(0x3ac01c14u) * n)));
+    if (0.0 > uintBitsToFloat(0x3b800000u) * n) {
+        hash ^= 0x80000000u;
+    }
+    return uintBitsToFloat(hash);
+}
+
+// x with its sign bit flipped (so for NaN too).
+float FlippedSign(float x) {
+    return uintBitsToFloat(floatBitsToUint(x) ^ 0x80000000u);
+}
+
+// An angle from -2 pi to 2 pi brought into -pi to pi.
+float WrapAngle(float a) {
+    float wrapped = uintBitsToFloat(0xc0c90fdbu) + a;
+    if (!(a >= uintBitsToFloat(0x40490fdbu))) {
+        wrapped = a;
+        if (uintBitsToFloat(0xc0490fdbu) >= a) {
+            wrapped = uintBitsToFloat(0x40c90fdbu) + a;
+        }
+    }
+    return wrapped;
+}
+
+// The game's arc sine series for s above 0 (the bounce's s is a sine): pi / 2 less sqrt(1 - s)
+// times a polynomial in s; the game's other series, for s at or below 0, never runs here.
+float GameAsin(float s) {
+    const float c1 = uintBitsToFloat(0x3b2ffdb3u);
+    const float c2 = uintBitsToFloat(0x3df15befu);
+    const float a = 1.0 - s;
+    const float a2 = a * a;
+    const float a3 = a * a2;
+    float p = fma(-s, c1, c1);
+    p = a3 * uintBitsToFloat(0x39c90930u) + p;
+    float r = fma(-s, c2, c2);
+    float m = uintBitsToFloat(0x3921c939u);
+    p = uintBitsToFloat(0x3c014caeu) + p;
+    m = m * a2 + uintBitsToFloat(0x3a8197e8u);
+    r = a2 * uintBitsToFloat(0x3cd93924u) + r;
+    r = uintBitsToFloat(0x3fb504f3u) + r;
+    const float inv_root = 1.0 / sqrt(a);
+    p = m * a2 + p;
+    r = p * a3 + r;
+    const float root = 1.0 / -inv_root;
+    return fma(root, r, uintBitsToFloat(0x3fc90fdbu));
+}
+
+// A stuck particle's test against the scene's depth, as the collider's (ColliderEffector) but
+// with its place before the step projected here too, in the game's program's own order there.
+// Returns 0 for no hit, 2 for crossing into or out of the band, 1 for crossing back out (with the
+// scene's normal there).
+uint StuckDepthHit(vec3 old, vec3 moved, float size, float thickness, out vec3 normal) {
+    normal = vec3(0.0, -1.0, 0.0);
+    const float w34 = SceneFloat(34u);
+    const float w15 = SceneFloat(15u);
+    float ow = SceneFloat(3u) * old.x;
+    float nw = w34 * w15;
+    float oz = SceneFloat(2u) * old.x;
+    float nz = SceneFloat(2u) * moved.x;
+    ow = SceneFloat(7u) * old.y + ow;
+    nw = SceneFloat(3u) * moved.x + nw;
+    ow = old.z * SceneFloat(11u) + ow;
+    oz = old.y * SceneFloat(6u) + oz;
+    nw = SceneFloat(7u) * moved.y + nw;
+    nz = SceneFloat(6u) * moved.y + nz;
+    ow = w34 * w15 + ow;
+    oz = SceneFloat(10u) * old.z + oz;
+    nw = SceneFloat(11u) * moved.z + nw;
+    nz = SceneFloat(10u) * moved.z + nz;
+    const float old_to_w = 1.0 / ow;
+    const float new_to_w = 1.0 / nw;
+    nz = w34 * SceneFloat(14u) + nz;
+    oz = w34 * SceneFloat(14u) + oz;
+    const float old_z = old_to_w * oz;
+    const float new_z = new_to_w * nz;
+    if (max(abs(old_z), abs(new_z)) > 1.0) {
+        return 0u;
+    }
+    float ox = SceneFloat(0u) * old.x;
+    float nx = SceneFloat(0u) * moved.x;
+    ox = SceneFloat(4u) * old.y + ox;
+    nx = SceneFloat(4u) * moved.y + nx;
+    nx = SceneFloat(8u) * moved.z + nx;
+    ox = SceneFloat(8u) * old.z + ox;
+    ox = w34 * SceneFloat(12u) + ox;
+    nx = w34 * SceneFloat(12u) + nx;
+    const float old_x = old_to_w * ox;
+    const float new_x = new_to_w * nx;
+    if (max(abs(old_x), abs(new_x)) > 1.0) {
+        return 0u;
+    }
+    float oy = SceneFloat(1u) * old.x;
+    float ny = SceneFloat(1u) * moved.x;
+    oy = old.y * SceneFloat(5u) + oy;
+    ny = SceneFloat(5u) * moved.y + ny;
+    ny = SceneFloat(9u) * moved.z + ny;
+    oy = SceneFloat(9u) * old.z + oy;
+    oy = w34 * SceneFloat(13u) + oy;
+    ny = w34 * SceneFloat(13u) + ny;
+    const float old_y = old_to_w * oy;
+    const float new_y = new_to_w * ny;
+    if (max(abs(old_y), abs(new_y)) > 1.0) {
+        return 0u;
+    }
+    const float old_scene = SceneDepth(vec2(0.5 * old_x + 0.5, -0.5 * old_y + 0.5));
+    const float u = 0.5 * new_x + 0.5;
+    const float v = -0.5 * new_y + 0.5;
+    const float scene = SceneDepth(vec2(u, v));
+    const float near = SceneFloat(36u);
+    const float depth_scale = w34 * SceneFloat(37u);
+    const float old_to_linear = 1.0 / (old_z - near);
+    const float old_linear = depth_scale * old_to_linear;
+    const float to_new = 1.0 / (new_z - near);
+    const float old_to_scene = 1.0 / (old_scene - near);
+    const float old_scene_after = depth_scale * old_to_scene + 1.0;
+    const float old_scene_linear = depth_scale * old_to_scene;
+    const float to_scene = 1.0 / (scene - near);
+    const float scene_after = depth_scale * to_scene + 1.0;
+    const float scene_linear = depth_scale * to_scene;
+    const float band = thickness * size;
+    const float old_front = -thickness * size + old_linear;
+    const float old_back = depth_scale * old_to_linear + band;
+    const bool old_front_ok = old_front < old_scene_after;
+    const bool old_back_ok = old_back > old_scene_linear;
+    const float new_front = depth_scale * to_new + -band;
+    const float new_back = to_new * depth_scale + band;
+    const bool new_front_ok = new_front < scene_after;
+    const uint was_in = old_back_ok && old_front_ok ? 1u : 0u;
+    const uint now_in = new_back > scene_linear && new_front_ok ? 1u : 0u;
+    if (was_in == now_in) {
+        return 0u;
+    }
+    const uint behind = old_linear > old_scene_linear ? 1u : 0u;
+    if (0u != (was_in | (behind & now_in))) {
+        return 2u;
+    }
+    // The scene's normal there: two more depth samples a texel along, back through the inverse
+    // projection, crossed.
+    const float texel_x = 1.0 / SceneFloat(32u);
+    const float texel_y = 1.0 / SceneFloat(33u);
+    const float u1 = texel_x + u;
+    const float to_w34 = 1.0 / w34;
+    const float sx0 = 2.0 * u + -1.0;
+    const float sx1 = 2.0 * u1 + -1.0;
+    const float sy0 = -2.0 * v + 1.0;
+    const float v1 = v + texel_y;
+    const float scene_u = SceneDepth(vec2(u1, v));
+    const float scene_v = SceneDepth(vec2(u, v1));
+    const float sy1 = -2.0 * v1 + 1.0;
+    float bz = SceneFloat(30u) * to_w34;
+    float cz = SceneFloat(18u) * sx0;
+    float cy = SceneFloat(17u) * sx0;
+    float ay = SceneFloat(29u) * to_w34;
+    float az = SceneFloat(18u) * sx1 + bz;
+    float vy = SceneFloat(17u) * sx0 + ay;
+    float bx = SceneFloat(28u) * to_w34;
+    float cx = SceneFloat(16u) * sx0;
+    cz = SceneFloat(22u) * sy0 + cz;
+    cy = SceneFloat(21u) * sy0 + cy;
+    cy = scene * SceneFloat(25u) + cy;
+    az = SceneFloat(22u) * sy0 + az;
+    cz = SceneFloat(26u) * scene + cz;
+    vy = SceneFloat(21u) * sy1 + vy;
+    ay = SceneFloat(17u) * sx1 + ay;
+    float ax = SceneFloat(16u) * sx1 + bx;
+    bz = SceneFloat(18u) * sx0 + bz;
+    cx = SceneFloat(20u) * sy0 + cx;
+    ay = SceneFloat(21u) * sy0 + ay;
+    cz = SceneFloat(30u) * to_w34 + cz;
+    cy = SceneFloat(29u) * to_w34 + cy;
+    bz = SceneFloat(22u) * sy1 + bz;
+    ax = SceneFloat(20u) * sy0 + ax;
+    cx = SceneFloat(24u) * scene + cx;
+    bx = SceneFloat(16u) * sx0 + bx;
+    cx = SceneFloat(28u) * to_w34 + cx;
+    bx = SceneFloat(20u) * sy1 + bx;
+    az = SceneFloat(26u) * scene_u + az;
+    vy = SceneFloat(25u) * scene_v + vy;
+    const float ex = az - cz;
+    vy = vy - cy;
+    ay = SceneFloat(25u) * scene_u + ay;
+    ax = SceneFloat(24u) * scene_u + ax;
+    bz = SceneFloat(26u) * scene_v + bz;
+    float n1 = ex * vy;
+    const float ey = ay - cy;
+    const float ez = ax - cx;
+    const float fx = bz - cz;
+    bx = SceneFloat(24u) * scene_v + bx;
+    float n2 = ez * fx;
+    const float fz = bx - cx;
+    n1 = fx * -ey + n1;
+    float l2 = n1 * n1;
+    n2 = -ex * fz + n2;
+    float n3 = ey * fz;
+    l2 = n2 * n2 + l2;
+    n3 = vy * -ez + n3;
+    l2 = n3 * n3 + l2;
+    const float inv = 1.0 / sqrt(l2);
+    normal = vec3(inv * n1, inv * n2, inv * n3);
+    return 1u;
+}
+
+// Effector type 5, a collider: the particle spins (turn mode 2) and, inside the effector's shape
+// (word 14; strength from word 24 at the edge to 25 at the centre above 0) or, without a shape,
+// when it crosses the scene's depth (within the description's word 19 times its size), bounces
+// from the place before the step by the description's bounce byte for its bounce count (word 49,
+// a byte for each count). k is the effector's slot, seed the particle's word 13, turn_mode its
+// description's word 49's low byte; stuck runs the stuck particles' copy, which projects the
+// place before the step itself (view is then unused).
+void ColliderEffector(uint effector, uint effector_description, uint k, uint seed,
+                      uint turn_mode, float step, float to_step_eps, float size, vec3 place,
+                      float left, DepthView view, vec3 moved, inout vec3 velocity,
+                      inout vec4 turn, inout uint flags, inout vec3 next, inout float next_left,
+                      bool stuck) {
+    const vec4 at = EmitterVector(effector, 0u);
+    const vec4 q = EmitterVector(effector, 4u);
+    const uint shape = EmitterWord(effector, 14u);
+    const vec4 sizes = EmitterVector(effector, 16u);
+    vec3 factors = EmitterVector(effector, 20u).xyz;
+    const vec2 strengths = EmitterVector(effector, 24u).xy;
+    const vec4 spins = vec4(DescriptionFloat(effector_description, 24u),
+                            DescriptionFloat(effector_description, 25u),
+                            DescriptionFloat(effector_description, 26u),
+                            DescriptionFloat(effector_description, 27u));
+    if (turn_mode == 2u) {
+        // Turn mode 2 spins about z by the description's speed for the bounce count (24 to 27).
+        const uint choice = bitfieldExtract(flags, 1, 2);
+        float speed = spins.z;
+        if (2u > choice) {
+            speed = spins.x;
+            if (1u <= choice) {
+                speed = spins.y;
+            }
+        } else if (!(3u > choice)) {
+            speed = spins.w;
+        }
+        const float spun = speed * turn.z;
+        turn.w = WrapAngle(spun * step + turn.w);
+    }
+    if (!(0u == shape && SceneFloat(32u) <= 0.0)) {
+        // Bit 0 (a bounce this step) clears; the depth test needs the screen (scene word 32).
+        flags = (flags & 0xfffffff8u) + bitfieldExtract(flags, 1, 2) * 2u;
+        uint hit = 0u;
+        vec3 normal = vec3(0.0, -1.0, 0.0);
+        if (0u != shape) {
+            const vec3 local =
+                EffectorLocal(at, q, sizes.xyz, moved, stuck ? StuckCopy : ColliderCopy);
+            const float lx = local.x;
+            const float ly = local.y;
+            const float lz = local.z;
+            float falloff = 0.0;
+            vec3 dir = vec3(0.0, 1.0, 0.0);
+            if (shape != 1u) {
+                if (shape != 2u) {
+                    if (shape != 3u) {
+                        if (shape == 4u) {
+                            // A torus: out from the ring of radius 1, tube radius word 19.
+                            float r2 = lx * lx;
+                            r2 = lz * lz + r2;
+                            if (0.0 < sqrt(r2)) {
+                                const float inv = 1.0 / sqrt(r2);
+                                const float px = fma(lx, -inv, lx);
+                                const float pxx = px * px;
+                                float t2 = ly * ly + pxx;
+                                const float pz = fma(lz, -inv, lz);
+                                t2 = pz * pz + t2;
+                                const float dist = sqrt(t2);
+                                const float dinv = 1.0 / sqrt(t2);
+                                const bool c = 0.0 < dist;
+                                const float nx = px * dinv;
+                                const float ny = dinv * ly;
+                                const float nz = pz * dinv;
+                                const float inv_tube = 1.0 / sizes.w;
+                                dir = vec3(c ? nx : 0.0, c ? ny : 1.0, c ? nz : 0.0);
+                                falloff = clamp(dist * inv_tube, 0.0, 1.0);
+                            }
+                        }
+                    } else {
+                        // A box: the largest coordinate, out from the centre.
+                        const float xx = lx * lx;
+                        float l2 = ly * ly + xx;
+                        l2 = lz * lz + l2;
+                        const float len = sqrt(l2);
+                        falloff = clamp(max(max(abs(lz), abs(lx)), abs(ly)), 0.0, 1.0);
+                        if (0.0 < len) {
+                            const float inv = 1.0 / sqrt(l2);
+                            dir = vec3(inv * lx, inv * ly, inv * lz);
+                        }
+                    }
+                } else {
+                    // A cylinder about y: out from its axis, 1 past y's ends.
+                    float l2 = lx * lx;
+                    l2 = lz * lz + l2;
+                    const float len = sqrt(l2);
+                    const bool cap = abs(ly) >= 1.0;
+                    const float f = clamp(max(0.0, len), 0.0, 1.0);
+                    falloff = cap ? 1.0 : f;
+                    if (0.0 < len) {
+                        const float inv = 1.0 / sqrt(l2);
+                        dir = vec3(inv * lx, 0.0, inv * lz);
+                    }
+                }
+            } else {
+                // A sphere: out from the centre.
+                const float xx = lx * lx;
+                float l2 = ly * ly + xx;
+                l2 = lz * lz + l2;
+                const float len = sqrt(l2);
+                falloff = clamp(max(0.0, len), 0.0, 1.0);
+                if (0.0 < len) {
+                    const float inv = 1.0 / sqrt(l2);
+                    dir = vec3(inv * lx, inv * ly, inv * lz);
+                }
+            }
+            // A hit where the strength is above 0; the normal points along the shape's direction
+            // by the strengths' difference.
+            const float range = strengths.y - strengths.x;
+            const float strength = range * falloff + strengths.x;
+            const float push = strengths.x - strengths.y;
+            hit = 0.0 < strength ? 1u : 0u;
+            normal = vec3(push * dir.x, push * dir.y, push * dir.z);
+        } else if (stuck) {
+            hit = StuckDepthHit(place, moved, size, DescriptionFloat(effector_description, 19u),
+                                normal);
+        } else {
+            // The new place against the scene's depth.
+            const float w34 = SceneFloat(34u);
+            float cw = moved.x * SceneFloat(3u) + w34 * SceneFloat(15u);
+            const float zx = SceneFloat(2u) * moved.x;
+            float cz = moved.y * SceneFloat(6u) + zx;
+            cw = SceneFloat(7u) * moved.y + cw;
+            cw = SceneFloat(11u) * moved.z + cw;
+            cz = SceneFloat(10u) * moved.z + cz;
+            const float to_w = 1.0 / cw;
+            const float new_z = to_w * (view.offset.z + cz);
+            if (!(max(abs(view.z), abs(new_z)) > 1.0)) {
+                float cx = SceneFloat(0u) * moved.x;
+                cx = SceneFloat(4u) * moved.y + cx;
+                cx = SceneFloat(8u) * moved.z + cx;
+                const float new_x = to_w * (view.offset.x + cx);
+                if (!(max(abs(view.x), abs(new_x)) > 1.0)) {
+                    float cy = SceneFloat(1u) * moved.x;
+                    cy = SceneFloat(5u) * moved.y + cy;
+                    cy = SceneFloat(9u) * moved.z + cy;
+                    const float new_y = to_w * (view.offset.y + cy);
+                    if (!(max(abs(view.y), abs(new_y)) > 1.0)) {
+                        const float u = 0.5 * new_x + 0.5;
+                        const float v = -0.5 * new_y + 0.5;
+                        const float scene = SceneDepth(vec2(u, v));
+                        const float near = SceneFloat(36u);
+                        const float to_new = 1.0 / (new_z - near);
+                        const float thickness = DescriptionFloat(effector_description, 19u);
+                        const float to_scene = 1.0 / (scene - near);
+                        const float scene_after = view.depth_scale * to_scene + 1.0;
+                        const float scene_linear = view.depth_scale * to_scene;
+                        const float band = thickness * size;
+                        const float new_front = view.depth_scale * to_new + -band;
+                        const float new_back = to_new * view.depth_scale + band;
+                        const bool front_ok = new_front < scene_after;
+                        const bool back_ok = new_back > scene_linear;
+                        const float old_back = thickness * size + view.linear;
+                        const float old_front = -thickness * size + view.linear;
+                        const bool old_back_ok = old_back > view.scene;
+                        const bool old_front_ok = old_front < view.scene_after;
+                        const uint now_in = back_ok && front_ok ? 1u : 0u;
+                        uint was_in = old_back_ok && old_front_ok ? 1u : 0u;
+                        if (was_in != now_in) {
+                            was_in = was_in | ((view.behind ? 1u : 0u) & now_in);
+                            hit = 2u;
+                            if (0u == was_in) {
+                                // The scene's normal there: two more depth samples a texel
+                                // along, back through the inverse projection, crossed.
+                                const float u1 = view.texel.x + u;
+                                const float scene_u = SceneDepth(vec2(u1, v));
+                                const float sx1 = 2.0 * u1 + -1.0;
+                                const float sx0 = 2.0 * u + -1.0;
+                                float az = SceneFloat(18u) * sx1 + view.inverse_offset.z;
+                                const float sy0 = -2.0 * v + 1.0;
+                                const float v1 = v + view.texel.y;
+                                const float scene_v = SceneDepth(vec2(u, v1));
+                                float bz = SceneFloat(18u) * sx0 + view.inverse_offset.z;
+                                float by = SceneFloat(17u) * sx0 + view.inverse_offset.y;
+                                const float sy1 = -2.0 * v1 + 1.0;
+                                float oz = SceneFloat(22u) * sy0 + bz;
+                                float cyv = SceneFloat(21u) * sy1 + by;
+                                float ay = SceneFloat(17u) * sx1 + view.inverse_offset.y;
+                                float ax = SceneFloat(16u) * sx1 + view.inverse_offset.x;
+                                float bx = SceneFloat(16u) * sx0 + view.inverse_offset.x;
+                                az = SceneFloat(22u) * sy0 + az;
+                                by = SceneFloat(21u) * sy0 + by;
+                                ay = SceneFloat(21u) * sy0 + ay;
+                                ax = SceneFloat(20u) * sy0 + ax;
+                                float ox = SceneFloat(20u) * sy0 + bx;
+                                oz = SceneFloat(26u) * scene + oz;
+                                by = SceneFloat(25u) * scene + by;
+                                bz = SceneFloat(22u) * sy1 + bz;
+                                ox = SceneFloat(24u) * scene + ox;
+                                bx = SceneFloat(20u) * sy1 + bx;
+                                hit = 1u;
+                                az = SceneFloat(26u) * scene_u + az;
+                                const float ex = az - oz;
+                                ay = SceneFloat(25u) * scene_u + ay;
+                                ax = SceneFloat(24u) * scene_u + ax;
+                                const float ey = ay - by;
+                                const float ez = ax - ox;
+                                cyv = SceneFloat(25u) * scene_v + cyv;
+                                cyv = cyv - by;
+                                bz = SceneFloat(26u) * scene_v + bz;
+                                float n1 = ex * cyv;
+                                const float fx = bz - oz;
+                                bx = SceneFloat(24u) * scene_v + bx;
+                                float n2 = ez * fx;
+                                const float fz = bx - ox;
+                                n1 = fx * -ey + n1;
+                                float l2 = n1 * n1;
+                                float n3 = ey * fz;
+                                n2 = fz * -ex + n2;
+                                l2 = n2 * n2 + l2;
+                                n3 = cyv * -ez + n3;
+                                l2 = n3 * n3 + l2;
+                                const float inv = 1.0 / sqrt(l2);
+                                normal = vec3(inv * n1, inv * n2, inv * n3);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (0u != hit) {
+            next = place;
+            next_left = 0.0;
+            if (2u != hit) {
+                // The bounce: count it (bits 1 and 2, up to 3, bit 0 this step); too slow sticks.
+                const float dx = place.x - moved.x;
+                const float dxx = dx * dx;
+                const float dy = place.y - moved.y;
+                float d2 = dy * dy + dxx;
+                const float dz = place.z - moved.z;
+                d2 = dz * dz + d2;
+                const uint count = bitfieldExtract(flags, 1, 2);
+                const uint more = 3u > count ? 1u : 0u;
+                const float dist = sqrt(d2);
+                const float stick_speed = DescriptionFloat(effector_description, 44u);
+                const float speed = dist * to_step_eps;
+                flags = (flags & 0xfffffff8u) + ((count + more) << 1);
+                flags = flags + more;
+                if (speed < stick_speed) {
+                    flags = 0x40u | (((k & 7u) << 3) | (0xffffff87u & flags));
+                    factors = vec3(0.0, 1.0, 0.0);
+                    velocity = vec3(0.0);
+                }
+                const uint shift = bitfieldExtract(flags, 1, 2) * 8u;
+                const uint bounce_byte =
+                    0xffu & (DescriptionWord(effector_description, 49u) >> (shift & 31u));
+                const uint response = bitfieldExtract(bounce_byte, 2, 2);
+                const uint turn_kind = 3u & bounce_byte;
+                float scatter = 0.0;
+                float friction = 1.0;
+                float bounce = 0.0;
+                if (0u >= response) {
+                    scatter = factors.z;
+                    friction = factors.y;
+                    bounce = factors.x;
+                }
+                const uint seed1 = 0x11u + seed;
+                const float n1 = float(0xc6395u ^ seed1);
+                const float n2 = float(0xc6395u ^ seed);
+                float dot = velocity.x * normal.x;
+                const float sg1 = uintBitsToFloat(0x3b800000u) * n1;
+                const float a2 = uintBitsToFloat(0x3ac01c14u) * n2;
+                dot = normal.y * velocity.y + dot;
+                const float fr2 = fract(abs(a2));
+                const float sg2 = uintBitsToFloat(0x3b800000u) * n2;
+                dot = normal.z * velocity.z + dot;
+                const float p1 = -normal.x * dot;
+                const float a1 = uintBitsToFloat(0x3ac01c14u) * n1;
+                const float h2 = uintBitsToFloat(0x402a91b9u) * fr2;
+                float b1 = bounce * p1;
+                const float keep = 1.0 - friction;
+                float p2 = -normal.y * dot;
+                const float fr1 = fract(abs(a1));
+                const float vx = dot * -normal.x + velocity.x;
+                p2 = bounce * p2;
+                const float p3 = -normal.z * dot;
+                const float h1 = uintBitsToFloat(0x402a91b9u) * fr1;
+                const float rx = vx * keep + b1;
+                const float vy = dot * -normal.y + velocity.y;
+                float sq = rx * rx;
+                const float ry = vy * keep + p2;
+                const float b3 = bounce * p3;
+                const float vz = dot * -normal.z + velocity.z;
+                const float hs1 = 0.0 > sg1 ? FlippedSign(h1) : h1;
+                const float hs2 = 0.0 > sg2 ? FlippedSign(h2) : h2;
+                const float angle =
+                    uintBitsToFloat(0x4016e1f2u) * hs2 + uintBitsToFloat(0xc0490fdbu);
+                const float turns = uintBitsToFloat(0x3e22f983u) * angle;
+                const float cos_arg = fract(abs(turns));
+                sq = ry * ry + sq;
+                const float rz = vz * keep + b3;
+                const float cz = uintBitsToFloat(0x3f401c14u) * hs1 + -1.0;
+                const float sin_arg = fract(turns);
+                float cs = cos(6.283185307 * cos_arg);
+                float s2 = -cz * cz + 1.0;
+                float sn = sin(6.283185307 * sin_arg);
+                sq = rz * rz + sq;
+                const float len = sqrt(sq);
+                const float keep2 = 1.0 - scatter;
+                cs = scatter * cs;
+                s2 = sqrt(s2);
+                sn = scatter * sn;
+                const float sl = scatter * len;
+                const float kz = keep2 * rz;
+                cs = cs * s2;
+                const float kx = keep2 * rx;
+                sn = sn * s2;
+                const float ky = keep2 * ry;
+                velocity.z = sl * cz + kz;
+                velocity.x = len * cs + kx;
+                velocity.y = len * sn + ky;
+                next.z = step * velocity.z + place.z;
+                next.x = step * velocity.x + place.x;
+                next.y = step * velocity.y + place.y;
+                vec3 t = turn.xyz;
+                if (1u != turn_mode) {
+                    if (turn_mode == 2u) {
+                        if (turn_kind != 1u) {
+                            if (turn_kind == 2u) {
+                                const uint state = NextWordState(0x277u + seed);
+                                float a = WordHash(state) * uintBitsToFloat(0x4016e1f2u) + turn.z;
+                                a = uintBitsToFloat(0xc0490fdbu) + a;
+                                t.z = WrapAngle(a);
+                            }
+                        } else {
+                            t.z = 0.0;
+                            turn.w = 0.0;
+                            if (!(normal.y >= uintBitsToFloat(0x3f7fbe77u))) {
+                                turn.w = uintBitsToFloat(0x40490fdbu);
+                                if (!(normal.y <= uintBitsToFloat(0xbf7fbe77u))) {
+                                    float h = normal.z * normal.z;
+                                    h = normal.x * normal.x + h;
+                                    h = sqrt(h);
+                                    const float c2 = -normal.y * normal.y + 1.0;
+                                    const bool big = uintBitsToFloat(0x38d1b717u) < h;
+                                    const float s = sqrt(c2);
+                                    h = big ? h : 1.0;
+                                    const float inv = 1.0 / h;
+                                    t.x = inv * normal.z;
+                                    const float mx = 0.0 - normal.x;
+                                    turn.w = GameAsin(s);
+                                    const float side = mx * inv;
+                                    t.y = 0.0;
+                                    t.z = 0.0;
+                                    if (0.0 > side) {
+                                        t.x = FlippedSign(t.x);
+                                        turn.w = uintBitsToFloat(0x40c90fdbu) - turn.w;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    t = turn_kind != 1u ? turn.xyz : normal;
+                }
+                if (response != 1u) {
+                    turn.xyz = t;
+                    next_left = response != 2u ? left : uintBitsToFloat(0x3a83126fu);
+                } else {
+                    flags = 0x40u | (((k & 7u) << 3) | (0xffffff87u & flags));
+                    turn.xyz = t;
+                    next_left = left;
+                }
+            }
+        }
+    }
+}
+
+// The wind of the scene's boxes at a place: each box of the scene's list (description indices in
+// words 64 to 71 until a 0; the box's inverse half sizes at its words 20 to 22, its wind 24 to 26
+// times 27, its turn 28 to 31, its place 32 to 34) adds its wind by a falloff of 1 out to 0.4 of
+// its half sizes, 0 past 0.5. Statements in the game's order.
+vec3 BoxWind(vec3 p) {
+    vec3 wind = vec3(0.0);
+    uint box = SceneWord(64u);
+    for (uint n = 16u; n < 24u && box != 0u; n++) {
+        const vec3 inv_half = vec3(DescriptionFloat(box, 20u), DescriptionFloat(box, 21u),
+                                   DescriptionFloat(box, 22u));
+        const vec4 blow = vec4(DescriptionFloat(box, 24u), DescriptionFloat(box, 25u),
+                               DescriptionFloat(box, 26u), DescriptionFloat(box, 27u));
+        const vec4 q = vec4(DescriptionFloat(box, 28u), DescriptionFloat(box, 29u),
+                            DescriptionFloat(box, 30u), DescriptionFloat(box, 31u));
+        const vec3 at = vec3(DescriptionFloat(box, 32u), DescriptionFloat(box, 33u),
+                             DescriptionFloat(box, 34u));
+        const float dx = p.x - at.x;
+        const float dz = p.z - at.z;
+        const float dy = p.y - at.y;
+        const float a1 = -q.z * dx;
+        const float a2 = -q.x * dy;
+        const float a3 = -q.y * dz;
+        const float by = dz * q.x + a1;
+        const float bz = dx * q.y + a2;
+        const float bx = q.z * dy + a3;
+        const float tx = dx * q.w + bx;
+        const float ty = q.w * dy + by;
+        const float tz = q.w * dz + bz;
+        float rx = q.z * ty;
+        float d = q.x * dx;
+        float ry = q.x * tz;
+        float rz = q.y * tx;
+        rx = -q.y * tz + rx;
+        d = q.y * dy + d;
+        ry = -q.z * tx + ry;
+        rz = -q.x * ty + rz;
+        rx = q.w * tx + rx;
+        d = q.z * dz + d;
+        ry = q.w * ty + ry;
+        rz = q.w * tz + rz;
+        rx = q.x * d + rx;
+        ry = q.y * d + ry;
+        rz = q.z * d + rz;
+        const float lx = inv_half.x * rx;
+        const float ly = inv_half.y * ry;
+        const float lz = inv_half.z * rz;
+        const float reach = max(max(abs(lz), abs(lx)), abs(ly));
+        const float falloff = clamp(10.0 * -reach + 5.0, 0.0, 1.0);
+        wind.x = falloff * (blow.x * blow.w) + wind.x;
+        wind.y = falloff * (blow.y * blow.w) + wind.y;
+        wind.z = falloff * (blow.z * blow.w) + wind.z;
+        box = SceneWord(49u + n);
+    }
+    return wind;
+}
+
+// Effector type 3, the scene's wind, where the moved place shows on screen (clip z over w from
+// -0.3, x and y over w within 1.5): the fields of the scene's list (words 48 to 63, object indices
+// until a 0; kind 1 only) each move it as type 2's field does, then the boxes' wind, times the
+// effector's word 20, the effect's word 43 and the scene's word 34, changes the velocity over the
+// step, the effector's word 27 its share kept as velocity.
+void WindEffector(uint effector, uint effect, DepthView view, inout vec3 moved,
+                  inout vec3 velocity, inout vec3 next, float step, float half_step,
+                  float to_step) {
+    const float w34 = SceneFloat(34u);
+    float cw = moved.x * SceneFloat(3u) + w34 * SceneFloat(15u);
+    const float zx = SceneFloat(2u) * moved.x;
+    float cz = moved.y * SceneFloat(6u) + zx;
+    cw = SceneFloat(7u) * moved.y + cw;
+    cw = SceneFloat(11u) * moved.z + cw;
+    cz = SceneFloat(10u) * moved.z + cz;
+    const float to_w = 1.0 / cw;
+    if (to_w * (view.offset.z + cz) < -0.3) {
+        return;
+    }
+    float cx = SceneFloat(0u) * moved.x;
+    cx = SceneFloat(4u) * moved.y + cx;
+    cx = SceneFloat(8u) * moved.z + cx;
+    if (abs(to_w * (view.offset.x + cx)) > 1.5) {
+        return;
+    }
+    float cy = SceneFloat(1u) * moved.x;
+    cy = SceneFloat(5u) * moved.y + cy;
+    cy = SceneFloat(9u) * moved.z + cy;
+    if (abs(to_w * (view.offset.y + cy)) > 1.5) {
+        return;
+    }
+    uint field = SceneWord(48u);
+    for (uint n = 0u; n < 16u && field != 0u; n++) {
+        if (EmitterWord(field, 10u) == 1u) {
+            vec3 field_next;
+            FieldEffector(field, EmitterWord(field, 8u), moved, velocity, field_next, step,
+                          half_step, to_step, WindCopy);
+            moved = field_next;
+        }
+        field = SceneWord(49u + n);
+    }
+    const vec3 wind = BoxWind(moved);
+    const float share = EmitterFloat(effector, 27u);
+    float gain = EffectFloat(effect, 43u) * EmitterFloat(effector, 20u);
+    gain = w34 * gain;
+    gain = gain * step;
+    const vec3 change = wind * gain;
+    const vec3 kept = share * change;
+    moved = kept * half_step + moved;
+    const float keep = 1.0 - share;
+    next = keep * change + moved;
+    velocity = change * share + velocity;
+}
+
+// The noise table: 32 gradients of 4 floats, then the permutation twice over, each entry the first
+// word of a 16-byte record.
+uint NoisePerm(uint index) {
+    return Words(noise_address).words[((32u + index) * 16u) >> 2];
+}
+
+vec4 NoiseGradient(uint index) {
+    const uint at = (index * 16u) >> 2;
+    return vec4(uintBitsToFloat(Words(noise_address).words[at]),
+                uintBitsToFloat(Words(noise_address).words[at + 1u]),
+                uintBitsToFloat(Words(noise_address).words[at + 2u]),
+                uintBitsToFloat(Words(noise_address).words[at + 3u]));
+}
+
+// The game's float to int: NaN gives 0, the rest clamps to the int range.
+int GameInt(float x) {
+    return isnan(x) ? 0 : int(clamp(x, -2147483648.0, 2147483520.0));
+}
+
+// The game's floor: the whole part, less 1 unless the value is above 0 (so whole numbers at or
+// below 0 drop by 1 too). above is the game's own test of that.
+float GameFloor(float value, bool above) {
+    const int whole = GameInt(value);
+    return float(above ? whole : whole - 1);
+}
+
+// One corner's share of the noise: (radius - d^2)^4 times the gradient's dot with d, where d^2 is
+// not over the radius; the corner's lattice indices (the cell's low 8 bits plus the corner's
+// offsets) pick the gradient through the permutation.
+float NoiseCorner(vec4 d, float d2, float radius, uint pi, uint pj, uint pk, uint pl) {
+    float share = 0.0;
+    if (!(radius < d2)) {
+        const float t = radius - d2;
+        float t4 = t * t;
+        t4 = t4 * t;
+        t4 = t4 * t;
+        const vec4 grad =
+            NoiseGradient(31u & NoisePerm(pi + NoisePerm(pj + NoisePerm(pk + NoisePerm(pl)))));
+        float along = grad.x * d.x;
+        along = d.y * grad.y + along;
+        along = d.z * grad.z + along;
+        along = d.w * grad.w + along;
+        share = t4 * along;
+    }
+    return share;
+}
+
+float NoiseDistance(vec4 d) {
+    float d2 = d.x * d.x;
+    d2 = d.y * d.y + d2;
+    d2 = d.z * d.z + d2;
+    return d.w * d.w + d2;
+}
+
+// The game's 4D simplex noise at p, less its factor of 27; sum is p's coordinates' sum (made by
+// the caller in the game's order), radius each corner's reach squared.
+float SimplexNoise(vec4 p, float sum, float radius) {
+    const float skew_factor = uintBitsToFloat(0x3e9e377au);
+    const float g4 = uintBitsToFloat(0x3e0d8369u);
+    const float skew = Rounded(skew_factor, sum);
+    const float sx = Added(skew, p.x);
+    const float fx = GameFloor(sx, 0.0 < sx);
+    const float fy = GameFloor(Added(p.y, skew), p.y > -skew);
+    const float fz = GameFloor(Added(p.z, skew), p.z > -skew);
+    const float fw = GameFloor(Added(p.w, skew), p.w > -skew);
+    const int l = GameInt(fw);
+    const int k = GameInt(fz);
+    const int j = GameInt(fy);
+    const int i = GameInt(fx);
+    const float cell = float(((l + k) + j) + i);
+    const vec4 d0 = vec4(fma(cell, g4, p.x) - float(i), fma(cell, g4, p.y) - float(j),
+                         fma(cell, g4, p.z) - float(k), fma(cell, g4, p.w) - float(l));
+    const uint ii = 0xffu & uint(i);
+    const uint jj = 0xffu & uint(j);
+    const uint kk = 0xffu & uint(k);
+    const uint ll = 0xffu & uint(l);
+    const float c0 = NoiseCorner(d0, NoiseDistance(d0), radius, ii, jj, kk, ll);
+    // The corners' order: each coordinate's rank among the four.
+    const bool xy = d0.x > d0.y;
+    const bool xz = d0.x > d0.z;
+    const bool xw = d0.x >= d0.w;
+    const bool yw = d0.y > d0.w;
+    const bool zw = d0.z > d0.w;
+    const bool yz = d0.y >= d0.z;
+    const int rank_x = int(xy) + int(xz) + int(xw);
+    const int rank_y = int(!xy) + int(yz) + int(yw);
+    const int rank_z = int(!xz) + int(!yz) + int(zw);
+    const int rank_w = int(!xw) + int(!yw) + int(!zw);
+    const float offsets[3] =
+        float[3](g4, uintBitsToFloat(0x3e8d8369u), uintBitsToFloat(0x3ed4451eu));
+    float shares[3];
+    for (int c = 1; c <= 3; c++) {
+        const bvec4 step_up = bvec4(rank_x >= 4 - c, rank_y >= 4 - c, rank_z >= 4 - c,
+                                    rank_w >= 4 - c);
+        const float offset = offsets[c - 1];
+        const vec4 d = vec4(offset + (d0.x + (step_up.x ? -1.0 : 0.0)),
+                            offset + (d0.y + (step_up.y ? -1.0 : 0.0)),
+                            offset + (d0.z + (step_up.z ? -1.0 : 0.0)),
+                            offset + (d0.w + (step_up.w ? -1.0 : 0.0)));
+        shares[c - 1] = NoiseCorner(d, NoiseDistance(d), radius, ii + uint(step_up.x),
+                                    jj + uint(step_up.y), kk + uint(step_up.z),
+                                    ll + uint(step_up.w));
+    }
+    const float last = uintBitsToFloat(0xbee4f92eu);
+    const vec4 d4 = vec4(last + d0.x, last + d0.y, last + d0.z, last + d0.w);
+    const float c4 = NoiseCorner(d4, NoiseDistance(d4), radius, ii + 1u, jj + 1u, kk + 1u,
+                                 ll + 1u);
+    return (((c0 + shares[0]) + shares[1]) + shares[2]) + c4;
+}
+
+// Effector type 4, turbulence: within the effector's shape (word 14; strength from word 24 at the
+// edge to 25 inside, word 26 the edge's width) the place moves along the curl of three 4D simplex
+// noise fields of its place times word 20 and the particle's emitter's time (word 11) times word
+// 21, by 3 times word 22 times the strength over the step; word 23 is the noise's corner radius,
+// word 27 the share kept as velocity.
+void TurbulenceEffector(uint effector, uint emitter, inout vec3 moved, inout vec3 velocity,
+                        inout vec3 next, float step, float half_step) {
+    const vec4 at = EmitterVector(effector, 0u);
+    const vec4 q = EmitterVector(effector, 4u);
+    const uint shape = EmitterWord(effector, 14u);
+    const vec4 sizes = EmitterVector(effector, 16u);
+    const vec4 w20 = EmitterVector(effector, 20u);
+    const vec4 w24 = EmitterVector(effector, 24u);
+    float strength = w24.x;
+    if (0u != shape) {
+        const vec3 local = EffectorLocal(at, q, sizes.xyz, moved, TurbulenceCopy);
+        const float lx = local.x;
+        const float ly = local.y;
+        const float lz = local.z;
+        float falloff = 0.0;
+        if (shape != 1u) {
+            if (shape != 2u) {
+                if (shape != 3u) {
+                    if (shape == 4u) {
+                        float r2 = lx * lx;
+                        r2 = lz * lz + r2;
+                        if (0.0 < sqrt(r2)) {
+                            const float inv = 1.0 / sqrt(r2);
+                            const float px = fma(lx, -inv, lx);
+                            float t2 = px * px;
+                            t2 = ly * ly + t2;
+                            const float pz = fma(lz, -inv, lz);
+                            t2 = pz * pz + t2;
+                            falloff = clamp(sqrt(t2) * (1.0 / sizes.w), 0.0, 1.0);
+                        }
+                    }
+                } else {
+                    falloff = clamp(max(max(abs(lz), abs(lx)), abs(ly)), 0.0, 1.0);
+                }
+            } else {
+                float l2 = lx * lx;
+                l2 = lz * lz + l2;
+                falloff = abs(ly) >= 1.0 ? 1.0 : clamp(sqrt(l2), 0.0, 1.0);
+            }
+        } else {
+            float l2 = lx * lx;
+            l2 = ly * ly + l2;
+            l2 = lz * lz + l2;
+            falloff = clamp(sqrt(l2), 0.0, 1.0);
+        }
+        float edge = med3(uintBitsToFloat(0x3c23d70au), w24.z, 1.0);
+        edge = 1.0 - edge;
+        float width = 1.0 - edge;
+        width = 1.0 / width;
+        const float t = clamp((falloff - edge) * width, 0.0, 1.0);
+        float t2 = t * t;
+        const float t3 = t * t2;
+        t2 = 3.0 * t2;
+        t2 = -2.0 * t3 + t2;
+        strength = t2 * (w24.y - w24.x) + w24.x;
+    }
+    vec3 dir = vec3(0.0);
+    const float scale = w20.x;
+    if (0.0 < scale) {
+        const float eps = uintBitsToFloat(0x38d1b717u);
+        const float radius = clamp(max(0.0, w20.w), 0.0, 1.0);
+        const float time = EmitterFloat(emitter, 11u);
+        const float x = Rounded(scale, moved.x);
+        const float y = Rounded(scale, moved.y);
+        const float z = Rounded(scale, moved.z);
+        const float w = Rounded(time, w20.y);
+        // Each noise takes its coordinates' sum as the game's program gives it on the GPU: the
+        // driver regroups the game's sums there (the scale factored out, the offsets folded into
+        // one constant), so the sums below are those regrouped forms, each add held as written.
+        // The first field at the place itself, then a little along y and along z.
+        const float yx = Rounded(scale, moved.y + moved.x);
+        const float n1 = SimplexNoise(vec4(x, y, z, w), Added(Added(w, z), yx), radius);
+        const float shifted_y = Added(eps, y);
+        const float shifted_z = Added(eps, z);
+        const float n1y = SimplexNoise(vec4(x, shifted_y, z, w),
+                                       Added(fma(scale, moved.x + moved.z, w), shifted_y), radius);
+        const float n1z = SimplexNoise(vec4(x, y, shifted_z, w),
+                                       Added(Added(w, yx), shifted_z), radius);
+        // The second at the place mixed and offset one way, then a little along x and along z.
+        const float k3 = uintBitsToFloat(0x3e99999au);
+        const float a2 = fma(x, k3, w);
+        const float b2 = fma(w, k3, z);
+        const float u2 = fma(moved.z, k3, moved.y);
+        const float p2 = Rounded(scale, fma(moved.y, k3, moved.x));
+        const float x2 = fma(scale, u2, uintBitsToFloat(0x3f9309bdu));
+        const float y2 = Added(uintBitsToFloat(0x3ea5dc99u), b2);
+        const float z2 = Added(uintBitsToFloat(0xbeab46ecu), a2);
+        const float w2 = Added(uintBitsToFloat(0xbe6ff823u), p2);
+        const float pulled = fma(scale, u2, b2);
+        const float n2 = SimplexNoise(vec4(x2, y2, z2, w2),
+                                      Added(uintBitsToFloat(0x3f676047u),
+                                            Added(Added(a2, p2), pulled)),
+                                      radius);
+        const float shifted_x2 = Added(eps, x2);
+        const float shifted_z2 = Added(eps, z2);
+        const float n2x = SimplexNoise(vec4(shifted_x2, y2, z2, w2),
+                                       Added(Added(Added(y2, z2), w2), shifted_x2), radius);
+        const float xy2 = Added(uintBitsToFloat(0x3fbc80e3u), pulled);
+        const float n2z = SimplexNoise(vec4(x2, y2, shifted_z2, w2),
+                                       Added(Added(xy2, w2), shifted_z2), radius);
+        // The third mixed and offset another, then a little along x and along y.
+        const float k13 = uintBitsToFloat(0x3e051eb8u);
+        const float a3 = fma(w, k13, z);
+        const float b3 = fma(x, k13, w);
+        const float u3 = fma(moved.y, k13, moved.x);
+        const float v3 = fma(moved.z, k13, moved.y);
+        const float x3 = Added(uintBitsToFloat(0x3f263b88u), a3);
+        const float y3 = Added(uintBitsToFloat(0x3f113703u), b3);
+        const float z3 = fma(scale, u3, uintBitsToFloat(0x3e700f17u));
+        const float w3 = fma(scale, v3, uintBitsToFloat(0x3e702946u));
+        const float n3 = SimplexNoise(vec4(x3, y3, z3, w3),
+                                      Added(uintBitsToFloat(0x3fd7c052u),
+                                            fma(scale, v3, fma(scale, u3, Added(a3, b3)))),
+                                      radius);
+        const float shifted_x3 = Added(eps, x3);
+        const float shifted_y3 = Added(eps, y3);
+        const float n3x = SimplexNoise(vec4(shifted_x3, y3, z3, w3),
+                                       Added(Added(Added(y3, z3), w3), shifted_x3), radius);
+        const float n3y = SimplexNoise(vec4(x3, shifted_y3, z3, w3),
+                                       Added(Added(Added(x3, z3), w3), shifted_y3), radius);
+        // The curl of the three, each difference over the same small step. The game's program
+        // makes the second field's value in an earlier run, and folds the first's into z.
+        const float base1 = 27.0 * n1;
+        const float base2 = Rounded(27.0, n2);
+        const float base3 = Rounded(27.0, n3);
+        const float d3y = fma(27.0, n3y, -base3);
+        const float d2z = fma(27.0, n2z, -base2);
+        const float d1z = fma(27.0, n1z, -base1);
+        const float d3x = fma(27.0, n3x, -base3);
+        const float d1y = fma(27.0, n1y, -base1);
+        const float curl_x = d3y - d2z;
+        const float curl_y = d1z - d3x;
+        const float curl_z = fma(27.0, n2x, -(base2 + d1y));
+        const float length2 = fma(curl_z, curl_z, fma(curl_y, curl_y, Rounded(curl_x, curl_x)));
+        const float inv = 1.0 / sqrt(length2);
+        dir = vec3(curl_x * inv, curl_y * inv, curl_z * inv);
+    }
+    float gain = 3.0 * w20.z;
+    gain = gain * strength;
+    // (dir * step) * gain: the driver would multiply step by gain once.
+    const vec3 change =
+        vec3(Rounded(dir.x, step), Rounded(dir.y, step), Rounded(dir.z, step)) * gain;
+    // The share kept as velocity, rounded: the game's program adds the same product to it.
+    const vec3 kept = vec3(Rounded(w24.w, change.x), Rounded(w24.w, change.y),
+                           Rounded(w24.w, change.z));
+    moved = fma(kept, vec3(half_step), moved);
+    const float keep = 1.0 - w24.w;
+    next = fma(vec3(keep), change, moved);
+    velocity = kept + velocity;
+}
+
+void main() {
+    const uint particle = gl_WorkGroupID.x * 64u + gl_LocalInvocationID.x;
+    if (!(SceneWord(46u) > particle)) {
+        return;
+    }
+    const uvec4 ids = ParticleWords(particle, 12u);
+    const uint emitter = ids.x & 0xffffffu;
+    const uint effect = EmitterWord(emitter, 9u);
+    if (effect == 0u) {
+        return;
+    }
+    const uint kind = EmitterWord(emitter, 10u);
+    if (!(kind == 1u || kind == 0u)) {
+        return;
+    }
+    if (EmitterWord(emitter, 14u) == FreshMark) {
+        return;
+    }
+    // The ring moved: word 13 its first particle in this pool, 12 in the next.
+    const uint first_in = EmitterWord(emitter, 13u);
+    if (!(first_in <= particle)) {
+        return;
+    }
+    const uint first = EmitterWord(emitter, 12u);
+    const uint target = first + particle - first_in;
+    if (!(0x27bc86aau > target)) {
+        return;
+    }
+    const uint description = EmitterWord(emitter, 8u);
+    const uint end = first + DescriptionWord(description, 6u);
+    if (first > target || end < target) {
+        return;
+    }
+    // The effect's time step (words 41 and 44).
+    const float step = EffectFloat(effect, 41u) * EffectFloat(effect, 44u);
+    const vec4 place = ParticleVector(particle, 0u);
+    vec4 velocity = ParticleVector(particle, 4u);
+    vec4 turn = ParticleVector(particle, 8u);
+    if (0.0 >= step) {
+        SetOutVector(target, 0u, place);
+        SetOutVector(target, 4u, velocity);
+        SetOutVector(target, 8u, turn);
+        SetOutWords(target, 12u, ids);
+        return;
+    }
+    if (velocity.w <= step) {
+        // Its life is over: the generation's low bits (24 to 27) clear and no time left.
+        SetOutWords(target, 12u, uvec4(0xf0ffffffu & ids.x, ids.yzw));
+        SetOutVector(target, 0u, place);
+        SetOutVector(target, 4u, vec4(velocity.xyz, 0.0));
+        SetOutVector(target, 8u, turn);
+        return;
+    }
+    float left = fma(-EffectFloat(effect, 41u), EffectFloat(effect, 44u), velocity.w);
+    vec3 moved = vec3(fma(velocity.x, step, place.x), fma(velocity.y, step, place.y),
+                      fma(velocity.z, step, place.z));
+    uint flags = ids.z;
+    float size = place.w;
+    // The slot of the effector a particle stuck to (flag 0x40, bits 3 to 5), else -1.
+    int stuck_slot = -1;
+    if ((0x40u & flags) != 0u) {
+        stuck_slot = int(bitfieldExtract(flags, 3, 3));
+    }
+    const uint turn_modes = DescriptionWord(description, 49u);
+    const uint effector_base = EffectWord(effect, 46u);
+    const float half_step = 0.5 * step;
+    const float to_step = 1.0 / step;
+    const float to_step_eps = 1.0 / (uintBitsToFloat(0x38d1b717u) + step);
+    if (0 > stuck_slot) {
+        const DepthView view = ViewOf(place.xyz);
+        for (uint k = 0u; k < 8u; k++) {
+            const uint slot_word = DescriptionWord(description, 8u + k);
+            if (slot_word == 0xffffffffu) {
+                break;
+            }
+            const uint effector = effector_base + 0xffffffffu * slot_word;
+            vec3 next = moved;
+            float next_left = left;
+            if (EmitterWord(effector, 10u) == 1u) {
+                const uint effector_description = EmitterWord(effector, 8u);
+                const uint type = DescriptionWord(effector_description, 4u);
+                if (type != 2u) {
+                    if (type != 4u) {
+                        if (type != 3u) {
+                            if (type != 5u) {
+                                if (type == 6u) {
+                                    // A push along x (word 20); the particle's size becomes 0.1.
+                                    const float a = EmitterFloat(effector, 20u);
+                                    const float gained = a * step;
+                                    moved.x = step * a + moved.x;
+                                    next.x = half_step * gained + moved.x;
+                                    size = uintBitsToFloat(0x3dcccccdu);
+                                    velocity.x = step * a + velocity.x;
+                                }
+                            } else {
+                                ColliderEffector(effector, effector_description, k, ids.y,
+                                                 0xffu & turn_modes, step, to_step_eps, size,
+                                                 place.xyz, left, view, moved, velocity.xyz, turn,
+                                                 flags, next, next_left, false);
+                            }
+                        } else {
+                            WindEffector(effector, effect, view, moved, velocity.xyz, next, step,
+                                         half_step, to_step);
+                        }
+                    } else {
+                        TurbulenceEffector(effector, emitter, moved, velocity.xyz, next, step,
+                                           half_step);
+                    }
+                } else {
+                    FieldEffector(effector, effector_description, moved, velocity.xyz, next, step,
+                                  half_step, to_step, FieldCopy);
+                }
+            }
+            moved = next;
+            left = next_left;
+        }
+    } else {
+        // A stuck particle meets only the collider it stuck to.
+        const uint slot_word = DescriptionWord(description, 8u + uint(stuck_slot));
+        if (slot_word != 0xffffffffu) {
+            const uint effector = effector_base + 0xffffffffu * slot_word;
+            DepthView no_view;
+            vec3 next = moved;
+            float next_left = left;
+            ColliderEffector(effector, EmitterWord(effector, 8u), uint(stuck_slot), ids.y,
+                             0xffu & turn_modes, step, to_step_eps, size, place.xyz, left, no_view,
+                             moved, velocity.xyz, turn, flags, next, next_left, true);
+            moved = next;
+            left = next_left;
+        }
+    }
+    // Turn mode 0: the turn is the step's direction (not for a NaN step).
+    if ((0xffu & turn_modes) == 0u && 0.0 < step) {
+        turn = vec4((moved.x - place.x) * to_step, (moved.y - place.y) * to_step,
+                    (moved.z - place.z) * to_step, to_step);
+    }
+    SetOutVector(target, 0u, vec4(moved, size));
+    SetOutVector(target, 4u, vec4(velocity.xyz, left));
+    SetOutVector(target, 8u, turn);
+    SetOutWords(target, 12u, uvec4(ids.xy, flags, ids.w));
+}
