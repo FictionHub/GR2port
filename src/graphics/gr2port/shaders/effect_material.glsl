@@ -74,7 +74,8 @@ float EffectFlippedSign(float x) {
 }
 
 // A map's texel at the carried texture coordinates (past map 0 plus the offset), through the map's
-// offset and repeat (v from the far edge), with red for green and blue where the flags ask.
+// offset and repeat (v from the far edge), with red for green and blue where the flags ask (not
+// with EFFECT_NO_RED_FLAGS, the shadow pass's program).
 vec4 EffectTexel(EffectLayers layers, uint map, bool first) {
     const uint words = EffectUVOffset + 4u * map;
     const vec2 uv = first ? layers.uv
@@ -84,9 +85,11 @@ vec4 EffectTexel(EffectLayers layers, uint map, bool first) {
         EffectFlippedSign(EffectConstant(words + 3u) * uv.y + EffectConstant(words + 1u));
     vec4 texel = textureLod(sampler2D(textures[nonuniformEXT(EffectMap(map))], texture_sampler),
                             vec2(u, v), 0.0);
+#ifndef EFFECT_NO_RED_FLAGS
     if ((floatBitsToUint(EffectConstant(EffectFlags)) & (EffectFlagRed << map)) != 0u) {
         texel.yz = texel.xx;
     }
+#endif
     return texel;
 }
 
