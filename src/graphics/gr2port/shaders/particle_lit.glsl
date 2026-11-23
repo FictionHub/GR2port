@@ -15,12 +15,39 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Lig
     uint words[];
 };
 
-// The directional light's colour times its wrapped term at the cosine: (0.5 cosine + 0.5)^2 times
-// 3 / (4 pi), with the cosine at least 0.
-vec3 DirectionalDiffuse(LightConstants light, float cosine) {
+// How a material shifts the lights' luma by LumaShifted: the directional light's where x is not 0
+// and each point light's where y is not 0, both by y held to -1 to 1.
+const vec2 NoLightShift = vec2(0.0);
+
+// The colour with each channel held to 0 to 1 and its luma (Rec. 709's weights) moved by the
+// amount (-1 to 1): by amount / (1 - luma) above 0 and amount / luma below, each only where its
+// divisor is above 2^-23. Red, green and blue come back through the game's weights, which take red
+// from the blue difference and blue from the red.
+vec3 LumaShifted(vec3 color, float amount) {
+    const vec3 held = clamp(max(vec3(0.0), color), 0.0, 1.0);
+    float luma = clamp(0.0722 * held.b + (held.g * 0.7152 + 0.2126 * held.r), 0.0, 1.0);
+    if (0.0 < amount) {
+        const float rest = 1.0 - luma;
+        luma = (uintBitsToFloat(0x34000000u) < rest ? (1.0 / rest) * amount : 0.0) + luma;
+    } else {
+        luma = (uintBitsToFloat(0x34000000u) < luma ? (1.0 / luma) * amount : 0.0) + luma;
+    }
+    const float blue_difference = 0.5 * held.b + (held.g * -0.385428 + -0.114572 * held.r);
+    const float red_difference = held.b * -0.045847 + (held.g * -0.454153 + 0.5 * held.r);
+    return vec3(blue_difference * 1.5748 + luma,
+                red_difference * -0.187324 + (blue_difference * -0.468124 + luma),
+                red_difference * 1.18556 + luma);
+}
+
+// The directional light's colour, shifted as the shift asks, times its wrapped term at the cosine:
+// (0.5 cosine + 0.5)^2 times 3 / (4 pi), with the cosine at least 0.
+vec3 DirectionalDiffuse(LightConstants light, float cosine, vec2 shift) {
     const float wrapped = 0.5 * max(0.0, cosine) + 0.5;
-    return vec3(light.words[0], light.words[1], light.words[2]) *
-           (uintBitsToFloat(0x3e747645u) * (wrapped * wrapped));
+    vec3 color = vec3(light.words[0], light.words[1], light.words[2]);
+    if (shift.x != 0.0) {
+        color = LumaShifted(color, clamp(shift.y, -1.0, 1.0));
+    }
+    return color * (uintBitsToFloat(0x3e747645u) * (wrapped * wrapped));
 }
 
 // The game's conversion to an unsigned integer: NaN gives 0, other values are clamped to the
@@ -86,11 +113,16 @@ float PointLightFaded(PointLight light, float distance) {
     return exp2(light.attenuation * log2(abs(falloff)));
 }
 
+// A point light's colour, shifted as the shift asks.
+vec3 PointLightColor(PointLight light, vec2 shift) {
+    return shift.y != 0.0 ? LumaShifted(light.color, clamp(shift.y, -1.0, 1.0)) : light.color;
+}
+
 // The diffuse light of a sprite's point lights: each light's direction turned into the sprite's
-// frame by the rows, its colour times what is left of it past its fade, times the light's side of
-// the normal n over pi.
+// frame by the rows, its colour (shifted as the shift asks) times what is left of it past its
+// fade, times the light's side of the normal n over pi.
 vec3 SpritePointLights(LightConstants light, uint first, vec3 view_position, vec3 n, vec3 row0,
-                       vec3 row1, vec3 row2, vec3 diffuse) {
+                       vec3 row1, vec3 row2, vec3 diffuse, vec2 shift) {
     const uint count = floatBitsToUint(light.words[12]);
     for (uint k = 0u; k < count; k++) {
         const uint index = CellLight(first, k);
@@ -108,15 +140,15 @@ vec3 SpritePointLights(LightConstants light, uint first, vec3 view_position, vec
         const float faded = PointLightFaded(point, sqrt(distance_squared));
         const float facing = max(0.0, -(turned.z * n.z + (turned.y * n.y + n.x * turned.x)));
         const float lit = uintBitsToFloat(0x3ea2f983u) * (facing * -faded + facing);
-        diffuse = lit * point.color + diffuse;
+        diffuse = lit * PointLightColor(point, shift) + diffuse;
     }
     return diffuse;
 }
 
-// The diffuse light of a model's point lights: each light's colour times what is left of it past
-// its fade, times the light's side of the view normal n over pi.
-vec3 ModelPointLights(LightConstants light, uint first, vec3 view_position, vec3 n,
-                      vec3 diffuse) {
+// The diffuse light of a model's point lights: each light's colour (shifted as the shift asks)
+// times what is left of it past its fade, times the light's side of the view normal n over pi.
+vec3 ModelPointLights(LightConstants light, uint first, vec3 view_position, vec3 n, vec3 diffuse,
+                      vec2 shift) {
     const uint count = floatBitsToUint(light.words[12]);
     for (uint k = 0u; k < count; k++) {
         const uint index = CellLight(first, k);
@@ -132,7 +164,7 @@ vec3 ModelPointLights(LightConstants light, uint first, vec3 view_position, vec3
             max(0.0, (1.0 / sqrt(distance_squared)) *
                          (to_light.z * n.z + (to_light.y * n.y + n.x * to_light.x)));
         const float lit = uintBitsToFloat(0x3ea2f983u) * (facing * -faded + facing);
-        diffuse = lit * point.color + diffuse;
+        diffuse = lit * PointLightColor(point, shift) + diffuse;
     }
     return diffuse;
 }

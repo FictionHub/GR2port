@@ -39,7 +39,7 @@ void main() {
         discard;
     }
     // The view normal, or where c_gpufxUsed.x's bit 21 picks a layer (below 7), the layer from -1
-    // to 1 through the tangent frame, turned away.
+    // to 1 through the tangent frame, negated.
     const vec3 normal = attr6.xyz;
     vec3 surface = normal;
     const uint normal_layer = bitfieldExtract(draw.gpufx_used[0], 21, 3);
@@ -61,7 +61,8 @@ void main() {
     const vec2 place = vec2(position.x * (1.0 / draw.constants[ScreenSize]),
                             position.y * (1.0 / draw.constants[ScreenSize + 1u]));
     const vec3 lit = ModelPointLights(light, LightCellFirst(light, place), attr8.xyz, n,
-                                      DirectionalDiffuse(light, -n_dot_l));
+                                      DirectionalDiffuse(light, -n_dot_l, NoLightShift),
+                                      NoLightShift);
     const float fade = DepthFade(draw, place, attr1.x);
     color0 = CombinedColor(draw, (attr0.rgb * combined.rgb) * lit, attr0.a * combined.a, fade,
                            attr2.zw, attr3.z, floatBitsToUint(attr9.x));

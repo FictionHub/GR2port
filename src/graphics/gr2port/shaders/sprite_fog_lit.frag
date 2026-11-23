@@ -66,7 +66,7 @@ void main() {
         vec3(draw.constants[16], draw.constants[17], draw.constants[18]),
         vec3(draw.constants[20], draw.constants[21], draw.constants[22]),
         vec3(draw.constants[24], draw.constants[25], draw.constants[26]),
-        DirectionalDiffuse(light, n_dot_l));
+        DirectionalDiffuse(light, n_dot_l, NoLightShift), NoLightShift);
     const float fade = DepthFade(draw, place, attr1.x);
     const vec4 curved = CurvedColor(draw, (attr0.rgb * combined.rgb) * lit, attr0.a * combined.a,
                                     fade, attr2.zw, attr3.z, floatBitsToUint(attr7.x));
