@@ -45,7 +45,7 @@ void main() {
     float vertex_alpha = 0.0;
     if (point.shown) {
         normal = ParticleNormal(point, 2.0 * mesh_normal + -1.0);
-        coordinates = SurfaceCoordinates(point, mesh_texcoord);
+        coordinates = MapCoordinates(point, 0u, mesh_texcoord);
         color.rgb = mesh_color.rgb * color.rgb;
         vertex_alpha = mesh_color.a;
         fog = HeightFog(mesh_position.y);
