@@ -148,6 +148,9 @@ void ReadGraphics(const json& section, Graphics& graphics) {
     detail("field_of_view", FieldOfViewLevels, graphics.field_of_view);
     detail("screen_shake", ScreenShakeLevels, graphics.screen_shake);
     detail("upscale_sharpening", UpscaleSharpeningLevels, graphics.upscale_sharpening);
+    graphics.hud_gravity_meter = ReadBool(section, "hud_gravity_meter", graphics.hud_gravity_meter);
+    graphics.hud_health_bar = ReadBool(section, "hud_health_bar", graphics.hud_health_bar);
+    graphics.hud_crosshair = ReadBool(section, "hud_crosshair", graphics.hud_crosshair);
     graphics.upscaler = ReadName(section, "upscaler", graphics.upscaler, UpscalerNames);
     graphics.upscale_quality =
         ReadName(section, "upscale_quality", graphics.upscale_quality, UpscaleQualityNames);
@@ -292,6 +295,9 @@ json ToJson(const Values& values) {
         {"upscaler", NameOf(values.graphics.upscaler, UpscalerNames)},
         {"upscale_quality", NameOf(values.graphics.upscale_quality, UpscaleQualityNames)},
         {"upscale_sharpening", values.graphics.upscale_sharpening},
+        {"hud_gravity_meter", values.graphics.hud_gravity_meter},
+        {"hud_health_bar", values.graphics.hud_health_bar},
+        {"hud_crosshair", values.graphics.hud_crosshair},
         {"texture_streaming_mb", values.graphics.texture_streaming_mb},
         {"pass_times", values.graphics.pass_times},
     };

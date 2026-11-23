@@ -329,6 +329,12 @@
     "TIP: if the display looks blurry, make sure the monitor resolution setting in System Menu > Graphics matches your monitor resolution": "팁: 화면이 흐릿하게 보이면 시스템 메뉴 > 그래픽 설정의 [모니터 해상도]를 사용 중인 모니터의 해상도에 맞춰 주세요",
     "Upscaler Sharpening": "업스케일러 선명도",
     "Screenshots": "스크린샷",
-    "Disable F12 Screenshot Popup": "F12 스크린샷 팝업 끄기"
+    "Disable F12 Screenshot Popup": "F12 스크린샷 팝업 끄기",
+    "HUD Gravity Meter": "HUD 중력 게이지",
+    "HUD Health Bar": "HUD 체력 바",
+    "HUD Crosshair": "HUD 조준선",
+    "Left Trigger Deadzone": "왼쪽 트리거 데드존",
+    "Right Trigger Deadzone": "오른쪽 트리거 데드존",
+    "Min Deadzone (def:1 max:126)": "최소 데드존(기본:1 최대:126)"
   }
 }

@@ -328,6 +328,12 @@
     "Audio Backend": "Hang-háttérrendszer",
     "Upscaler Sharpening": "Felskálázás élessége",
     "Screenshots": "Képernyőképek",
-    "Disable F12 Screenshot Popup": "F12-képernyőkép felugró ablakának kikapcsolása"
+    "Disable F12 Screenshot Popup": "F12-képernyőkép felugró ablakának kikapcsolása",
+    "HUD Gravity Meter": "HUD: gravitációmérő",
+    "HUD Health Bar": "HUD: életerősáv",
+    "HUD Crosshair": "HUD: célkereszt",
+    "Left Trigger Deadzone": "Bal ravasz holtzónája",
+    "Right Trigger Deadzone": "Jobb ravasz holtzónája",
+    "Min Deadzone (def:1 max:126)": "Min. holtzóna (alap:1 max:126)"
   }
 }

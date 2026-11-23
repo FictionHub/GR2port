@@ -329,6 +329,12 @@
     "TIP: if the display looks blurry, make sure the monitor resolution setting in System Menu > Graphics matches your monitor resolution": "WSKAZÓWKA: jeśli obraz jest rozmyty, w Menu systemowe > Ustawienia grafiki ustaw „Rozdzielczość monitora” zgodną z Twoim monitorem",
     "Upscaler Sharpening": "Ostrość skalowania",
     "Screenshots": "Zrzuty ekranu",
-    "Disable F12 Screenshot Popup": "Wyłącz okienko zrzutu ekranu (F12)"
+    "Disable F12 Screenshot Popup": "Wyłącz okienko zrzutu ekranu (F12)",
+    "HUD Gravity Meter": "HUD: wskaźnik grawitacji",
+    "HUD Health Bar": "HUD: pasek zdrowia",
+    "HUD Crosshair": "HUD: celownik",
+    "Left Trigger Deadzone": "Martwa strefa lewego spustu",
+    "Right Trigger Deadzone": "Martwa strefa prawego spustu",
+    "Min Deadzone (def:1 max:126)": "Minimum (domyślnie 1, maks. 126)"
   }
 }

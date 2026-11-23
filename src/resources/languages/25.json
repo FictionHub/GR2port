@@ -328,6 +328,12 @@
     "Audio Backend": "Υποσύστημα ήχου",
     "Upscaler Sharpening": "Ευκρίνεια αναβάθμισης",
     "Screenshots": "Στιγμιότυπα οθόνης",
-    "Disable F12 Screenshot Popup": "Απενεργοποίηση αναδυόμενου στιγμιότυπου (F12)"
+    "Disable F12 Screenshot Popup": "Απενεργοποίηση αναδυόμενου στιγμιότυπου (F12)",
+    "HUD Gravity Meter": "HUD: μετρητής βαρύτητας",
+    "HUD Health Bar": "HUD: μπάρα υγείας",
+    "HUD Crosshair": "HUD: σταυρόνημα",
+    "Left Trigger Deadzone": "Νεκρή ζώνη αριστερής σκανδάλης",
+    "Right Trigger Deadzone": "Νεκρή ζώνη δεξιάς σκανδάλης",
+    "Min Deadzone (def:1 max:126)": "Ελάχ. νεκρή ζώνη (προεπ.:1 μέγ.:126)"
   }
 }

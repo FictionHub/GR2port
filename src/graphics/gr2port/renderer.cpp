@@ -37,6 +37,7 @@
 #include "graphics/gr2port/fog.h"
 #include "graphics/gr2port/frame_stats.h"
 #include "graphics/gr2port/glass.h"
+#include "graphics/gr2port/hud_parts.h"
 #include "graphics/gr2port/imgui_relay.h"
 #include "graphics/gr2port/look.h"
 #include "graphics/gr2port/memory.h"
@@ -562,6 +563,7 @@ void Thread::TakeSettings() {
         now.anisotropic_filtering = graphics.anisotropic_filtering;
     }
     Look::Choose(now.bloom, now.antialiasing, now.upscale_sharpening);
+    HudParts::Choose(now);
     World::Choose(now.decals);
     // The light reads the last lines and the last occlusion.
     constexpr auto Off = Settings::Quality::Off;
@@ -1938,6 +1940,9 @@ Settings::Values Live(const Settings::Values& started, const Settings::Values& w
     to.field_of_view = from.field_of_view;
     to.screen_shake = from.screen_shake;
     to.upscale_sharpening = from.upscale_sharpening;
+    to.hud_gravity_meter = from.hud_gravity_meter;
+    to.hud_health_bar = from.hud_health_bar;
+    to.hud_crosshair = from.hud_crosshair;
     live.display.vsync = wanted.display.vsync;
     // The window takes these at once; Window::Apply shows them.
     live.display.fullscreen = wanted.display.fullscreen;

@@ -31,6 +31,7 @@
 #include "graphics/gr2port/gravity_slide.h"
 #include "graphics/gr2port/hair_flutter.h"
 #include "graphics/gr2port/hooks.h"
+#include "graphics/gr2port/hud_parts.h"
 #include "graphics/gr2port/layout_clock.h"
 #include "graphics/gr2port/loading_tip.h"
 #include "graphics/gr2port/marker_fit.h"
@@ -144,6 +145,7 @@ void Install(VAddr module_base) {
     }
     UiCapture::Install(module_base);
     PhotoUi::Install(module_base);
+    HudParts::Install(module_base);
     MouseCamera::Install(module_base, c, StubAreaSize);
     StickTilt::Install(module_base, c, StubAreaSize);
     CameraReach::Install(module_base, c, StubAreaSize);

@@ -328,6 +328,12 @@
     "Audio Backend": "Backend âm thanh",
     "Upscaler Sharpening": "Độ sắc nét nâng độ phân giải",
     "Screenshots": "Ảnh chụp màn hình",
-    "Disable F12 Screenshot Popup": "Tắt cửa sổ thông báo chụp màn hình F12"
+    "Disable F12 Screenshot Popup": "Tắt cửa sổ thông báo chụp màn hình F12",
+    "HUD Gravity Meter": "HUD: thanh trọng lực",
+    "HUD Health Bar": "HUD: thanh máu",
+    "HUD Crosshair": "HUD: tâm ngắm",
+    "Left Trigger Deadzone": "Vùng chết cò trái",
+    "Right Trigger Deadzone": "Vùng chết cò phải",
+    "Min Deadzone (def:1 max:126)": "Vùng chết tối thiểu (mặc định:1 tối đa:126)"
   }
 }

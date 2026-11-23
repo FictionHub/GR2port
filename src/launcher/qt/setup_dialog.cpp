@@ -200,7 +200,7 @@ struct Stick {
     std::array<Slider, 2> sliders;
 };
 
-// The sticks of the input config's deadzone lines, in the order of StickNames, with GR2Launcher's
+// The sticks of the input config's deadzone lines, in the order of AxisNames, with GR2Launcher's
 // labels and defaults.
 constexpr std::array Sticks{
     Stick{"Left Stick Deadzone",
@@ -213,17 +213,36 @@ constexpr std::array Sticks{
            Slider{"Max Deadzone (def:127 max:127)", 127, 348}}},
 };
 
+struct Trigger {
+    std::string_view text;
+    Area area;
+    Slider slider;
+};
+
+// The triggers of the input config's deadzone lines, after the sticks in the order of AxisNames.
+// Only the minimum shows: each trigger keeps its maximum.
+constexpr std::array Triggers{
+    Trigger{"Left Trigger Deadzone",
+            {18, 402, 290, 468},
+            Slider{"Min Deadzone (def:1 max:126)", 1, 420}},
+    Trigger{"Right Trigger Deadzone",
+            {300, 402, 577, 468},
+            Slider{"Min Deadzone (def:1 max:126)", 1, 420}},
+};
+
 // The Mouse && Keyboard tab: each camera's mouse look speeds, in percent of the base speed.
 constexpr int SpeedLow = 10;
 constexpr int SpeedHigh = 300;
 constexpr int PromptsTop = 226;
-// The Controller tab shows the same setting below the sticks.
-constexpr int PadPromptsTop = 402;
+// The Controller tab shows the same setting below the triggers. The page scrolls down to
+// ControllerPageBottom.
+constexpr int PadPromptsTop = 476;
 constexpr int MouseNoteTop = 280;
 constexpr int TouchSwipeTop = 336;
 constexpr int TouchSwipeNoteTop = 356;
 constexpr Area KeyBindingsButton{18, 396, 178, 419};
-constexpr Area PadBindingsButton{433, 402, 577, 424};
+constexpr Area PadBindingsButton{433, 476, 577, 498};
+constexpr int ControllerPageBottom = 506;
 constexpr int TrophyPopupsTop = 118;
 constexpr Area TrophyViewerButton{18, 146, 178, 169};
 // The inputs that open the trophy list in the game: a heading, then the keys' row and the pad
@@ -313,8 +332,8 @@ constexpr std::array<std::string_view, 5> UpscaleQualityChoices{"Native AA", "Qu
 constexpr int PresetTop = 88;
 constexpr int PassTop = 118;
 constexpr int PassStep = 26;
-constexpr int GraphicsNoteTop = 378;
-constexpr int GraphicsPageBottom = 462;
+constexpr int GraphicsNoteTop = 430;
+constexpr int GraphicsPageBottom = 514;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
 // driver's budget, as Auto does.
 constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
@@ -483,6 +502,9 @@ struct Dialog {
     QComboBox* character_detail = nullptr;
     QComboBox* distortion = nullptr;
     QComboBox* screen_shake = nullptr;
+    QComboBox* hud_gravity_meter = nullptr;
+    QComboBox* hud_health_bar = nullptr;
+    QComboBox* hud_crosshair = nullptr;
     std::array<QCheckBox*, Toggles.size()> toggles{};
     QSlider* gyro_deadzone = nullptr;
     QComboBox* active_pad = nullptr;
@@ -491,6 +513,7 @@ struct Dialog {
     QLabel* default_pad_id = nullptr;
     QPushButton* set_default_pad = nullptr;
     std::array<std::array<QSlider*, 2>, Sticks.size()> deadzone_bars{};
+    std::array<QSlider*, Triggers.size()> trigger_bars{};
     std::array<std::array<QSlider*, 2>, Cameras.size()> speed_bars{};
     QComboBox* prompts = nullptr;
     QComboBox* pad_prompts = nullptr;
@@ -613,6 +636,9 @@ Deadzones DefaultDeadzones() {
             deadzones[i][j] = Sticks[i].sliders[j].fallback;
         }
     }
+    for (size_t i = 0; i < Triggers.size(); ++i) {
+        deadzones[FirstTrigger + i] = {Triggers[i].slider.fallback, DeadzoneHigh};
+    }
     return deadzones;
 }
 
@@ -622,6 +648,9 @@ void ShowDeadzones(const Dialog& dialog, const Deadzones& deadzones) {
             dialog.deadzone_bars[i][j]->setValue(deadzones[i][j]);
         }
     }
+    for (size_t i = 0; i < Triggers.size(); ++i) {
+        dialog.trigger_bars[i]->setValue(deadzones[FirstTrigger + i][0]);
+    }
 }
 
 Deadzones ShownDeadzones(const Dialog& dialog) {
@@ -630,6 +659,12 @@ Deadzones ShownDeadzones(const Dialog& dialog) {
         for (size_t j = 0; j < Sticks[i].sliders.size(); ++j) {
             deadzones[i][j] = dialog.deadzone_bars[i][j]->value();
         }
+    }
+    // Each trigger keeps the maximum the input config has, above the minimum.
+    for (size_t i = 0; i < Triggers.size(); ++i) {
+        const int low = dialog.trigger_bars[i]->value();
+        deadzones[FirstTrigger + i] = {low,
+                                       std::max(dialog.deadzones[FirstTrigger + i][1], low + 1)};
     }
     return deadzones;
 }
@@ -983,13 +1018,16 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.distortion->setCurrentIndex(graphics.distortion ? 0 : 1);
 }
 
-// The field of view, the screen shake, the upscaler, its quality and its sharpening, which presets
-// leave.
+// The field of view, the screen shake, the HUD's parts, the upscaler, its quality and its
+// sharpening, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.field_of_view->setCurrentIndex(
         IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
     dialog.screen_shake->setCurrentIndex(
         IndexOf(Settings::ScreenShakeLevels, graphics.screen_shake, OwnScreenShake));
+    dialog.hud_gravity_meter->setCurrentIndex(graphics.hud_gravity_meter ? 0 : 1);
+    dialog.hud_health_bar->setCurrentIndex(graphics.hud_health_bar ? 0 : 1);
+    dialog.hud_crosshair->setCurrentIndex(graphics.hud_crosshair ? 0 : 1);
     const int upscaler = static_cast<int>(graphics.upscaler);
     dialog.upscaler->setCurrentIndex(upscaler < static_cast<int>(UpscalerChoices.size()) ? upscaler
                                                                                          : 0);
@@ -1026,6 +1064,9 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.distortion = dialog.distortion->currentIndex() != 1;
     ReadChoice(dialog.field_of_view, Settings::FieldOfViewLevels, graphics.field_of_view);
     ReadChoice(dialog.screen_shake, Settings::ScreenShakeLevels, graphics.screen_shake);
+    graphics.hud_gravity_meter = dialog.hud_gravity_meter->currentIndex() != 1;
+    graphics.hud_health_bar = dialog.hud_health_bar->currentIndex() != 1;
+    graphics.hud_crosshair = dialog.hud_crosshair->currentIndex() != 1;
     const int upscaler = dialog.upscaler->currentIndex();
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -1451,6 +1492,9 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
     FillTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
     dialog.far_detail = row("Far Environment LOD Quality", RightColumn, 7, FarDetailChoices);
     dialog.near_detail = row("Near Environment LOD Quality", RightColumn, 8, DetailChoices);
+    dialog.hud_gravity_meter = row("HUD Gravity Meter", RightColumn, 9, SwitchChoices);
+    dialog.hud_health_bar = row("HUD Health Bar", RightColumn, 10, SwitchChoices);
+    dialog.hud_crosshair = row("HUD Crosshair", RightColumn, 11, SwitchChoices);
     MakeNote(dialog, page,
              "Steam Deck also sets Aspect Ratio to 16:10, Render Resolution to 720p (1280 x 800) "
              "and VSync to Off on the Display tab, and Swap Gyro Yaw/Roll and Invert Gyro Yaw on "
@@ -1502,6 +1546,14 @@ void BuildController(Dialog& dialog, QWidget* page) {
                 dialog, page, stick.sliders[j].text, stick.area.left + GroupInset,
                 stick.area.right - GroupInset, stick.sliders[j].top, DeadzoneLow, DeadzoneHigh, {});
         }
+    }
+    for (size_t i = 0; i < Triggers.size(); ++i) {
+        const Trigger& trigger = Triggers[i];
+        MakeGroup(dialog, page, trigger.text, trigger.area);
+        dialog.trigger_bars[i] =
+            MakeSlider(dialog, page, trigger.slider.text, trigger.area.left + GroupInset,
+                       trigger.area.right - GroupInset, trigger.slider.top, DeadzoneLow,
+                       TriggerDeadzoneHigh, {});
     }
     dialog.pad_prompts = MakeRow(dialog, page, "Button Prompts", PadPromptsTop);
     QPushButton* const pad_bindings =
@@ -1974,6 +2026,7 @@ void Build(Dialog& dialog) {
     BuildGraphics(dialog, dialog.pages[GraphicsPage]);
     scroll(GraphicsPage, GraphicsPageBottom);
     BuildController(dialog, dialog.pages[ControllerPage]);
+    scroll(ControllerPage, ControllerPageBottom);
     BuildMouse(dialog, dialog.pages[MousePage]);
     BuildDlc(dialog, dialog.pages[DlcPage]);
     BuildOnline(dialog, dialog.pages[OnlinePage]);

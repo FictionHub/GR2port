@@ -328,6 +328,12 @@
     "Audio Backend": "Äänen taustaosa",
     "Upscaler Sharpening": "Skaalauksen terävyys",
     "Screenshots": "Kuvakaappaukset",
-    "Disable F12 Screenshot Popup": "Poista F12-kuvakaappauksen ilmoitus käytöstä"
+    "Disable F12 Screenshot Popup": "Poista F12-kuvakaappauksen ilmoitus käytöstä",
+    "HUD Gravity Meter": "HUD: painovoimamittari",
+    "HUD Health Bar": "HUD: terveyspalkki",
+    "HUD Crosshair": "HUD: tähtäin",
+    "Left Trigger Deadzone": "Vasemman liipaisimen kuollut alue",
+    "Right Trigger Deadzone": "Oikean liipaisimen kuollut alue",
+    "Min Deadzone (def:1 max:126)": "Min. kuollut alue (oletus:1 maks.:126)"
   }
 }

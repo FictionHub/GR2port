@@ -178,6 +178,14 @@ enum Control : int {
     IdRightMaxLabel,
     IdRightMax,
     IdRightMaxValue,
+    IdLeftTriggerGroup,
+    IdLeftTriggerLabel,
+    IdLeftTrigger,
+    IdLeftTriggerValue,
+    IdRightTriggerGroup,
+    IdRightTriggerLabel,
+    IdRightTrigger,
+    IdRightTriggerValue,
     IdFootGroup,
     IdFootHorizontalLabel,
     IdFootHorizontal,
@@ -246,6 +254,12 @@ enum Control : int {
     IdDistortion,
     IdScreenShakeLabel,
     IdScreenShake,
+    IdHudGravityMeterLabel,
+    IdHudGravityMeter,
+    IdHudHealthBarLabel,
+    IdHudHealthBar,
+    IdHudCrosshairLabel,
+    IdHudCrosshair,
     IdGraphicsNote,
     IdGameFolderGroup,
     IdGameFolder,
@@ -394,17 +408,41 @@ constexpr std::array Sticks{
                   127, 348}}},
 };
 
+struct Trigger {
+    int group;
+    const wchar_t* text;
+    RECT area;
+    Slider slider;
+};
+
+// The triggers' deadzone lines, after the sticks in the order of AxisNames. Only the minimum
+// shows: each trigger keeps its maximum.
+constexpr std::array Triggers{
+    Trigger{IdLeftTriggerGroup,
+            L"Left Trigger Deadzone",
+            {18, 402, 290, 468},
+            Slider{IdLeftTriggerLabel, IdLeftTrigger, IdLeftTriggerValue,
+                   L"Min Deadzone (def:1 max:126)", 1, 420}},
+    Trigger{IdRightTriggerGroup,
+            L"Right Trigger Deadzone",
+            {300, 402, 577, 468},
+            Slider{IdRightTriggerLabel, IdRightTrigger, IdRightTriggerValue,
+                   L"Min Deadzone (def:1 max:126)", 1, 420}},
+};
+
 // The Mouse && Keyboard tab: each camera's mouse look speeds, in percent of the base speed.
 constexpr int SpeedLow = 10;
 constexpr int SpeedHigh = 300;
 constexpr int PromptsTop = 226;
-// The Controller tab shows the same setting below the sticks.
-constexpr int PadPromptsTop = 402;
+// The Controller tab shows the same setting below the triggers. The page scrolls down to
+// ControllerPageBottom.
+constexpr int PadPromptsTop = 476;
 constexpr int MouseNoteTop = 280;
 constexpr int TouchSwipeTop = 336;
 constexpr int TouchSwipeNoteTop = 356;
 constexpr RECT KeyBindingsButton{18, 396, 178, 419};
-constexpr RECT PadBindingsButton{433, 402, 577, 424};
+constexpr RECT PadBindingsButton{433, 476, 577, 498};
+constexpr int ControllerPageBottom = 506;
 constexpr int TrophyPopupsTop = 118;
 constexpr RECT TrophyViewerButton{18, 146, 178, 169};
 // The inputs that open the trophy list in the game: a heading, then the keys' row and the pad
@@ -519,8 +557,8 @@ constexpr std::array<const wchar_t*, 5> UpscaleQualityChoices{L"Native AA", L"Qu
 constexpr int PresetTop = 88;
 constexpr int PassTop = 118;
 constexpr int PassStep = 26;
-constexpr int GraphicsNoteTop = 378;
-constexpr int GraphicsPageBottom = 462;
+constexpr int GraphicsNoteTop = 430;
+constexpr int GraphicsPageBottom = 514;
 // The Texture Streaming list is wider than its combo box, to show the GPU's name.
 constexpr int TextureStreamingListWidth = 280;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
@@ -610,6 +648,12 @@ constexpr std::array GraphicsRows{
                 FarDetailChoices},
     GraphicsRow{IdNearDetailLabel, IdNearDetail, L"Near Environment LOD Quality", RightColumn, 8,
                 DetailChoices},
+    GraphicsRow{IdHudGravityMeterLabel, IdHudGravityMeter, L"HUD Gravity Meter", RightColumn, 9,
+                SwitchChoices},
+    GraphicsRow{IdHudHealthBarLabel, IdHudHealthBar, L"HUD Health Bar", RightColumn, 10,
+                SwitchChoices},
+    GraphicsRow{IdHudCrosshairLabel, IdHudCrosshair, L"HUD Crosshair", RightColumn, 11,
+                SwitchChoices},
 };
 
 struct Monitor {
@@ -1038,6 +1082,9 @@ Deadzones DefaultDeadzones() {
             deadzones[i][j] = Sticks[i].sliders[j].fallback;
         }
     }
+    for (size_t i = 0; i < Triggers.size(); ++i) {
+        deadzones[FirstTrigger + i] = {Triggers[i].slider.fallback, DeadzoneHigh};
+    }
     return deadzones;
 }
 
@@ -1049,6 +1096,12 @@ void ShowDeadzones(const Dialog& dialog, const Deadzones& deadzones) {
             SetWindowTextW(Item(dialog, slider.value), std::to_wstring(deadzones[i][j]).c_str());
         }
     }
+    for (size_t i = 0; i < Triggers.size(); ++i) {
+        const Slider& slider = Triggers[i].slider;
+        const int low = deadzones[FirstTrigger + i][0];
+        SendMessageW(Item(dialog, slider.bar), TBM_SETPOS, TRUE, low);
+        SetWindowTextW(Item(dialog, slider.value), std::to_wstring(low).c_str());
+    }
 }
 
 Deadzones ShownDeadzones(const Dialog& dialog) {
@@ -1058,6 +1111,13 @@ Deadzones ShownDeadzones(const Dialog& dialog) {
             deadzones[i][j] = static_cast<int>(
                 SendMessageW(Item(dialog, Sticks[i].sliders[j].bar), TBM_GETPOS, 0, 0));
         }
+    }
+    // Each trigger keeps the maximum the input config has, above the minimum.
+    for (size_t i = 0; i < Triggers.size(); ++i) {
+        const int low =
+            static_cast<int>(SendMessageW(Item(dialog, Triggers[i].slider.bar), TBM_GETPOS, 0, 0));
+        deadzones[FirstTrigger + i] = {low,
+                                       std::max(dialog.deadzones[FirstTrigger + i][1], low + 1)};
     }
     return deadzones;
 }
@@ -1118,6 +1178,11 @@ void ShowSliderValue(const Dialog& dialog, HWND bar) {
             if (slider.bar == GetDlgCtrlID(bar)) {
                 SetWindowTextW(Item(dialog, slider.value), std::to_wstring(value).c_str());
             }
+        }
+    }
+    for (const Trigger& trigger : Triggers) {
+        if (trigger.slider.bar == GetDlgCtrlID(bar)) {
+            SetWindowTextW(Item(dialog, trigger.slider.value), std::to_wstring(value).c_str());
         }
     }
     for (const Camera& camera : Cameras) {
@@ -1493,13 +1558,16 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdDistortion), graphics.distortion ? 0 : 1);
 }
 
-// The field of view, the screen shake, the upscaler, its quality and its sharpening, which presets
-// leave.
+// The field of view, the screen shake, the HUD's parts, the upscaler, its quality and its
+// sharpening, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdFieldOfView),
            IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
     Select(Item(dialog, IdScreenShake),
            IndexOf(Settings::ScreenShakeLevels, graphics.screen_shake, OwnScreenShake));
+    Select(Item(dialog, IdHudGravityMeter), graphics.hud_gravity_meter ? 0 : 1);
+    Select(Item(dialog, IdHudHealthBar), graphics.hud_health_bar ? 0 : 1);
+    Select(Item(dialog, IdHudCrosshair), graphics.hud_crosshair ? 0 : 1);
     Select(Item(dialog, IdUpscaler), static_cast<int>(graphics.upscaler));
     Select(Item(dialog, IdUpscaleQuality), static_cast<int>(graphics.upscale_quality));
     SendMessageW(Item(dialog, IdUpscaleSharpening), TBM_SETPOS, TRUE,
@@ -1538,6 +1606,9 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.distortion = Selected(Item(dialog, IdDistortion)) != 1;
     ReadChoice(Item(dialog, IdFieldOfView), Settings::FieldOfViewLevels, graphics.field_of_view);
     ReadChoice(Item(dialog, IdScreenShake), Settings::ScreenShakeLevels, graphics.screen_shake);
+    graphics.hud_gravity_meter = Selected(Item(dialog, IdHudGravityMeter)) != 1;
+    graphics.hud_health_bar = Selected(Item(dialog, IdHudHealthBar)) != 1;
+    graphics.hud_crosshair = Selected(Item(dialog, IdHudCrosshair)) != 1;
     const int upscaler = Selected(Item(dialog, IdUpscaler));
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -1889,12 +1960,12 @@ void Build(HWND window, Dialog& dialog) {
     RECT page_area{0, 0, tab_width, tab_height};
     TabCtrl_AdjustRect(tab, FALSE, &page_area);
     for (size_t i = 0; i < PageCount; ++i) {
-        dialog.pages[i] =
-            CreateWindowExW(WS_EX_CONTROLPARENT, PageClass, L"",
-                            WS_CHILD | (i == DisplayPage ? WS_VISIBLE : 0) |
-                                (i == DisplayPage || i == GraphicsPage ? WS_VSCROLL : 0),
-                            page_area.left, page_area.top, page_area.right - page_area.left,
-                            page_area.bottom - page_area.top, tab, nullptr, instance, nullptr);
+        dialog.pages[i] = CreateWindowExW(
+            WS_EX_CONTROLPARENT, PageClass, L"",
+            WS_CHILD | (i == DisplayPage ? WS_VISIBLE : 0) |
+                (i == DisplayPage || i == GraphicsPage || i == ControllerPage ? WS_VSCROLL : 0),
+            page_area.left, page_area.top, page_area.right - page_area.left,
+            page_area.bottom - page_area.top, tab, nullptr, instance, nullptr);
     }
     const POINT page_origin{Scaled(dialog, TabArea.left) + page_area.left,
                             Scaled(dialog, TabArea.top) + page_area.top};
@@ -2069,25 +2140,34 @@ void Build(HWND window, Dialog& dialog) {
     controller_order.push_back(add(WC_BUTTONW, L"Remove Default Gamepad",
                                    BS_PUSHBUTTON | WS_TABSTOP, IdRemoveDefaultPad,
                                    RemoveDefaultPadButton));
+    // A deadzone slider in its group box: its label, its value and its bar up to high.
+    const auto add_deadzone = [&](const Slider& slider, const RECT& group, int high) {
+        const int left = group.left + GroupInset;
+        const int right = group.right - GroupInset;
+        controller_order.push_back(
+            add(WC_STATICW, slider.text, SS_LEFT, slider.label,
+                {left, slider.top, right - SliderValueWidth, slider.top + InfoHeight}));
+        controller_order.push_back(
+            add(WC_STATICW, L"", SS_RIGHT, slider.value,
+                {right - SliderValueWidth, slider.top, right, slider.top + InfoHeight}));
+        const int bar_top = slider.top + SliderTop;
+        const HWND bar =
+            add(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, slider.bar,
+                {left - SliderOverhang, bar_top, right + SliderOverhang, bar_top + SliderHeight});
+        SendMessageW(bar, TBM_SETRANGE, FALSE, MAKELPARAM(DeadzoneLow, high));
+        controller_order.push_back(bar);
+    };
     for (const Stick& stick : Sticks) {
         controller_order.push_back(
             add(WC_BUTTONW, stick.text, BS_GROUPBOX, stick.group, stick.area));
-        const int left = stick.area.left + GroupInset;
-        const int right = stick.area.right - GroupInset;
         for (const Slider& slider : stick.sliders) {
-            controller_order.push_back(
-                add(WC_STATICW, slider.text, SS_LEFT, slider.label,
-                    {left, slider.top, right - SliderValueWidth, slider.top + InfoHeight}));
-            controller_order.push_back(
-                add(WC_STATICW, L"", SS_RIGHT, slider.value,
-                    {right - SliderValueWidth, slider.top, right, slider.top + InfoHeight}));
-            const int bar_top = slider.top + SliderTop;
-            const HWND bar = add(
-                TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, slider.bar,
-                {left - SliderOverhang, bar_top, right + SliderOverhang, bar_top + SliderHeight});
-            SendMessageW(bar, TBM_SETRANGE, FALSE, MAKELPARAM(DeadzoneLow, DeadzoneHigh));
-            controller_order.push_back(bar);
+            add_deadzone(slider, stick.area, DeadzoneHigh);
         }
+    }
+    for (const Trigger& trigger : Triggers) {
+        controller_order.push_back(
+            add(WC_BUTTONW, trigger.text, BS_GROUPBOX, trigger.group, trigger.area));
+        add_deadzone(trigger.slider, trigger.area, TriggerDeadzoneHigh);
     }
     controller_order.push_back(
         add(WC_STATICW, L"Button Prompts", SS_LEFT | SS_CENTERIMAGE, IdPadPromptsLabel,
@@ -2098,6 +2178,7 @@ void Build(HWND window, Dialog& dialog) {
     controller_order.push_back(add(WC_BUTTONW, L"Button Bindings...", BS_PUSHBUTTON | WS_TABSTOP,
                                    IdPadBindings, PadBindingsButton));
     KeepTabOrder(controller_order);
+    set_scroll(controller_page, ControllerPageBottom);
 
     const HWND mouse_page = dialog.pages[MousePage];
     const auto add_mouse = [&](const wchar_t* type, const wchar_t* text, DWORD style, int id,

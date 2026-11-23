@@ -81,6 +81,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/motion_blur.h
     ${CMAKE_CURRENT_LIST_DIR}/photo.cpp
     ${CMAKE_CURRENT_LIST_DIR}/photo.h
+    ${CMAKE_CURRENT_LIST_DIR}/hud_parts.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/hud_parts.h
     ${CMAKE_CURRENT_LIST_DIR}/photo_ui.cpp
     ${CMAKE_CURRENT_LIST_DIR}/photo_ui.h
     ${CMAKE_CURRENT_LIST_DIR}/particles.cpp

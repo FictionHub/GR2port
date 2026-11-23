@@ -305,6 +305,9 @@ void ApplyPreset(Values& values, const Settings::Preset& preset) {
     graphics.upscaler = values.graphics.upscaler;
     graphics.upscale_quality = values.graphics.upscale_quality;
     graphics.upscale_sharpening = values.graphics.upscale_sharpening;
+    graphics.hud_gravity_meter = values.graphics.hud_gravity_meter;
+    graphics.hud_health_bar = values.graphics.hud_health_bar;
+    graphics.hud_crosshair = values.graphics.hud_crosshair;
     graphics.texture_streaming_mb = preset.texture_streaming_mb != 0
                                         ? preset.texture_streaming_mb
                                         : values.graphics.texture_streaming_mb;
@@ -375,7 +378,7 @@ constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
 
-const std::array<Setting, 30> Table{{
+const std::array<Setting, 33> Table{{
     {"Preset",
      [](const Values&) {
          Names names;
@@ -422,6 +425,15 @@ const std::array<Setting, 30> Table{{
      [](Values& values, int choice) {
          values.graphics.screen_shake = Settings::ScreenShakeLevels[choice];
      }},
+    {"HUD Gravity Meter", &SwitchNames,
+     [](const Values& values) { return values.graphics.hud_gravity_meter ? 0 : 1; },
+     [](Values& values, int choice) { values.graphics.hud_gravity_meter = choice == 0; }},
+    {"HUD Health Bar", &SwitchNames,
+     [](const Values& values) { return values.graphics.hud_health_bar ? 0 : 1; },
+     [](Values& values, int choice) { values.graphics.hud_health_bar = choice == 0; }},
+    {"HUD Crosshair", &SwitchNames,
+     [](const Values& values) { return values.graphics.hud_crosshair ? 0 : 1; },
+     [](Values& values, int choice) { values.graphics.hud_crosshair = choice == 0; }},
     {"Shadows", [](const Values&) { return Choices({"PS4 Original", "Medium", "Low", "Off"}); },
      [](const Values& values) { return static_cast<int>(values.graphics.shadows); },
      [](Values& values, int choice) { values.graphics.shadows = static_cast<Quality>(choice); }},

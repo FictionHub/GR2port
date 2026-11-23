@@ -328,6 +328,12 @@
     "Audio Backend": "Ljudbackend",
     "Upscaler Sharpening": "Uppskalningsskärpa",
     "Screenshots": "Skärmbilder",
-    "Disable F12 Screenshot Popup": "Inaktivera popup för F12-skärmbild"
+    "Disable F12 Screenshot Popup": "Inaktivera popup för F12-skärmbild",
+    "HUD Gravity Meter": "HUD: gravitationsmätare",
+    "HUD Health Bar": "HUD: hälsomätare",
+    "HUD Crosshair": "HUD: sikte",
+    "Left Trigger Deadzone": "Dödzon för vänster avtryckare",
+    "Right Trigger Deadzone": "Dödzon för höger avtryckare",
+    "Min Deadzone (def:1 max:126)": "Minsta dödzon (standard: 1, max: 126)"
   }
 }

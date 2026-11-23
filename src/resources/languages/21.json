@@ -328,6 +328,12 @@
     "Audio Backend": "‫الواجهة الخلفية للصوت‬",
     "Upscaler Sharpening": "‫حدة رفع الدقة‬",
     "Screenshots": "‫لقطات الشاشة‬",
-    "Disable F12 Screenshot Popup": "‫تعطيل نافذة لقطة الشاشة (F12)‬"
+    "Disable F12 Screenshot Popup": "‫تعطيل نافذة لقطة الشاشة (F12)‬",
+    "HUD Gravity Meter": "‫مقياس الجاذبية (HUD)‬",
+    "HUD Health Bar": "‫شريط الصحة (HUD)‬",
+    "HUD Crosshair": "‫علامة التصويب (HUD)‬",
+    "Left Trigger Deadzone": "‫المنطقة الميتة للزناد الأيسر‬",
+    "Right Trigger Deadzone": "‫المنطقة الميتة للزناد الأيمن‬",
+    "Min Deadzone (def:1 max:126)": "‫أدنى منطقة ميتة (افتراضي:1 أقصى:126)‬"
   }
 }

@@ -328,6 +328,12 @@
     "Audio Backend": "Lyd-backend",
     "Upscaler Sharpening": "Opskaleringsskarphed",
     "Screenshots": "Skærmbilleder",
-    "Disable F12 Screenshot Popup": "Deaktiver pop op for F12-skærmbillede"
+    "Disable F12 Screenshot Popup": "Deaktiver pop op for F12-skærmbillede",
+    "HUD Gravity Meter": "HUD: tyngdekraftsmåler",
+    "HUD Health Bar": "HUD: helbredsbjælke",
+    "HUD Crosshair": "HUD: sigtekorn",
+    "Left Trigger Deadzone": "Dødzone for venstre aftrækker",
+    "Right Trigger Deadzone": "Dødzone for højre aftrækker",
+    "Min Deadzone (def:1 max:126)": "Mindste dødzone (standard 1, maks. 126)"
   }
 }

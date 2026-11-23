@@ -142,6 +142,12 @@
     "Default Device": "Dispositivo predefinido",
     "TIP: if the display looks blurry, make sure the monitor resolution setting in System Menu > Graphics matches your monitor resolution": "DICA: se a imagem estiver desfocada, define “Resolução do monitor” em Menu de sistema > Definições gráficas para a do teu monitor",
     "Screenshots": "Capturas de ecrã",
-    "Disable F12 Screenshot Popup": "Desativar o aviso de captura de ecrã (F12)"
+    "Disable F12 Screenshot Popup": "Desativar o aviso de captura de ecrã (F12)",
+    "HUD Gravity Meter": "Medidor de gravidade (HUD)",
+    "HUD Health Bar": "Barra de vida (HUD)",
+    "HUD Crosshair": "Mira (HUD)",
+    "Left Trigger Deadzone": "Zona morta do gatilho esquerdo",
+    "Right Trigger Deadzone": "Zona morta do gatilho direito",
+    "Min Deadzone (def:1 max:126)": "Zona morta mín. (predef.:1 máx.:126)"
   }
 }

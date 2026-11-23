@@ -187,6 +187,11 @@ struct Graphics {
     /// How strongly the upscaled picture is sharpened, in percent, an UpscaleSharpeningLevels
     /// entry. 0 leaves the upscaler's picture as it is. Presets leave it.
     u32 upscale_sharpening{0};
+    /// Whether the game draws its gravity meter with the special meter beside it, its health bar,
+    /// and its crosshair and target markers. HudParts takes them. Presets leave them.
+    bool hud_gravity_meter{true};
+    bool hud_health_bar{true};
+    bool hud_crosshair{true};
     /// Texture streaming: the device memory GR2port keeps within, in MB; 0 takes the budget the
     /// driver gives the process, or on an integrated GPU its share of RAM. With less, textures
     /// keep fewer mip levels. The Steam Deck preset sets 4 GB; the others leave it.

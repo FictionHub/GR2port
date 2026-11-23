@@ -328,6 +328,12 @@
     "Audio Backend": "Ses Arka Ucu",
     "Upscaler Sharpening": "Yükseltme Keskinliği",
     "Screenshots": "Ekran Görüntüleri",
-    "Disable F12 Screenshot Popup": "F12 Ekran Görüntüsü Bildirimini Kapat"
+    "Disable F12 Screenshot Popup": "F12 Ekran Görüntüsü Bildirimini Kapat",
+    "HUD Gravity Meter": "HUD Yerçekimi Göstergesi",
+    "HUD Health Bar": "HUD Can Çubuğu",
+    "HUD Crosshair": "HUD Nişangâh",
+    "Left Trigger Deadzone": "Sol Tetik Ölü Bölgesi",
+    "Right Trigger Deadzone": "Sağ Tetik Ölü Bölgesi",
+    "Min Deadzone (def:1 max:126)": "Min. Ölü Bölge (vars.:1 maks.:126)"
   }
 }

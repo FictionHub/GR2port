@@ -328,6 +328,12 @@
     "Audio Backend": "Аудіобекенд",
     "Upscaler Sharpening": "Різкість апскейлера",
     "Screenshots": "Знімки екрана",
-    "Disable F12 Screenshot Popup": "Вимкнути сповіщення про знімок екрана (F12)"
+    "Disable F12 Screenshot Popup": "Вимкнути сповіщення про знімок екрана (F12)",
+    "HUD Gravity Meter": "Шкала гравітації (HUD)",
+    "HUD Health Bar": "Смуга здоров’я (HUD)",
+    "HUD Crosshair": "Приціл (HUD)",
+    "Left Trigger Deadzone": "Мертва зона лівого тригера",
+    "Right Trigger Deadzone": "Мертва зона правого тригера",
+    "Min Deadzone (def:1 max:126)": "Мінімум (типово 1, макс. 126)"
   }
 }

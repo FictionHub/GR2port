@@ -11,20 +11,26 @@
 #include <string_view>
 #include <vector>
 
-// The launcher's lines of the input config: the stick deadzones, the touch pad swipe switch, the
-// keys of the game's functions and the pad buttons of the PlayStation buttons they use.
+// The launcher's lines of the input config: the stick and trigger deadzones, the touch pad swipe
+// switch, the keys of the game's functions and the pad buttons of the PlayStation buttons they
+// use.
 namespace Gr2Port::Launcher {
 
 inline constexpr int DeadzoneLow = 1;
 inline constexpr int DeadzoneHigh = 127;
+/// The highest minimum deadzone of a trigger: one below the highest maximum.
+inline constexpr int TriggerDeadzoneHigh = DeadzoneHigh - 1;
 
-/// The input config's names of the sticks, in the order of Deadzones.
-inline constexpr std::array<std::string_view, 2> StickNames{"leftjoystick", "rightjoystick"};
+/// The input config's names of the sticks, then of the triggers, in the order of Deadzones.
+inline constexpr std::array<std::string_view, 4> AxisNames{"leftjoystick", "rightjoystick", "l2",
+                                                           "r2"};
+/// The first trigger's place in AxisNames.
+inline constexpr size_t FirstTrigger = 2;
 
-/// The minimum and maximum deadzone of each stick.
-using Deadzones = std::array<std::array<int, 2>, StickNames.size()>;
+/// The minimum and maximum deadzone of each stick and trigger.
+using Deadzones = std::array<std::array<int, 2>, AxisNames.size()>;
 
-/// The "analog_deadzone = stick, min, max" lines. A stick without one keeps the parser's 1 and
+/// The "analog_deadzone = axis, min, max" lines. An axis without one keeps the parser's 1 and
 /// 127.
 Deadzones ReadDeadzones(const std::filesystem::path& file);
 

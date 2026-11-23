@@ -44,8 +44,8 @@ Deadzones ReadDeadzones(const std::filesystem::path& file) {
     std::ifstream in(file);
     for (std::string line; std::getline(in, line);) {
         const std::string compact = Compact(line);
-        for (size_t i = 0; i < StickNames.size(); ++i) {
-            const std::string prefix = DeadzonePrefix(StickNames[i]);
+        for (size_t i = 0; i < AxisNames.size(); ++i) {
+            const std::string prefix = DeadzonePrefix(AxisNames[i]);
             if (!compact.starts_with(prefix)) {
                 continue;
             }
@@ -69,11 +69,11 @@ Deadzones ReadDeadzones(const std::filesystem::path& file) {
 
 std::vector<ConfigLine> DeadzoneLines(const Deadzones& deadzones) {
     std::vector<ConfigLine> lines;
-    for (size_t i = 0; i < StickNames.size(); ++i) {
+    for (size_t i = 0; i < AxisNames.size(); ++i) {
         lines.push_back(
-            {DeadzonePrefix(StickNames[i]), "analog_deadzone = " + std::string(StickNames[i]) +
-                                                ", " + std::to_string(deadzones[i][0]) + ", " +
-                                                std::to_string(deadzones[i][1])});
+            {DeadzonePrefix(AxisNames[i]), "analog_deadzone = " + std::string(AxisNames[i]) + ", " +
+                                               std::to_string(deadzones[i][0]) + ", " +
+                                               std::to_string(deadzones[i][1])});
     }
     return lines;
 }
