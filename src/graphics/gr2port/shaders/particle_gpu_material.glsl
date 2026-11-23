@@ -163,6 +163,15 @@ float ErodedAlpha(ParticleDraw draw, uint material, uint curve_offset, float x, 
     return Dissolved(clamp(max(0.0, alpha), 0.0, 1.0), place, erosion, threshold);
 }
 
+// ErodedAlpha without the clamp: the combiner's programs dissolve their alpha as it is.
+float Eroded(ParticleDraw draw, uint material, uint curve_offset, float x, float alpha,
+             vec2 coordinates, float scale, float distance, float threshold) {
+    const vec4 erosion = MaterialCurve(material, MaterialErosionCurve, curve_offset, x,
+                                       MaterialVector(material, MaterialErosion));
+    const vec2 place = coordinates * ((draw.constants[ClipPlane + 2u] * scale) * (1.0 / distance));
+    return Dissolved(alpha, place, erosion, threshold);
+}
+
 // The colour faded by the depth behind the particle and coloured by its curve, times its alpha,
 // discarded below 2^-23 before and after c_materialAttr2.w and held to the dissolve's threshold,
 // premultiplied, with alpha times 1 - c_materialAttr.x. c_gpufxUsed.z holds the curve from bit 4,
