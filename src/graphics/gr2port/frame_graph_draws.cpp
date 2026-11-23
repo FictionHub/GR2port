@@ -42,8 +42,8 @@ constexpr std::array Writers{
     // The writers of what the frame graph's passes still send: the registers of the draw
     // wrappers' state flush FUN_01614150, the targets and viewports of FUN_016137a0,
     // FUN_01616ee0, FUN_0161b3e0 and FUN_0161b760, the index buffer of FUN_01616e10, and the
-    // cache flushes and waits. Each writes its packet and nothing else; the callers keep the
-    // engine's copy of the state, which UiCapture reads.
+    // pipeline events. Each writes its packet and nothing else; the callers keep the engine's
+    // copy of the state, which UiCapture reads.
     Hooks::Entry{0x411550, 6, Hooks::FramePrologueR14},
     Hooks::Entry{0x411610, 6, Hooks::FramePrologue},
     Hooks::Entry{0x411680, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}},
@@ -66,7 +66,6 @@ constexpr std::array Writers{
     Hooks::Entry{0x413b90, 6, Hooks::FramePrologueR14},
     Hooks::Entry{0x413bf0, 6, Hooks::FramePrologueR14},
     Hooks::Entry{0x4148e0, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x414950, 6, Hooks::FramePrologue},
     Hooks::Entry{0x415120, 6, Hooks::FramePrologue},
     Hooks::Entry{0x4152c0, 6, Hooks::FramePrologue},
     Hooks::Entry{0x4154b0, 6, Hooks::FramePrologueR14},
@@ -80,8 +79,6 @@ constexpr std::array Writers{
     Hooks::Entry{0x415e60, 6, Hooks::FramePrologue},
     Hooks::Entry{0x415ed0, 6, Hooks::FramePrologue},
     Hooks::Entry{0x415f50, 6, Hooks::FramePrologueR14},
-    Hooks::Entry{0x416730, 6, Hooks::FramePrologue},
-    Hooks::Entry{0x416b40, 6, Hooks::FramePrologue},
 };
 
 // push rbp; mov rbp, rsp.
@@ -118,6 +115,13 @@ constexpr std::array Returning{
     Hooks::Entry{0x429b40, 4, PushFrame},
     Hooks::Entry{0x4112d0, 4, PushFrame},
     Hooks::Entry{0x42ab60, 4, PushFrame},
+    // A graphics command buffer's cache flushes and waits, among them the frame's first flush and
+    // its last wait, and the room the frame leaves at its end for flip packets, which the submit
+    // does not write.
+    Hooks::Entry{0x414950, 4, PushFrame},
+    Hooks::Entry{0x416730, 4, PushFrame},
+    Hooks::Entry{0x416b40, 4, PushFrame},
+    Hooks::Entry{0x4170d0, 4, PushFrame},
     // The frame graph's depth sort orders the G2_BG_Main keys for the draw loop. Capture reads the
     // keys when the frame graph starts.
     Hooks::Entry{0x1441460, 4, PushFrame},
