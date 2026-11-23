@@ -73,7 +73,7 @@ void main() {
         map1 = MapCoordinates(point, 1u, mesh_texcoord);
         map2 = MapCoordinates(point, 2u, mesh_texcoord);
         map3 = MapCoordinates(point, 3u, mesh_texcoord);
-        color = ListedColor(point, mesh_color * point.color);
+        color = ListedColor(point.emitter, mesh_color * point.color);
         shown = 1.0;
         records = uvec4(EmitterWord(point.emitter, 9u), point.emitter,
                         EmitterWord(point.emitter, 8u), particle);
