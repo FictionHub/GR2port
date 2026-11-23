@@ -70,24 +70,24 @@ void WriteSelected(u64 address, u32 source, u64 value) {
     Write(address & AddressMask & ~(size - 1), &data, size);
 }
 
-void PS4_SYSV_ABI OnEndOfPipe(u32, const Hooks::Registers* registers, u64) {
-    WriteSelected(registers->rcx, static_cast<u32>(registers->r8), registers->r9);
+// In place of each writer, which takes the arguments above: the write its packet asks for.
+void PS4_SYSV_ABI OnEndOfPipe(u64, u32, u32, u64 address, u32 source, u64 value) {
+    WriteSelected(address, source, value);
 }
 
-void PS4_SYSV_ABI OnEndOfShader(u32, const Hooks::Registers* registers, u64) {
-    const u32 value = static_cast<u32>(registers->rcx);
-    Write(registers->rdx & AddressMask & ~u64{3}, &value, sizeof(value));
+void PS4_SYSV_ABI OnEndOfShader(u64, u32, u64 address, u32 value) {
+    Write(address & AddressMask & ~u64{3}, &value, sizeof(value));
 }
 
-void PS4_SYSV_ABI OnDataInline(u32, const Hooks::Registers* registers, u64) {
-    const u64 size = u64{static_cast<u32>(registers->rcx)} * sizeof(u32);
+void PS4_SYSV_ABI OnDataInline(u64, u64 address, const u32* values, u32 count) {
+    const u64 size = u64{count} * sizeof(u32);
     if (size != 0) {
-        Write(registers->rsi & ~u64{3}, reinterpret_cast<const void*>(registers->rdx), size);
+        Write(address & ~u64{3}, values, size);
     }
 }
 
-void PS4_SYSV_ABI OnReleaseMem(u32, const Hooks::Registers* registers, u64) {
-    WriteSelected(registers->rcx, static_cast<u32>(registers->r8), registers->r9);
+void PS4_SYSV_ABI OnReleaseMem(u64, u32, u32, u64 address, u32 source, u64 value) {
+    WriteSelected(address, source, value);
 }
 
 } // namespace
@@ -97,14 +97,14 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         !Hooks::Holds(module_base, DataInline) || !Hooks::Holds(module_base, ReleaseMem)) {
         return false;
     }
-    return Hooks::Hooked(
-               Hooks::ObserveEntry(module_base, EndOfPipe, c, capacity, &OnEndOfPipe, 0)) &&
-           Hooks::Hooked(
-               Hooks::ObserveEntry(module_base, EndOfShader, c, capacity, &OnEndOfShader, 0)) &&
-           Hooks::Hooked(
-               Hooks::ObserveEntry(module_base, DataInline, c, capacity, &OnDataInline, 0)) &&
-           Hooks::Hooked(
-               Hooks::ObserveEntry(module_base, ReleaseMem, c, capacity, &OnReleaseMem, 0));
+    return Hooks::Hooked(Hooks::Replace(module_base, EndOfPipe, c, capacity,
+                                        reinterpret_cast<const void*>(&OnEndOfPipe))) &&
+           Hooks::Hooked(Hooks::Replace(module_base, EndOfShader, c, capacity,
+                                        reinterpret_cast<const void*>(&OnEndOfShader))) &&
+           Hooks::Hooked(Hooks::Replace(module_base, DataInline, c, capacity,
+                                        reinterpret_cast<const void*>(&OnDataInline))) &&
+           Hooks::Hooked(Hooks::Replace(module_base, ReleaseMem, c, capacity,
+                                        reinterpret_cast<const void*>(&OnReleaseMem)));
 }
 
 } // namespace Gr2Port::GpuWrites
