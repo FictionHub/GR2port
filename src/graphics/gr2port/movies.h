@@ -24,7 +24,8 @@ namespace Gr2Port::Movies {
 /// plays several, the televisions and the screen's movie.
 inline constexpr u32 Surfaces = 32;
 
-/// Installs the hooks on the returns of the game's movie update and of its frame keeping.
+/// Installs the hooks on the returns of the game's movie update and of its frame keeping, and in
+/// place of the writer of the job's user data and of the keeping's copy.
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
 /// The game's last copy into a surface: the copy of its frame in AvPlayer's layout and the job's

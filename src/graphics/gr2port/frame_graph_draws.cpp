@@ -84,11 +84,10 @@ constexpr std::array Writers{
 // push rbp; mov rbp, rsp.
 constexpr std::array<u8, 11> PushFrame{0x55, 0x48, 0x89, 0xe5};
 
-// UiCapture reads the programs, registers and draws of the screen drawing, and Movies the movie
-// job's user data and copies. The functions below write none of them, so they return at once: a
-// compute queue's dispatch, FUN_0042cfb0 and FUN_00413560, the functions that reserve room for
-// one packet, call the driver and advance, and the thunks of two driver functions whose results
-// the game leaves unused.
+// UiCapture reads the programs, registers and draws of the screen drawing. The functions below
+// write none of them, so they return at once: a compute queue's dispatch, FUN_0042cfb0 and
+// FUN_00413560, the functions that reserve room for one packet, call the driver and advance, and
+// the thunks of two driver functions whose results the game leaves unused.
 constexpr std::array Returning{
     Hooks::Entry{0x42cfb0, 4, PushFrame},
     Hooks::Entry{0x413560, 4, PushFrame},

@@ -31,7 +31,7 @@ constexpr u64 RecordTexture = 0x28;
 // The constant update engine of the movie job: the shader's table of where each resource goes at
 // +0x18a8, and the user data it copies into the job at +0x98. The table's entries for the first
 // read-only buffer, read-write buffer and constant buffer: an offset in dwords, with bit 15 set
-// when the resource goes into a user data register instead, which the job's commands set.
+// when the resource goes into a user data register instead, which FUN_00429820 sets.
 constexpr VAddr Engine = 0x1f5a3f8;
 constexpr u64 EngineTable = 0x18a8;
 constexpr u64 EngineUserData = 0x98;
@@ -41,21 +41,16 @@ constexpr u64 TableConstants = 0x41;
 constexpr u16 Unused = 0xffff;
 constexpr u16 InRegister = 0x8000;
 constexpr u16 OffsetMask = 0x3fff;
-// The movie job's command buffer: where its commands start at +0x1a38, and where the next goes
-// at +0x20.
-constexpr VAddr Commands = 0x1f5a3a8;
-constexpr u64 CommandsStart = 0x1a38;
-constexpr u64 CommandsNext = 0x20;
-constexpr u64 MaxCommandBytes = 64 * 1024;
-constexpr u32 OpSetShReg = 0x76;
-constexpr u32 OpDmaData = 0x50;
+// FUN_00429820(commands, first, values, count) sets count compute user data registers from first
+// on, the movie job's in its command buffer at 0x1f5a3b8.
+constexpr Hooks::Entry UserDataWriter{0x429820, 6, Hooks::FramePrologue};
+constexpr VAddr JobCommands = 0x1f5a3b8;
 // FUN_01519d40(player) returns a texture object that keeps the player's frame: its memory object
-// at +0x28 begins with the surface, which a DMA in the command buffer of the same kind at
-// 0x1f58778 fills from the frame's surface.
+// at +0x28 begins with the surface, which FUN_0042bf10(commands, destination, source, bytes, ...)
+// fills from the frame's surface by a DMA.
 constexpr Hooks::Entry Keep{0x1519d40, 6, Hooks::FramePrologue};
-constexpr VAddr KeepCommands = 0x1f58778;
+constexpr Hooks::Entry KeepCopy{0x42bf10, 6, Hooks::FramePrologue};
 constexpr u64 KeptMemory = 0x28;
-constexpr u32 ComputeUserData = 0x240;
 constexpr u32 UserDataRegisters = 16;
 // The job's constants.
 constexpr u32 Width = 1;
@@ -233,47 +228,26 @@ void Drop(Slots& slots, VAddr surface) {
 
 using UserData = std::array<u32, UserDataRegisters>;
 
-// Calls packet(opcode, count, body) for each type 3 packet a command buffer holds.
-template <typename Packet>
-void Walk(VAddr commands, Packet&& packet) {
-    const VAddr start = Load<VAddr>(commands + CommandsStart);
-    const VAddr next = Load<VAddr>(commands + CommandsNext);
-    if (start == 0 || next <= start || next - start > MaxCommandBytes) {
+// The movie job's user data registers as FUN_00429820 last set them, and the destination and
+// source of the keep's last copy. Each is set inside the call whose return reads it.
+UserData g_user{};
+VAddr g_kept_destination = 0;
+VAddr g_kept_source = 0;
+
+// In place of FUN_00429820, whose packets nothing reads: keeps the movie job's user data.
+void PS4_SYSV_ABI OnUserData(VAddr commands, u32 first, const u32* values, u32 count) {
+    if (commands != g_base + JobCommands - Hooks::CodeBase) {
         return;
     }
-    const u32* at = reinterpret_cast<const u32*>(start);
-    const u32* const stop = reinterpret_cast<const u32*>(next);
-    while (at < stop) {
-        const u32 header = *at;
-        const u32 type = header >> 30;
-        if (type == 2) {
-            at++;
-            continue;
-        }
-        const u32 count = header >> 16 & 0x3fff;
-        if (type == 3 && at + count + 2 <= stop) {
-            packet(header >> 8 & 0xff, count, at + 1);
-        }
-        at += count + 2;
+    for (u32 i = 0; i < count && first + i < UserDataRegisters; i++) {
+        g_user[first + i] = values[i];
     }
 }
 
-// The compute user data registers the job's commands set.
-UserData ReadUserData() {
-    UserData user{};
-    Walk(g_base + Commands - Hooks::CodeBase, [&user](u32 opcode, u32 count, const u32* body) {
-        if (opcode != OpSetShReg) {
-            return;
-        }
-        const u32 first = body[0] & 0xffff;
-        for (u32 i = 0; i < count; i++) {
-            const u32 index = first + i - ComputeUserData;
-            if (first + i >= ComputeUserData && index < UserDataRegisters) {
-                user[index] = body[1 + i];
-            }
-        }
-    });
-    return user;
+// In place of FUN_0042bf10, whose packets nothing reads: keeps the copy.
+void PS4_SYSV_ABI OnKeepCopy(VAddr, VAddr destination, VAddr source) {
+    g_kept_destination = destination;
+    g_kept_source = source;
 }
 
 // The base of a resource's V#, wherever the engine put it; 0 for none.
@@ -304,7 +278,7 @@ void PS4_SYSV_ABI OnUpdate(u32, const Hooks::Arguments* arguments, u64 result) {
     const VAddr surface = texture != 0 ? Load<VAddr>(texture) : 0;
     const VAddr engine = g_base + Engine - Hooks::CodeBase;
     const VAddr table = Load<VAddr>(engine + EngineTable);
-    const UserData user = ReadUserData();
+    const UserData& user = g_user;
     const VAddr source = ResourceBase(engine, table, TableSource, user);
     const VAddr destination = ResourceBase(engine, table, TableDestination, user);
     const VAddr constants = ResourceBase(engine, table, TableConstants, user);
@@ -334,23 +308,13 @@ void PS4_SYSV_ABI OnUpdate(u32, const Hooks::Arguments* arguments, u64 result) {
     Publish(slot, surface, 0, copied, values);
 }
 
-// DMA_DATA holds the source's address in words 1 and 2 of its body, the destination's in 3 and 4.
 void PS4_SYSV_ABI OnKeep(u32, const Hooks::Arguments*, u64 result) {
     const VAddr memory = result != 0 ? Load<VAddr>(result + KeptMemory) : 0;
     const VAddr surface = memory != 0 ? Load<VAddr>(memory) : 0;
     if (surface == 0) {
         return;
     }
-    VAddr source = 0;
-    Walk(g_base + KeepCommands - Hooks::CodeBase,
-         [surface, &source](u32 opcode, u32 count, const u32* body) {
-             if (opcode != OpDmaData || count < 5 || source != 0) {
-                 return;
-             }
-             if ((u64{body[3]} | u64{body[4]} << 32) == surface) {
-                 source = u64{body[1]} | u64{body[2]} << 32;
-             }
-         });
+    const VAddr source = g_kept_destination == surface ? g_kept_source : 0;
     if (g_logged_keeps < LoggedKeeps) {
         g_logged_keeps++;
         LOG_INFO(Render_Vulkan, "GR2port movies: frame of {:#x} kept in {:#x}", source, surface);
@@ -383,7 +347,11 @@ void PS4_SYSV_ABI OnKeep(u32, const Hooks::Arguments*, u64 result) {
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     g_base = module_base;
     return Hooks::Hooked(Hooks::ObserveReturn(module_base, Update, c, capacity, &OnUpdate, 0)) &&
-           Hooks::Hooked(Hooks::ObserveReturn(module_base, Keep, c, capacity, &OnKeep, 0));
+           Hooks::Hooked(Hooks::ObserveReturn(module_base, Keep, c, capacity, &OnKeep, 0)) &&
+           Hooks::Hooked(Hooks::Replace(module_base, UserDataWriter, c, capacity,
+                                        reinterpret_cast<const void*>(&OnUserData))) &&
+           Hooks::Hooked(Hooks::Replace(module_base, KeepCopy, c, capacity,
+                                        reinterpret_cast<const void*>(&OnKeepCopy)));
 }
 
 Job Peek(u32 slot) {
