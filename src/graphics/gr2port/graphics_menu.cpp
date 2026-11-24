@@ -630,7 +630,10 @@ const std::array<Setting, 33> Table{{
          values.display.width = size.width;
          values.display.height = size.height;
      }},
-    {"VSync", [](const Values&) { return Choices({"Off", "Double Buffered", "Triple Buffered"}); },
+    {"VSync",
+     [](const Values&) {
+         return Choices({"Off", "Double Buffered", "Triple Buffered", "Mailbox"});
+     },
      [](const Values& values) { return static_cast<int>(values.display.vsync); },
      [](Values& values, int choice) {
          values.display.vsync = static_cast<Settings::VSync>(choice);

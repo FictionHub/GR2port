@@ -35,21 +35,22 @@ vk::SurfaceFormatKHR PickFormat(const std::vector<vk::SurfaceFormatKHR>& formats
     return formats.front();
 }
 
-// Without VSync frames show at once, double buffering waits for the display, and triple buffering
-// replaces the frame that waits. FIFO is the one mode every device has.
-vk::PresentModeKHR PickMode(const std::vector<vk::PresentModeKHR>& modes) {
+// Without VSync frames show at once. Double and triple buffering queue frames for the display
+// (FIFO), and Mailbox replaces the frame that waits. FIFO is the one mode every device has.
+vk::PresentModeKHR PickMode(const std::vector<vk::PresentModeKHR>& modes, Settings::VSync vsync) {
     static constexpr std::array NoVSync{vk::PresentModeKHR::eImmediate,
                                         vk::PresentModeKHR::eMailbox};
-    static constexpr std::array TripleBuffered{vk::PresentModeKHR::eMailbox};
+    static constexpr std::array Mailbox{vk::PresentModeKHR::eMailbox};
     std::span<const vk::PresentModeKHR> preferred;
-    switch (Settings::Get().display.vsync) {
+    switch (vsync) {
     case Settings::VSync::Off:
         preferred = NoVSync;
         break;
-    case Settings::VSync::TripleBuffered:
-        preferred = TripleBuffered;
+    case Settings::VSync::Mailbox:
+        preferred = Mailbox;
         break;
     case Settings::VSync::DoubleBuffered:
+    case Settings::VSync::TripleBuffered:
         break;
     }
     for (const vk::PresentModeKHR wanted : preferred) {
@@ -81,7 +82,15 @@ bool Swapchain::Create(u32 width, u32 height) {
         return false;
     }
     const vk::SurfaceFormatKHR surface_format = PickFormat(formats, hdr_wanted);
+    // Double and triple buffering keep two and three images where the surface allows that many;
+    // the other modes take one more than the surface's least.
+    const Settings::VSync vsync = Settings::Get().display.vsync;
     u32 image_count = caps.minImageCount + 1;
+    if (vsync == Settings::VSync::DoubleBuffered) {
+        image_count = std::max(caps.minImageCount, 2u);
+    } else if (vsync == Settings::VSync::TripleBuffered) {
+        image_count = std::max(caps.minImageCount, 3u);
+    }
     if (caps.maxImageCount != 0) {
         image_count = std::min(image_count, caps.maxImageCount);
     }
@@ -97,7 +106,7 @@ bool Swapchain::Create(u32 width, u32 height) {
                       vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc,
         .preTransform = caps.currentTransform,
         .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-        .presentMode = PickMode(modes),
+        .presentMode = PickMode(modes, vsync),
         .clipped = true,
         .oldSwapchain = old,
     };

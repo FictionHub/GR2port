@@ -320,7 +320,8 @@ constexpr int PadSpeakerDeviceTop = 684;
 constexpr int DisplayPageBottom = 722;
 
 // In the order of Settings::VSync.
-constexpr std::array<std::string_view, 3> VSyncNames{"Off", "Double Buffered", "Triple Buffered"};
+constexpr std::array<std::string_view, 4> VSyncNames{"Off", "Double Buffered", "Triple Buffered",
+                                                     "Mailbox"};
 // Indexed by Settings::Upscaler and Settings::UpscaleQuality.
 constexpr std::array<std::string_view, 4> UpscalerChoices{"Off", "FSR 3.1", "FSR 4", "DLSS"};
 constexpr std::array<std::string_view, 5> UpscaleQualityChoices{"Native AA", "Quality", "Balanced",

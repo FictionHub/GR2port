@@ -544,7 +544,7 @@ constexpr std::array AudioRows{
 constexpr int DisplayPageBottom = 722;
 
 // In the order of Settings::VSync.
-constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
+constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered", L"Mailbox"};
 // Indexed by Settings::Upscaler and Settings::UpscaleQuality.
 constexpr std::array<const wchar_t*, 5> UpscalerChoices{L"Off", L"FSR 3.1", L"FSR 4", L"DLSS",
                                                         L"XeSS"};

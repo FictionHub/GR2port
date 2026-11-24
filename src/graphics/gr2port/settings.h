@@ -20,6 +20,7 @@ enum class VSync : u32 {
     Off,
     DoubleBuffered,
     TripleBuffered,
+    Mailbox,
 };
 
 struct Point {
