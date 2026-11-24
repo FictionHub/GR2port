@@ -28,6 +28,7 @@
 #include "input/game_functions.h"
 #include "input/input_handler.h"
 #include "input/pad_bindings.h"
+#include "launcher/pad_commands.h"
 #include "launcher/qt/key_bindings.h"
 #include "launcher/qt/text.h"
 
@@ -596,6 +597,8 @@ private:
         accept();
     }
 
+    // The pads move no window while the popup reads them.
+    PadCommands::Pause pause;
     QString function;
     // Takes a pad button instead of a key or mouse button.
     bool pad = false;

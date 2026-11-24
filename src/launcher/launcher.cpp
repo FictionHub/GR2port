@@ -26,6 +26,7 @@
 #include "launcher/driver_notice.h"
 #include "launcher/folder_picker.h"
 #include "launcher/launcher.h"
+#include "launcher/pad_navigation.h"
 #include "launcher/setup_dialog.h"
 #include "launcher/updater.h"
 
@@ -570,7 +571,8 @@ std::optional<std::filesystem::path> AskGameFolder(const std::string& text) {
     bool choose = false;
     TASKDIALOGCONFIG config{};
     config.cbSize = sizeof(config);
-    config.dwFlags = TDF_ENABLE_HYPERLINKS;
+    // Escape and a pad's back button close it as OK does.
+    config.dwFlags = TDF_ENABLE_HYPERLINKS | TDF_ALLOW_DIALOG_CANCELLATION;
     config.dwCommonButtons = TDCBF_OK_BUTTON;
     config.pszWindowTitle = Title;
     config.pszMainIcon = TD_ERROR_ICON;
@@ -579,12 +581,15 @@ std::optional<std::filesystem::path> AskGameFolder(const std::string& text) {
     config.pszFooter = link.c_str();
     config.pfCallback = &OnNoGameEvent;
     config.lpCallbackData = reinterpret_cast<LONG_PTR>(&choose);
+    PadNavigation::Start();
     TaskDialogIndirect(&config, nullptr, nullptr, nullptr);
-    if (!choose) {
-        return std::nullopt;
+    std::optional<std::filesystem::path> folder;
+    if (choose) {
+        folder = PickFolder(
+            nullptr, Language::Text(L"Choose the folder that holds your game and its update"));
     }
-    return PickFolder(nullptr,
-                      Language::Text(L"Choose the folder that holds your game and its update"));
+    PadNavigation::Stop();
+    return folder;
 }
 
 bool Run() {
@@ -618,6 +623,7 @@ bool Run() {
             Layout(window, state);
             ShowWindow(window, SW_SHOW);
             SetForegroundWindow(window);
+            PadNavigation::Start();
             ShowDriverNotice(window);
             ShowFolderNotice(window);
             // The updater's answer comes on a thread of its own; the window looks for it.
@@ -628,6 +634,7 @@ bool Run() {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
+            PadNavigation::Stop();
             play = state.play;
             restart = state.restart;
         }

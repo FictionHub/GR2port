@@ -38,6 +38,7 @@
 #include "common/scm_rev.h"
 #include "launcher/launcher.h"
 #include "launcher/qt/art.h"
+#include "launcher/qt/pad_navigation.h"
 #include "launcher/qt/setup_dialog.h"
 #include "launcher/qt/style.h"
 #include "launcher/qt/text.h"
@@ -450,6 +451,7 @@ auto InApplication(Show&& show) {
         QApplication::setPalette(DialogPalette());
         // The dialogs' places are fixed, left to right, in every language.
         QApplication::setLayoutDirection(Qt::LeftToRight);
+        const PadNavigation pads;
         shown = show();
     }
     std::setlocale(LC_ALL, locale.c_str());

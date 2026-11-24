@@ -21,6 +21,7 @@
 #include "input/input_handler.h"
 #include "input/pad_bindings.h"
 #include "launcher/key_bindings.h"
+#include "launcher/pad_commands.h"
 
 namespace Gr2Port::Launcher {
 
@@ -611,6 +612,8 @@ std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& fun
     if (window == nullptr) {
         return {};
     }
+    // The pads move no window while the popup reads them.
+    const PadCommands::Pause pause;
     Capture capture{function, editor.font, pad, combination};
     const bool gamepads = pad && SDL_InitSubSystem(SDL_INIT_GAMEPAD);
     if (gamepads) {

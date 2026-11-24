@@ -86,7 +86,8 @@ void ShowDriverNotice(HWND owner) {
     TASKDIALOGCONFIG config{};
     config.cbSize = sizeof(config);
     config.hwndParent = owner;
-    config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW;
+    // Escape and a pad's back button close it as OK does.
+    config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW | TDF_ALLOW_DIALOG_CANCELLATION;
     config.dwCommonButtons = TDCBF_OK_BUTTON;
     config.pszWindowTitle = Title;
     config.pszMainIcon = TD_WARNING_ICON;

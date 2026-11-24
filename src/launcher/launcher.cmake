@@ -19,6 +19,10 @@ if (WIN32)
         ${CMAKE_CURRENT_LIST_DIR}/key_bindings.h
         ${CMAKE_CURRENT_LIST_DIR}/launcher.cpp
         ${CMAKE_CURRENT_LIST_DIR}/launcher.h
+        ${CMAKE_CURRENT_LIST_DIR}/pad_commands.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/pad_commands.h
+        ${CMAKE_CURRENT_LIST_DIR}/pad_navigation.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/pad_navigation.h
         ${CMAKE_CURRENT_LIST_DIR}/setup_dialog.cpp
         ${CMAKE_CURRENT_LIST_DIR}/setup_dialog.h
         ${CMAKE_CURRENT_LIST_DIR}/trophy_viewer.cpp
@@ -52,6 +56,8 @@ elseif (UNIX AND NOT APPLE)
         ${CMAKE_CURRENT_LIST_DIR}/input_config.cpp
         ${CMAKE_CURRENT_LIST_DIR}/input_config.h
         ${CMAKE_CURRENT_LIST_DIR}/launcher.h
+        ${CMAKE_CURRENT_LIST_DIR}/pad_commands.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/pad_commands.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/art.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/art.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/avatar.cpp
@@ -61,6 +67,8 @@ elseif (UNIX AND NOT APPLE)
         ${CMAKE_CURRENT_LIST_DIR}/qt/key_bindings.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/key_bindings.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/launcher.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/pad_navigation.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/pad_navigation.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/setup_dialog.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/setup_dialog.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/style.cpp
