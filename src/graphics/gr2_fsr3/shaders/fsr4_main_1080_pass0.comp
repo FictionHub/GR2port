@@ -240,31 +240,25 @@ void main() {
         columns[channel] = subgroupQuadSwapVertical(pairs[channel]);
     }
 
-    // The quad's first thread stores its 16 channels, quantized to bytes, at its half-resolution
-    // pixel.
-    if (all(equal(place, uvec2(0u)))) {
-        uint packed[4];
-        [[unroll]] for (uint g = 0u; g < 4u; ++g) {
-            const uint b = BiasWords + 4u * g;
-            const vec4 bias = uintBitsToFloat(
-                uvec4(init_words[b], init_words[b + 1u], init_words[b + 2u], init_words[b + 3u]));
-            const ivec4 q = clamp(
-                ivec4(roundEven((vec4(pairs[4u * g] + columns[4u * g],
-                                      pairs[4u * g + 1u] + columns[4u * g + 1u],
-                                      pairs[4u * g + 2u] + columns[4u * g + 2u],
-                                      pairs[4u * g + 3u] + columns[4u * g + 3u]) +
-                                 bias) *
-                                64.0)),
-                ivec4(-128), ivec4(127));
-            packed[g] = (((uint(q.x) & 255u) | ((uint(q.y) & 255u) << 8)) |
+    // Each thread of the quad stores four of the 16 channels, quantized to bytes, at its
+    // half-resolution pixel; every thread holds the quad's sums.
+    const uint g = place.x + 2u * place.y;
+    vec4 sums = vec4(pairs[0] + columns[0], pairs[1] + columns[1], pairs[2] + columns[2],
+                     pairs[3] + columns[3]);
+    [[unroll]] for (uint k = 1u; k < 4u; ++k) {
+        const uint c = 4u * k;
+        const vec4 group = vec4(pairs[c] + columns[c], pairs[c + 1u] + columns[c + 1u],
+                                pairs[c + 2u] + columns[c + 2u], pairs[c + 3u] + columns[c + 3u]);
+        sums = g == k ? group : sums;
+    }
+    const uint b = BiasWords + 4u * g;
+    const vec4 bias = uintBitsToFloat(
+        uvec4(init_words[b], init_words[b + 1u], init_words[b + 2u], init_words[b + 3u]));
+    const ivec4 q = clamp(ivec4(roundEven((sums + bias) * 64.0)), ivec4(-128), ivec4(127));
+    const uint packed = (((uint(q.x) & 255u) | ((uint(q.y) & 255u) << 8)) |
                          ((uint(q.z) & 255u) << 16)) |
                         ((uint(q.w) & 255u) << 24);
-        }
-        const ivec2 half_pos = ivec2(gl_WorkGroupID.xy) * ivec2(8) + ivec2(local / 2u);
-        const uvec4 at4 = uvec4(uint(half_pos.x), uint(half_pos.y), 0u, 0u) + uvec4(1u, 1u, 0u, 0u);
-        const uint word = ((((16u * at4.x) + (HalfRow * at4.y)) + at4.z) + (Plane * at4.w)) >> 2;
-        [[unroll]] for (uint g = 0u; g < 4u; ++g) {
-            scratch_words[word + g] = packed[g];
-        }
-    }
+    const ivec2 half_pos = ivec2(gl_WorkGroupID.xy) * ivec2(8) + ivec2(local / 2u);
+    const uint word = ((16u * uint(half_pos.x + 1)) + HalfRow * uint(half_pos.y + 1)) >> 2;
+    scratch_words[word + g] = packed;
 }

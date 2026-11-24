@@ -100,14 +100,19 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
     set(GR2_FSR3_SHADER_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/gr2_fsr3_shaders/include)
     set(GR2_FSR3_SHADER_DIR ${GR2_FSR3_SHADER_INCLUDE}/graphics/gr2_fsr3/shaders)
     set(GR2_FSR3_SHADER_HEADERS "")
+    # Arguments after the name are macros the shader is built with.
     function(gr2_fsr3_add_shader FILENAME SHADER_NAME)
         set(HEADER_FILE ${GR2_FSR3_SHADER_DIR}/${SHADER_NAME}.h)
+        set(DEFINES "")
+        foreach(DEFINE ${ARGN})
+            list(APPEND DEFINES -D${DEFINE})
+        endforeach()
         set(DEPFILE ${HEADER_FILE}.d)
         string(TOUPPER ${SHADER_NAME} SYMBOL)
         add_custom_command(
             OUTPUT ${HEADER_FILE}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${GR2_FSR3_SHADER_DIR}
-            COMMAND ${GR2_FSR3_GLSLANG} --target-env vulkan1.3
+            COMMAND ${GR2_FSR3_GLSLANG} --target-env vulkan1.3 ${DEFINES}
                     -o ${HEADER_FILE} --vn ${SYMBOL} --depfile ${DEPFILE}
                     ${GR2_FSR3_DIR}/shaders/${FILENAME}
             COMMAND ${CMAKE_COMMAND} "-DHEADER_FILE=${HEADER_FILE}" -P ${GR2_FSR3_HEADER_SCRIPT}
@@ -125,6 +130,7 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
     gr2_fsr3_add_shader(fsr4_main_1080_pass5.comp fsr4_main_1080_pass5_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass7.comp fsr4_main_1080_pass7_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass9.comp fsr4_main_1080_pass9_comp)
+    gr2_fsr3_add_shader(fsr4_main_1080_pass9.comp fsr4_main_1080_pass9_srgb_comp SRGB)
     gr2_fsr3_add_shader(fsr4_main_1080_pass2_fma.comp fsr4_main_1080_pass2_fma_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass5_fma.comp fsr4_main_1080_pass5_fma_comp)
     gr2_fsr3_add_shader(fsr4_main_1080_pass7_fma.comp fsr4_main_1080_pass7_fma_comp)

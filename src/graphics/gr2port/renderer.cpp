@@ -281,6 +281,8 @@ private:
     // they did not fit at. The scene draws at render_extent, which the upscaler makes smaller.
     vk::Extent2D scene_extent;
     vk::Extent2D refused_extent;
+    // Whether a setting needs the scene's images made again at their size.
+    bool scene_stale = false;
     vk::Extent2D render_extent;
     Image depth;
     // The characters' depth alone, for the ambient occlusion.
@@ -563,6 +565,7 @@ void Thread::TakeSettings() {
         now.anisotropic_filtering = graphics.anisotropic_filtering;
     }
     Look::Choose(now.bloom, now.antialiasing, now.upscale_sharpening);
+    scene_stale = Upscaler::SetSharpened(now.upscale_sharpening > 0) || scene_stale;
     HudParts::Choose(now);
     World::Choose(now.decals);
     // The light reads the last lines and the last occlusion.
@@ -590,6 +593,7 @@ bool Thread::ResizeScene(vk::Extent2D output) {
         return false;
     }
     scene_extent = vk::Extent2D{};
+    scene_stale = false;
     // An upscaler that cannot run at these sizes leaves the scene at the picture's size.
     if (!Upscaler::Resize(Upscaler::RenderExtent(output), output)) {
         return false;
@@ -643,7 +647,7 @@ bool Thread::SizeScene(const Scene::Header& header, const u8* packet) {
             extent = world;
         }
     }
-    if (extent == scene_extent || ResizeScene(extent)) {
+    if ((extent == scene_extent && !scene_stale) || ResizeScene(extent)) {
         return true;
     }
     LOG_ERROR(Render_Vulkan, "GR2port: no room for the scene's images at {}x{}", extent.width,

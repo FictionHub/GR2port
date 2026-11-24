@@ -86,8 +86,14 @@ vk::Viewport SceneViewport(vk::Extent2D extent, bool jittered = true);
 
 /// Outside rendering, after the tonemap: upscales the toned colour, in the shader read layout,
 /// into the output image, which compute shaders then read in the general layout. The depth is in
-/// the depth read layout and the velocity in the general layout.
-void Record(vk::CommandBuffer cmd);
+/// the depth read layout and the velocity in the general layout. picture is an R8G8B8A8_UNORM
+/// image at the output size in the general layout, made writable by a compute barrier; true when
+/// the upscaler wrote the picture's sRGB there instead.
+bool Record(vk::CommandBuffer cmd, vk::Image picture, vk::ImageView picture_view);
+
+/// With the GPU idle, as the settings change: whether the picture is sharpened after the upscale.
+/// True when the scene's images must be made again for it.
+bool SetSharpened(bool sharpened);
 
 vk::ImageView OutputView();
 

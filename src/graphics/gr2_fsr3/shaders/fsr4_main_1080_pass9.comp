@@ -4,6 +4,7 @@
 #version 460
 #extension GL_EXT_control_flow_attributes : require
 #extension GL_EXT_integer_dot_product : require
+#extension GL_KHR_shader_subgroup_basic : require
 #extension GL_EXT_samplerless_texture_functions : require
 #extension GL_EXT_spirv_intrinsics : require
 
@@ -11,8 +12,9 @@
 // fsr4_lite_main_1080_pass9.spv). AMD's module takes the log of an input colour texel in each of
 // a thread's four 3x3 filters that read it; this one takes it once, and reads the weights AMD's
 // module holds as constants from AMD's model data, which has the same bytes. The rest is AMD's
-// operations in AMD's order, so its results are identical. One thread per half-resolution pixel
-// makes its four pixels.
+// operations in AMD's order, so its results are identical. Built with SRGB, it writes the output
+// colour as the picture's encode pass does: the 16-bit floats of AMD's output, encoded to sRGB in
+// an R8G8B8A8_UNORM image. One thread per half-resolution pixel makes its four pixels.
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
@@ -23,7 +25,11 @@ layout(set = 0, binding = 21) readonly buffer InitializerBuffer {
     int init_words[];
 };
 layout(set = 0, binding = 129) uniform writeonly image2D rw_history_color;
+#ifdef SRGB
+layout(set = 0, binding = 130, rgba8) uniform writeonly image2D rw_mlsr_output_color;
+#else
 layout(set = 0, binding = 130) uniform writeonly image2D rw_mlsr_output_color;
+#endif
 layout(set = 0, binding = 134, rgba8) uniform writeonly image2D rw_recurrent_0;
 layout(set = 0, binding = 137, r32f) uniform writeonly image2D rw_auto_exposure_texture;
 layout(set = 0, binding = 141) readonly buffer ScratchBuffer {
@@ -66,6 +72,16 @@ const uint WeightsC = 6528u; // [output][input], 16 x 32
 const uint BiasC = 6656u;
 const uint WeightsPixel = 6688u; // [output pixel][kernel, then state][output][input]
 const uint BiasPixel = 6816u; // [kernel, then state][output]
+
+#ifdef SRGB
+// The encode pass's sRGB: 12.92 x below 0.0031308, else 1.055 x^(1/2.4) - 0.055.
+float Encode(float x) {
+    const float curve = uintBitsToFloat(0x3f870a3du) *
+                            exp2(uintBitsToFloat(0x3ed55555u) * log2(max(0.0, x))) +
+                        uintBitsToFloat(0xbd6147aeu);
+    return uintBitsToFloat(0x3b4d2e1cu) > x ? uintBitsToFloat(0x414eb852u) * x : curve;
+}
+#endif
 
 // A sum divided by 256 to a signed byte, halves to even, as AMD's module rounds it.
 int Byte(int sum) {
@@ -171,7 +187,8 @@ void main() {
 
     // Each pixel filters the input colour at the 3x3 texels around its nearest. When the render
     // size is below the output size, the other pixels' nearest texels are at most one right of and
-    // below the first pixel's, and the four filters read a 4x4 block, whose logs are taken once.
+    // below the first pixel's, and the four filters read a 4x4 block, whose logs are taken once in
+    // 32-wide subgroups. In 64-wide ones the block's registers cost more than the logs.
     vec2 centers[4];
     uvec2 nearest[4];
     [[unroll]] for (uint s = 0u; s < 4u; ++s) {
@@ -180,7 +197,7 @@ void main() {
         nearest[s] = uvec2(ivec2(roundEven(centers[s])));
     }
     const uvec2 step = nearest[3] - nearest[0];
-    const bool blocked = all(lessThanEqual(step, uvec2(1u)));
+    const bool blocked = gl_SubgroupSize == 32u && all(lessThanEqual(step, uvec2(1u)));
     vec3 block[16];
     if (blocked) {
         [[unroll]] for (uint i = 0u; i < 16u; ++i) {
@@ -286,7 +303,14 @@ void main() {
         }
         imageStore(rw_recurrent_0, ivec2(o), recurrent);
         imageStore(rw_history_color, ivec2(o), vec4(history, 0.0));
+        const vec3 output_color = clamp(color, vec3(0.0), vec3(64000.0));
+#ifdef SRGB
+        const vec2 rg = unpackHalf2x16(packHalf2x16(output_color.rg));
+        const float b = unpackHalf2x16(packHalf2x16(vec2(output_color.b, 0.0))).x;
         imageStore(rw_mlsr_output_color, ivec2(o),
-                   vec4(clamp(color, vec3(0.0), vec3(64000.0)), 0.0));
+                   vec4(Encode(rg.x), Encode(rg.y), Encode(b), 0.0));
+#else
+        imageStore(rw_mlsr_output_color, ivec2(o), vec4(output_color, 0.0));
+#endif
     }
 }

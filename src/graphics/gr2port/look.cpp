@@ -909,31 +909,34 @@ void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
     ImageBarrier(*g_device, cmd, output, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
                  Compute, vk::AccessFlagBits2::eNone, Compute,
                  vk::AccessFlagBits2::eShaderStorageWrite);
-    if (Upscaler::Active()) {
-        // The upscaler fills the picture from the toned scene; the encode writes its sRGB.
-        Upscaler::Record(cmd);
-        const Pipeline& encode = g_sharpening > 0.0f ? g_upscale_sharpen : g_antialias_off;
-        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, encode.pipeline, dl);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, encode.layout, 0,
-                               g_upscaled_sets[g_antialiased_image], {}, dl);
-        if (g_sharpening > 0.0f) {
-            cmd.pushConstants(encode.layout, vk::ShaderStageFlagBits::eCompute, 0,
-                              sizeof(g_sharpening), &g_sharpening, dl);
+    const Image& picture = g_antialiased[g_antialiased_image];
+    // The upscaler fills the picture from the toned scene: its sRGB, or an output image that the
+    // encode writes the sRGB of.
+    if (!Upscaler::Active() || !Upscaler::Record(cmd, picture.image, picture.view)) {
+        if (Upscaler::Active()) {
+            const Pipeline& encode = g_sharpening > 0.0f ? g_upscale_sharpen : g_antialias_off;
+            cmd.bindPipeline(vk::PipelineBindPoint::eCompute, encode.pipeline, dl);
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, encode.layout, 0,
+                                   g_upscaled_sets[g_antialiased_image], {}, dl);
+            if (g_sharpening > 0.0f) {
+                cmd.pushConstants(encode.layout, vk::ShaderStageFlagBits::eCompute, 0,
+                                  sizeof(g_sharpening), &g_sharpening, dl);
+            }
+        } else {
+            const u64 constants = g_antialias_constants.address;
+            const Pipeline& pipeline = g_antialias_enabled ? g_antialias : g_antialias_off;
+            cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.pipeline, dl);
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.layout, 0,
+                                   g_antialias_sets[g_antialiased_image], {}, dl);
+            if (g_antialias_enabled) {
+                cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0,
+                                  sizeof(constants), &constants, dl);
+            }
         }
-    } else {
-        const u64 constants = g_antialias_constants.address;
-        const Pipeline& pipeline = g_antialias_enabled ? g_antialias : g_antialias_off;
-        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.pipeline, dl);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.layout, 0,
-                               g_antialias_sets[g_antialiased_image], {}, dl);
-        if (g_antialias_enabled) {
-            cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0,
-                              sizeof(constants), &constants, dl);
-        }
+        cmd.dispatch((g_picture_extent.width + AntialiasGroupPixels - 1) / AntialiasGroupPixels,
+                     (g_picture_extent.height + AntialiasGroupPixels - 1) / AntialiasGroupPixels, 1,
+                     dl);
     }
-    cmd.dispatch((g_picture_extent.width + AntialiasGroupPixels - 1) / AntialiasGroupPixels,
-                 (g_picture_extent.height + AntialiasGroupPixels - 1) / AntialiasGroupPixels, 1,
-                 dl);
     // The picture reads the output, and the next frame reads it as its history.
     ImageBarrier(*g_device, cmd, output, vk::ImageLayout::eGeneral,
                  vk::ImageLayout::eShaderReadOnlyOptimal, Compute,

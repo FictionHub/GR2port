@@ -35,6 +35,7 @@
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass7_fma_comp.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass9_comp.h"
 #include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass9_fma_comp.h"
+#include "graphics/gr2_fsr3/shaders/fsr4_main_1080_pass9_srgb_comp.h"
 #include "graphics/gr2_fsr3/vk_trampolines.h"
 #include "graphics/gr2_fsr3/xess_vulkan.h"
 #include "graphics/gr2port/memory.h"
@@ -188,6 +189,11 @@ Gr2Fsr4Context* g_fsr4 = nullptr;
 std::deque<Fsr4Frame> g_fsr4_frames;
 // Whether FSR 4 reads the toned colour, the velocity and the depth, not the inputs pass's copies.
 bool g_fsr4_reads_scene = false;
+// Whether FSR 4's pass 9 can write the picture's sRGB, and whether it does.
+bool g_fsr4_can_encode = false;
+bool g_fsr4_encodes = false;
+// Whether the picture is sharpened after the upscale, which reads the output image.
+bool g_sharpened = false;
 
 // DLSS: whether the options are set for the sizes, which the first evaluation makes NGX's feature
 // with.
@@ -324,6 +330,8 @@ void FreeContexts() {
         g_fsr4_frames.clear();
     }
     g_fsr4_reads_scene = false;
+    g_fsr4_can_encode = false;
+    g_fsr4_encodes = false;
     if (g_dlss_ready) {
         Gr2Fsr3::DlssFree();
         g_dlss_ready = false;
@@ -574,10 +582,14 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
     // WideSubgroupPasses faster in 64-wide subgroups.
     const bool wide_subgroups =
         radv && dot_products.integerDotProduct4x8BitPackedMixedSignednessAccelerated;
-    // Pass 9 has the same results with the log of each input colour texel taken once for the four
-    // pixels a thread makes, which RADV runs faster than AMD's module in 32-wide subgroups.
-    const bool shared_pass9 = radv && dot_products.integerDotProduct4x8BitPackedSignedAccelerated &&
-                              !wide_subgroups && main_weights && matches(9, MainPass9Sha256);
+    // GR2port's pass 9 has the same results. It takes the log of each input colour texel once for
+    // the four pixels a thread makes, which RADV runs faster than AMD's module in 32-wide
+    // subgroups, and it can write the picture's sRGB itself, which saves the encode pass when the
+    // picture is not sharpened.
+    g_fsr4_can_encode = radv && dot_products.integerDotProduct4x8BitPackedSignedAccelerated &&
+                        main_weights && matches(9, MainPass9Sha256);
+    g_fsr4_encodes = g_fsr4_can_encode && !g_sharpened;
+    const bool shared_pass9 = g_fsr4_can_encode && !g_fsr4_encodes && !wide_subgroups;
     std::vector<u8> initializer = assets.initializer;
     if (vector_pass2 || vector_pass5 || vector_pass7) {
         const std::vector<u8> matrices = VectorMatrices(assets.initializer);
@@ -634,6 +646,9 @@ bool CreateFsr4(vk::Extent2D render, vk::Extent2D output) {
     }
     if (float_pass9) {
         replace(9, FSR4_MAIN_1080_PASS9_FMA_COMP, sizeof(FSR4_MAIN_1080_PASS9_FMA_COMP));
+    }
+    if (g_fsr4_encodes) {
+        replace(9, FSR4_MAIN_1080_PASS9_SRGB_COMP, sizeof(FSR4_MAIN_1080_PASS9_SRGB_COMP));
     }
     if (shared_pass9) {
         replace(9, FSR4_MAIN_1080_PASS9_COMP, sizeof(FSR4_MAIN_1080_PASS9_COMP));
@@ -827,7 +842,7 @@ void RecordFsr3(vk::CommandBuffer cmd) {
     }
 }
 
-void RecordFsr4(vk::CommandBuffer cmd) {
+void RecordFsr4(vk::CommandBuffer cmd, vk::Image picture, vk::ImageView picture_view) {
     // The dispatches of frames the GPU has finished go back to the provider.
     std::optional<u64> completed;
     while (!g_fsr4_frames.empty() &&
@@ -868,7 +883,12 @@ void RecordFsr4(vk::CommandBuffer cmd) {
         .motion_vectors = g_fsr4_reads_scene
                               ? scene(g_velocity, g_velocity_view, vk::ImageLayout::eGeneral)
                               : image(g_input_motion),
-        .output = image(g_output),
+        .output = g_fsr4_encodes ? Gr2Fsr4Image{.image = static_cast<VkImage>(picture),
+                                                .view = static_cast<VkImageView>(picture_view),
+                                                .width = g_output_extent.width,
+                                                .height = g_output_extent.height,
+                                                .layout = VK_IMAGE_LAYOUT_GENERAL}
+                                 : image(g_output),
         .jitter_x = g_jitter.x,
         .jitter_y = g_jitter.y,
         .motion_vector_scale_x = 0.5f * static_cast<float>(g_render.width),
@@ -1101,6 +1121,7 @@ bool Start(const Device& device, Memory& memory) {
     const Settings::Graphics graphics = Settings::Get().graphics;
     g_upscaler = Settings::Upscaler::Off;
     g_quality = graphics.upscale_quality;
+    g_sharpened = graphics.upscale_sharpening > 0;
     g_ratio = 1.0f;
     if (graphics.upscaler == Settings::Upscaler::Off) {
         return true;
@@ -1340,13 +1361,13 @@ vk::Viewport SceneViewport(vk::Extent2D extent, bool jittered) {
     };
 }
 
-void Record(vk::CommandBuffer cmd) {
+bool Record(vk::CommandBuffer cmd, vk::Image picture, vk::ImageView picture_view) {
     const bool ready = (g_upscaler == Settings::Upscaler::Fsr3 && g_fsr3 != nullptr) ||
                        (g_upscaler == Settings::Upscaler::Fsr4 && g_fsr4 != nullptr) ||
                        (g_upscaler == Settings::Upscaler::Dlss && g_dlss_ready) ||
                        (g_upscaler == Settings::Upscaler::Xess && g_xess_ready);
     if (!ready || !g_output.image) {
-        return;
+        return false;
     }
     constexpr auto Compute = vk::PipelineStageFlagBits2::eComputeShader;
     constexpr auto Depth = vk::ImageAspectFlagBits::eDepth;
@@ -1370,7 +1391,7 @@ void Record(vk::CommandBuffer cmd) {
         if (!g_fsr4_reads_scene) {
             RecordInputs(cmd);
         }
-        RecordFsr4(cmd);
+        RecordFsr4(cmd, picture, picture_view);
         break;
     case Settings::Upscaler::Dlss:
         RecordInputs(cmd);
@@ -1394,6 +1415,13 @@ void Record(vk::CommandBuffer cmd) {
     ImageBarrier(*g_device, cmd, g_output.image, vk::ImageLayout::eGeneral,
                  vk::ImageLayout::eGeneral, Compute, vk::AccessFlagBits2::eShaderStorageWrite,
                  Compute, vk::AccessFlagBits2::eShaderSampledRead);
+    return g_upscaler == Settings::Upscaler::Fsr4 && g_fsr4_encodes;
+}
+
+bool SetSharpened(bool sharpened) {
+    const bool remake = g_fsr4 != nullptr && g_fsr4_can_encode && g_fsr4_encodes == sharpened;
+    g_sharpened = sharpened;
+    return remake;
 }
 
 vk::ImageView OutputView() {
