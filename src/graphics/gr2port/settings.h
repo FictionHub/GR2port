@@ -80,6 +80,10 @@ struct Mouse {
     /// The control type of the game's Controls option as the game last used it, 0 to 4 for Type A
     /// to Type E. The keyboard prompts label the buttons for it.
     u32 control_type{0};
+    /// The camera's turn speed in the Normal style's Special Attack flight and in Panther Mode, in
+    /// percent of the game's own, at most 200. The game's Camera Sensitivity leaves both alone.
+    u32 special_attack_camera{100};
+    u32 panther_camera{100};
 };
 
 /// A pass's quality: Original draws it as the game does, the lower ones cost less and show less.

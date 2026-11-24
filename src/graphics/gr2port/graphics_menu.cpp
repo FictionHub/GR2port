@@ -18,6 +18,7 @@
 
 #include "common/logging/log.h"
 #include "core/game_check/game_patches.h"
+#include "graphics/gr2port/camera_menu.h"
 #include "graphics/gr2port/field_of_view.h"
 
 #include "graphics/gr2port/graphics_menu.h"
@@ -1012,12 +1013,13 @@ void MakeRows(u64 system) {
         LOG_ERROR(Render_Vulkan, "GR2port: the Graphics Settings rows could not be made");
         g_broken = true;
     }
+    CameraMenu::MakeRows(system);
     g_system = system;
     g_load_frames = 0;
 }
 
 bool RowsLoaded() {
-    return Loaded(g_entry) && std::ranges::all_of(g_slots, &Loaded);
+    return Loaded(g_entry) && std::ranges::all_of(g_slots, &Loaded) && CameraMenu::RowsLoaded();
 }
 
 void Animate(u64 row, u32 mode) {
@@ -1037,6 +1039,7 @@ void PS4_SYSV_ABI OnSlideRows(u64 system, u32 mode) {
         }
     }
     g_slide_rows(system, mode);
+    CameraMenu::Slide(system, mode);
     if (!own || mode > SlideRest) {
         return;
     }
@@ -1410,6 +1413,7 @@ u64 PS4_SYSV_ABI OnPlaceRows(u64 system) {
         HangEntry(system);
         PlaceSlots(system);
         HangSlots();
+        CameraMenu::Hang(system);
     }
     return placed;
 }
@@ -1439,6 +1443,7 @@ void PS4_SYSV_ABI OnEndSystem(u64 system) {
         for (OwnRow& slot : g_slots) {
             End(slot);
         }
+        CameraMenu::End(system);
         g_system = 0;
         g_phase = Phase::List;
         g_thumb = -1.0f;
@@ -1478,6 +1483,7 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         LOG_ERROR(Render_Vulkan, "GR2port: the System Menu is not the expected code");
         return false;
     }
+    CameraMenu::Install(module_base, c, capacity);
     LOG_INFO(Render_Vulkan, "GR2port: the System Menu has a Graphics Settings row");
     return true;
 }
@@ -1516,6 +1522,9 @@ u64 FindText(u64 texts, const char* key, FindTextFunction find) {
     } else if (name.starts_with(PlainValuePrefix)) {
         model = "ui_system_menu_2_6_4";
         english = name.substr(PlainValuePrefix.size());
+    } else if (name.starts_with(CameraMenu::KeyPrefix)) {
+        model = CameraMenu::ModelKey;
+        english = name.substr(CameraMenu::KeyPrefix.size());
     } else {
         return 0;
     }
@@ -1547,6 +1556,7 @@ void AfterDrawClip(u64 handle, u64 context, DrawFunction draw) {
             }
         }
     }
+    CameraMenu::Draw(system, context, draw);
 }
 
 void SetGpuVendor(u32 vendor) {

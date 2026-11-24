@@ -209,6 +209,10 @@ Values FromJson(const json& root) {
         mouse.prompts = prompts->get<std::string>();
     }
     mouse.control_type = ReadU32(section, "control_type", mouse.control_type);
+    mouse.special_attack_camera = std::min<u32>(
+        ReadU32(section, "special_attack_camera_sensitivity", mouse.special_attack_camera), 200);
+    mouse.panther_camera =
+        std::min<u32>(ReadU32(section, "panther_camera_sensitivity", mouse.panther_camera), 200);
     Display& display = values.display;
     display.fullscreen = ReadBool(section, "fullscreen", display.fullscreen);
     display.exclusive = ReadBool(section, "exclusive_fullscreen", display.exclusive);
@@ -273,6 +277,8 @@ json ToJson(const Values& values) {
         {"mouse_shift_vertical", values.mouse.shift_vertical},
         {"prompts", values.mouse.prompts},
         {"control_type", values.mouse.control_type},
+        {"special_attack_camera_sensitivity", values.mouse.special_attack_camera},
+        {"panther_camera_sensitivity", values.mouse.panther_camera},
         {"graphics_preset", values.graphics.preset},
         {"shadow_quality", NameOf(values.graphics.shadows, QualityNames)},
         {"fog_quality", NameOf(values.graphics.fog, QualityNames)},

@@ -52,6 +52,7 @@
 #include "graphics/gr2port/scripted_moves.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/smoke_and_dust.h"
+#include "graphics/gr2port/special_cameras.h"
 #include "graphics/gr2port/stick_tilt.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/timeline.h"
@@ -180,6 +181,7 @@ void Install(VAddr module_base) {
     }
     FieldOfView::Install(module_base, c, StubAreaSize);
     ScreenShake::Install(module_base, c, StubAreaSize);
+    SpecialCameras::Install(module_base, c, StubAreaSize);
     if (GamePatches::FitsUi()) {
         MarkerFit::Install(module_base, c, StubAreaSize);
     }

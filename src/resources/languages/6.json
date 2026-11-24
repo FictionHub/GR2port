@@ -336,6 +336,8 @@
     "HUD Crosshair": "HUD-vizier",
     "Left Trigger Deadzone": "Dode zone linkertrigger",
     "Right Trigger Deadzone": "Dode zone rechtertrigger",
-    "Min Deadzone (def:1 max:126)": "Min. dode zone (standaard 1, max. 126)"
+    "Min Deadzone (def:1 max:126)": "Min. dode zone (standaard 1, max. 126)",
+    "Special Attack Camera Sensitivity": "Gevoeligheid camera (speciale aanval)",
+    "Panther Mode Camera Sensitivity": "Gevoeligheid camera (Pantermodus)"
   }
 }

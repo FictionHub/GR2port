@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 target_sources(gr2port PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/camera_menu.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/camera_menu.h
     ${CMAKE_CURRENT_LIST_DIR}/camera_reach.cpp
     ${CMAKE_CURRENT_LIST_DIR}/camera_reach.h
     ${CMAKE_CURRENT_LIST_DIR}/capture.cpp
@@ -149,6 +151,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/shadows.h
     ${CMAKE_CURRENT_LIST_DIR}/splash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/splash.h
+    ${CMAKE_CURRENT_LIST_DIR}/special_cameras.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/special_cameras.h
     ${CMAKE_CURRENT_LIST_DIR}/stick_tilt.cpp
     ${CMAKE_CURRENT_LIST_DIR}/stick_tilt.h
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.cpp
