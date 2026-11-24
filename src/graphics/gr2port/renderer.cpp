@@ -236,6 +236,7 @@ struct Stats {
     u64 caster_draws = 0;
     u64 alpha_casters = 0;
     u64 indices = 0;
+    u64 view_culled_indices = 0;
     u32 max_indices = 0;
     u32 refused = 0;
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
@@ -805,7 +806,11 @@ void Thread::LogScene(const Scene::Header& header, const SceneRing::Packet& pack
     const auto* draws = reinterpret_cast<const Scene::Draw*>(packet.data + Scene::DrawsOffset);
     const auto* commands =
         reinterpret_cast<const Scene::Command*>(packet.data + Scene::CommandsOffset());
-    for (u32 i = 0; i < std::min(header.draws, 4u); i++) {
+    u32 command_count = 0;
+    for (const u32 list_commands : header.draw_commands) {
+        command_count += list_commands;
+    }
+    for (u32 i = 0; i < std::min(command_count, 4u); i++) {
         const Scene::Draw& draw = draws[commands[i].first_instance];
         const float* wvp = draw.world_view_projection;
         LOG_INFO(Render_Vulkan,
@@ -1476,6 +1481,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
         stats.category_items[c] += header.category_items[c];
     }
     stats.indices += header.indices;
+    stats.view_culled_indices += header.view_culled_indices;
     stats.max_indices = std::max(stats.max_indices, header.max_indices);
     stats.casters += header.casters;
     stats.skinned_casters += header.skinned_casters;
@@ -1693,7 +1699,8 @@ void Thread::Report() {
         "for theirs, {:.1f} outlines, {:.1f} not drawn, {:.1f} KB of palettes), {:.0f} items "
         "not "
         "drawn and {:.0f} deformed ones waiting for their "
-        "copy, {:.0f} indices (largest draw {}), {:.3f} ms of capture on the game's draw "
+        "copy, {:.0f} indices (largest draw {}, {:.0f} outside the view left out), {:.3f} ms of "
+        "capture on the game's draw "
         "thread (median {:.3f}, shortest {:.3f}; constants {:.3f}, deformers {:.3f}, casters "
         "{:.3f}, world {:.3f}, characters {:.3f}), {} frames not drawn for too many indices; {} "
         "meshes ({} skinned) in {:.1f} "
@@ -1710,6 +1717,7 @@ void Thread::Report() {
         static_cast<double>(stats.dropped) / frames,
         static_cast<double>(stats.deformed_waiting) / frames,
         static_cast<double>(stats.indices) / frames, stats.max_indices,
+        static_cast<double>(stats.view_culled_indices) / frames,
         static_cast<double>(stats.capture_ns) * 1e-6 / frames,
         static_cast<double>(captures[captures.size() / 2]) * 1e-6,
         static_cast<double>(*std::ranges::min_element(captures)) * 1e-6,

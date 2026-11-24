@@ -399,6 +399,10 @@ struct Header {
     u64 indices;
     u32 max_indices;
     u32 draws;
+    /// The world draws' indices in chunks wholly outside the view, which their commands leave out,
+    /// and the commands past one a draw that their runs of chunks take.
+    u32 view_culled_indices;
+    u32 view_runs;
     /// Items with no drawable mesh or palette, or past the room for draws.
     u32 dropped;
     /// The capture's time on the game's draw thread, and its parts.
@@ -1521,8 +1525,10 @@ inline constexpr u64 DrawsOffset = (CameraOffset + sizeof(Camera) + 63) & ~u64{6
 inline u64 CommandsOffset() {
     return DrawsOffset + u64{g_room.draws} * sizeof(Draw);
 }
+/// A draw has a command, none, or a command for each run of its chunks in the view; the room
+/// holds as many again as draws for the runs.
 inline u64 CastersOffset() {
-    return CommandsOffset() + u64{g_room.draws} * sizeof(Command);
+    return CommandsOffset() + u64{g_room.draws} * 2 * sizeof(Command);
 }
 inline u64 CasterCommandsOffset() {
     return CastersOffset() + u64{g_room.casters} * sizeof(Caster);

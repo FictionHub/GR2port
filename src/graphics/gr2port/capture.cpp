@@ -788,7 +788,7 @@ alignas(64) std::array<KnownPalette, 1u << KnownPaletteBits> g_known_palettes{};
 
 // The frame's commands, which reach the packet in one go. Written item by item, they would leave
 // half-full write-combined lines in several places for the reads between items to evict.
-alignas(64) std::array<std::array<Scene::Command, Scene::MaxDraws>,
+alignas(64) std::array<std::array<Scene::Command, 2 * Scene::MaxDraws>,
                        static_cast<u32>(Scene::DrawList::Count)> g_commands;
 alignas(64) std::array<std::array<Scene::Command, Scene::MaxCasterCommands>,
                        Scene::Cascades * Scene::CasterLists> g_caster_commands;
@@ -1194,14 +1194,144 @@ public:
         draw.tangent = mesh->tangent;
         draw.vertex_color = mesh->vertex_color;
         draw.material = material_index;
+        // World draws of the mesh's own positions leave out the chunks outside the view.
+        const bool world = static_cast<u32>(list) <= static_cast<u32>(Scene::DrawList::Alpha);
+        if (world && skin.bones == 0 && vertices == mesh->vertices && mesh->chunks > 1 &&
+            AddViewChunks(list, reinterpret_cast<const float*>(constants) + 16, *mesh, first, count,
+                          i)) {
+            return;
+        }
+        AddDrawCommand(list, mesh->first_index + first, count, i);
+    }
+
+    void AddDrawCommand(Scene::DrawList list, u32 first_index, u32 count, u32 draw) {
         u32& commands = header.draw_commands[static_cast<u32>(list)];
         g_commands[static_cast<u32>(list)][commands++] = {
             .index_count = count,
             .instance_count = 1,
-            .first_index = mesh->first_index + first,
+            .first_index = first_index,
             .vertex_offset = 0,
-            .first_instance = i,
+            .first_instance = draw,
         };
+    }
+
+    // Writes the commands of a world draw whose mesh has chunks: its runs of chunks that are not
+    // wholly past one of the view's six clip planes, under the world-view-projection at
+    // world_view_projection. A chunk past a plane holds only triangles the clipping removes, which
+    // draw nothing: no pipeline clamps depth. The shader's float clip position is within 2^-20 of
+    // the sum of its terms' magnitudes; a box counts as past a plane only by more than 16 times
+    // that. False, with nothing written, when the mesh's box has no bounds.
+    bool AddViewChunks(Scene::DrawList list, const float* world_view_projection,
+                       const Meshes::Mesh& mesh, u32 first, u32 count, u32 draw) {
+        constexpr double Rounding = 0x1p-16;
+        constexpr u32 MaxRuns = 64;
+        const float* m = world_view_projection;
+        std::array<double, 3> magnitude;
+        for (u32 k = 0; k < 3; k++) {
+            magnitude[k] =
+                std::max(std::abs(double{mesh.box_low[k]}), std::abs(double{mesh.box_high[k]}));
+        }
+        // The planes w + x, w - x, w + y, w - y, w + z and w - z over the mesh's own positions, of
+        // the column-major matrix the shader multiplies by.
+        struct Plane {
+            std::array<double, 3> normal;
+            std::array<double, 3> size;
+            double offset;
+            double rounding;
+        };
+        std::array<Plane, 6> planes;
+        for (u32 p = 0; p < planes.size(); p++) {
+            const u32 axis = p / 2;
+            const double sign = p % 2 == 0 ? 1.0 : -1.0;
+            double terms = std::abs(double{m[15]}) + std::abs(double{m[12 + axis]});
+            for (u32 k = 0; k < 3; k++) {
+                planes[p].normal[k] = double{m[4 * k + 3]} + sign * double{m[4 * k + axis]};
+                planes[p].size[k] = std::abs(planes[p].normal[k]);
+                terms += (std::abs(double{m[4 * k + 3]}) + std::abs(double{m[4 * k + axis]})) *
+                         magnitude[k];
+            }
+            planes[p].offset = double{m[15]} + sign * double{m[12 + axis]};
+            planes[p].rounding = Rounding * terms;
+            if (!std::isfinite(planes[p].rounding)) {
+                return false;
+            }
+        }
+        // The chunks the draw's indices touch, and the tree's nodes left to look at: the first
+        // half of a node is looked at before its second, so the runs come in order.
+        const u32 first_chunk = first / Meshes::ChunkIndices;
+        const u32 end_chunk = std::min(
+            (first + count + Meshes::ChunkIndices - 1) / Meshes::ChunkIndices, mesh.chunks);
+        struct Node {
+            u32 index;
+            u32 low;
+            u32 high;
+        };
+        std::array<Node, 64> stack;
+        u32 depth = 0;
+        stack[depth++] = {0, 0, mesh.chunks};
+        std::array<std::array<u32, 2>, MaxRuns> runs;
+        u32 run_count = 0;
+        while (depth != 0) {
+            const Node node = stack[--depth];
+            if (node.high <= first_chunk || node.low >= end_chunk) {
+                continue;
+            }
+            const Meshes::ChunkBox& box = mesh.chunk_tree[node.index];
+            std::array<double, 3> centre;
+            std::array<double, 3> half;
+            for (u32 k = 0; k < 3; k++) {
+                centre[k] = 0.5 * (double{box.low[k]} + double{box.high[k]});
+                half[k] = 0.5 * (double{box.high[k]} - double{box.low[k]});
+            }
+            bool outside = false;
+            bool inside = true;
+            for (const Plane& plane : planes) {
+                const double middle = plane.normal[0] * centre[0] + plane.normal[1] * centre[1] +
+                                      plane.normal[2] * centre[2] + plane.offset;
+                const double reach =
+                    plane.size[0] * half[0] + plane.size[1] * half[1] + plane.size[2] * half[2];
+                // A box without bounds compares false and stays.
+                if (middle + reach < -plane.rounding) {
+                    outside = true;
+                    break;
+                }
+                inside = inside && middle - reach >= 0.0;
+            }
+            if (outside) {
+                continue;
+            }
+            if (!inside && node.high - node.low > 1) {
+                const u32 middle = (node.low + node.high) / 2;
+                stack[depth++] = {node.index + 2 * (middle - node.low), middle, node.high};
+                stack[depth++] = {node.index + 1, node.low, middle};
+                continue;
+            }
+            const u32 low = std::max(node.low, first_chunk);
+            const u32 high = std::min(node.high, end_chunk);
+            if (run_count != 0 && (runs[run_count - 1][1] == low || run_count == MaxRuns)) {
+                // The next chunks, or with no room for a run, the chunks between too.
+                runs[run_count - 1][1] = high;
+            } else {
+                runs[run_count++] = {low, high};
+            }
+        }
+        // Past the room for runs, one command draws from the first run to the last.
+        if (run_count > 1 && header.view_runs + run_count - 1 > Scene::g_room.draws) {
+            runs[0][1] = runs[run_count - 1][1];
+            run_count = 1;
+        }
+        if (run_count != 0) {
+            header.view_runs += run_count - 1;
+        }
+        u32 drawn = 0;
+        for (u32 run = 0; run < run_count; run++) {
+            const u32 start = std::max(first, runs[run][0] * Meshes::ChunkIndices);
+            const u32 end = std::min(first + count, runs[run][1] * Meshes::ChunkIndices);
+            drawn += end - start;
+            AddDrawCommand(list, mesh.first_index + start, end - start, draw);
+        }
+        header.view_culled_indices += count - drawn;
+        return true;
     }
 
     // A G2_CH_Contour item: the mesh's adjacency indices with the item's constants.
