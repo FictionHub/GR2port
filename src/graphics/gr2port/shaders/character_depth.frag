@@ -4,6 +4,7 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_GOOGLE_include_directive : require
+#extension GL_KHR_shader_subgroup_ballot : require
 
 #include "scene.glsl"
 
@@ -27,12 +28,12 @@ vec4 Sample(uint handle, vec2 uv) {
 
 // A character's depth for the ambient occlusion: the pixels G2_CH_Main keeps, past its alpha step
 // and its screen door, as character.frag decides them.
-void main() {
+void Shade(uint draw) {
     Characters table = scene_characters;
-    const uint index = scene_draws.draws[draw_index].material - 1u;
+    const uint index = scene_draws.draws[draw].material - 1u;
     const vec2 uv = texcoord;
     if (table.characters[index].alpha_step != 0u) {
-        const float mask = Sample(scene_draws.draws[draw_index].texture, uv).a;
+        const float mask = Sample(scene_draws.draws[draw].texture, uv).a;
         const vec2 height_uv =
             table.characters[index].normal_offset + table.characters[index].normal_repeat * uv;
         const float height = pow(abs(Sample(table.characters[index].normal_map, height_uv).a), 2.2);
@@ -45,5 +46,17 @@ void main() {
         256.0 * punch.x * (0.0771356 * gl_FragCoord.x + 0.00888381 * gl_FragCoord.y) + 1e-7;
     if (punch.y < fract(fract(abs(123456792.0 / seed)) * abs(seed))) {
         discard;
+    }
+}
+
+// A wave can hold the pixels of several draws. It shades one draw's pixels at a time, so the draw's
+// constants and textures load once for the wave, into scalar registers.
+void main() {
+    for (;;) {
+        const uint draw = subgroupBroadcastFirst(draw_index);
+        if (draw == draw_index) {
+            Shade(draw);
+            break;
+        }
     }
 }

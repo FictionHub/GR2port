@@ -4,6 +4,7 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_GOOGLE_include_directive : require
+#extension GL_KHR_shader_subgroup_ballot : require
 
 #include "scene.glsl"
 #include "point_lights.glsl"
@@ -99,10 +100,10 @@ vec3 AmbientOn(vec3 n) {
 
 // The game's G2_CH_Main pixel programs, in the order they run: bands of the toon light, ambient
 // light, point lights, camera light, reflection, detail, highlight, rim, self-translucency.
-void main() {
+void Shade(uint draw) {
     Characters table = scene_characters;
-    const uint index = scene_draws.draws[draw_index].material - 1u;
-    const uint color_handle = scene_draws.draws[draw_index].texture;
+    const uint index = scene_draws.draws[draw].material - 1u;
+    const uint color_handle = scene_draws.draws[draw].texture;
     const uint normal_handle = table.characters[index].normal_map;
     const vec2 uv = texcoord;
     const vec4 color_map = Sample(color_handle, uv);
@@ -182,7 +183,7 @@ void main() {
     vec3 albedo = mix(color_map.rgb * table.characters[index].color_scale.rgb, gradation.rgb,
                       gradation.a * (1.0 - vertex_color.z));
     vec4 decal = vec4(1.0);
-    const uint decal_index = scene_draws.draws[draw_index].decal;
+    const uint decal_index = scene_draws.draws[draw].decal;
     if (decal_index != 0u) {
         const uint handle = scene_decals.decals[decal_index - 1u].texture;
         decal = texture(sampler2D(textures[nonuniformEXT(handle)], clamp_sampler), decal_texcoord);
@@ -288,7 +289,7 @@ void main() {
                  table.characters[index].rim_border + table.characters[index].rim_smooth,
                  rim_light * max(1.0 - n.z, 0.0));
     result += (1.8 * result + 0.2) * light_color * table.characters[index].rim_intensity * rim;
-    if (scene_draws.draws[draw_index].vertex_color != 0u) {
+    if (scene_draws.draws[draw].vertex_color != 0u) {
         result = mix(shadow_color * table.characters[index].vertex_shadow, result, vertex_color.y);
     }
 
@@ -339,5 +340,17 @@ void main() {
     // A glow draw takes the game's blend constant.
     if (glow_pass != 0u) {
         color = vec4(result * table.characters[index].glow, glow_alpha);
+    }
+}
+
+// A wave can hold the pixels of several draws. It shades one draw's pixels at a time, so the draw's
+// constants and textures load once for the wave, into scalar registers.
+void main() {
+    for (;;) {
+        const uint draw = subgroupBroadcastFirst(draw_index);
+        if (draw == draw_index) {
+            Shade(draw);
+            break;
+        }
     }
 }

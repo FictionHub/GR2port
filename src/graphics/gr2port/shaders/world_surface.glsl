@@ -136,11 +136,11 @@ void WriteGem(uint index, vec3 n) {
 }
 
 // The game's G2_BG_Main pixel programs without their velocity, one program for all their variants.
-void main() {
+void Shade(uint draw) {
     const float facing_sign = gl_FrontFacing ? 1.0 : -1.0;
-    const uint material_index = scene_draws.draws[draw_index].material;
-    const uint color_handle = scene_draws.draws[draw_index].texture;
-    const vec4 color_scale = scene_draws.draws[draw_index].color_scale;
+    const uint material_index = scene_draws.draws[draw].material;
+    const uint color_handle = scene_draws.draws[draw].texture;
+    const vec4 color_scale = scene_draws.draws[draw].color_scale;
     const float length_squared = dot(normal, normal);
     // A mesh without normals faces the eye.
     vec3 n = length_squared > 0.0 ? normal * inversesqrt(length_squared) * facing_sign
@@ -228,4 +228,16 @@ void main() {
     g_albedo = vec4(albedo, Sample(table.materials[index].hatching, uv * repeat).r);
     g_normal = PackNormal(TurnedNormal(n, tangent_normal));
     g_surface = surface;
+}
+
+// A wave can hold the pixels of several draws. It shades one draw's pixels at a time, so the draw's
+// constants and textures load once for the wave, into scalar registers.
+void main() {
+    for (;;) {
+        const uint draw = subgroupBroadcastFirst(draw_index);
+        if (draw == draw_index) {
+            Shade(draw);
+            break;
+        }
+    }
 }
