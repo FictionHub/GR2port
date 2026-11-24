@@ -55,7 +55,8 @@ void main() {
     vec3 map = vec3(attr2.zw, 0.0);
     const uint normal_layer = bitfieldExtract(draw.gpufx_used[0], 21, 3);
     if (normal_layer < 7u) {
-        map = vec3(2.0 * layers.color[normal_layer].rg + -1.0, layers.color[normal_layer].b);
+        const vec4 normal_map = LayerAt(layers, normal_layer).color;
+        map = vec3(2.0 * normal_map.rg + -1.0, normal_map.b);
     }
     const float angle = attr1.y;
     const float cosine = sin(

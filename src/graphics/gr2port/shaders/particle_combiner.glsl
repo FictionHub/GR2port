@@ -96,16 +96,45 @@ struct Layers {
     float luminance_alpha[8];
 };
 
+// One layer's colour and its luminance times alpha.
+struct Layer {
+    vec4 color;
+    float luminance_alpha;
+};
+
+// Layer `index`, picked by a switch: an array read at a runtime index puts the layers in scratch
+// memory on AMD's Windows driver.
+Layer LayerAt(Layers layers, uint index) {
+    switch (index) {
+    case 0u:
+        return Layer(layers.color[0], layers.luminance_alpha[0]);
+    case 1u:
+        return Layer(layers.color[1], layers.luminance_alpha[1]);
+    case 2u:
+        return Layer(layers.color[2], layers.luminance_alpha[2]);
+    case 3u:
+        return Layer(layers.color[3], layers.luminance_alpha[3]);
+    case 4u:
+        return Layer(layers.color[4], layers.luminance_alpha[4]);
+    case 5u:
+        return Layer(layers.color[5], layers.luminance_alpha[5]);
+    case 6u:
+        return Layer(layers.color[6], layers.luminance_alpha[6]);
+    default:
+        return Layer(layers.color[7], layers.luminance_alpha[7]);
+    }
+}
+
 // One stage: c_gpufxUsed.x picks the two layers from bit a and bit a - 3, c_gpufxUsed.y how each is
 // taken from bit b and bit b - 3, and from bit b - 6 how they mix: 1 the first over the second by
 // its alpha, 2 the first times its alpha plus the second, 3 their product, else white. The result,
 // clamped to 0 to 1, becomes layer `into`.
 void CombinerStage(ParticleDraw draw, inout Layers layers, int a, int b, uint into) {
-    const uint first = bitfieldExtract(draw.gpufx_used[0], a, 3);
-    const uint second = bitfieldExtract(draw.gpufx_used[0], a - 3, 3);
-    const vec4 x = Operand(layers.color[first], layers.luminance_alpha[first],
+    const Layer first = LayerAt(layers, bitfieldExtract(draw.gpufx_used[0], a, 3));
+    const Layer second = LayerAt(layers, bitfieldExtract(draw.gpufx_used[0], a - 3, 3));
+    const vec4 x = Operand(first.color, first.luminance_alpha,
                            OperandWays[bitfieldExtract(draw.gpufx_used[1], b, 3)]);
-    const vec4 y = Operand(layers.color[second], layers.luminance_alpha[second],
+    const vec4 y = Operand(second.color, second.luminance_alpha,
                            OperandWays[bitfieldExtract(draw.gpufx_used[1], b - 3, 3)]);
     const uint mix = bitfieldExtract(draw.gpufx_used[1], b - 6, 3);
     vec4 result = vec4(1.0);
@@ -146,10 +175,14 @@ Layers CombinerLayers(ParticleDraw draw, uint material_index, vec2 place0, vec2 
             (move1 * MoveStrength(material, 1u, 3u) +
              (move0 * MoveStrength(material, 0u, 3u) + place3)));
     layers.luminance_alpha[3] = LuminanceAlpha(layers.color[3]);
-    for (uint k = 4u; k < 8u; k++) {
-        layers.color[k] = vec4(1.0);
-        layers.luminance_alpha[k] = 1.0;
-    }
+    layers.color[4] = vec4(1.0);
+    layers.color[5] = vec4(1.0);
+    layers.color[6] = vec4(1.0);
+    layers.color[7] = vec4(1.0);
+    layers.luminance_alpha[4] = 1.0;
+    layers.luminance_alpha[5] = 1.0;
+    layers.luminance_alpha[6] = 1.0;
+    layers.luminance_alpha[7] = 1.0;
     CombinerStage(draw, layers, 15, 27, 4u);
     CombinerStage(draw, layers, 9, 18, 5u);
     CombinerStage(draw, layers, 3, 9, 6u);
@@ -164,18 +197,18 @@ vec4 Combined(ParticleDraw draw, Layers layers) {
     vec3 color = vec3(1.0);
     const uint color_layer = bitfieldExtract(draw.gpufx_used[0], 27, 3);
     if (color_layer < 7u) {
-        const float base = layers.luminance_alpha[color_layer] *
-                           float(bitfieldExtract(draw.gpufx_used[2], 30, 1));
-        color = fma(layers.color[color_layer].rgb,
-                    vec3(float(bitfieldExtract(draw.gpufx_used[2], 31, 1))), vec3(base));
+        const Layer layer = LayerAt(layers, color_layer);
+        const float base =
+            layer.luminance_alpha * float(bitfieldExtract(draw.gpufx_used[2], 30, 1));
+        color = fma(layer.color.rgb, vec3(float(bitfieldExtract(draw.gpufx_used[2], 31, 1))),
+                    vec3(base));
     }
     float alpha = 1.0;
     const uint alpha_layer = bitfieldExtract(draw.gpufx_used[0], 24, 3);
     if (alpha_layer < 7u) {
-        alpha = fma(layers.luminance_alpha[alpha_layer],
-                    float(bitfieldExtract(draw.gpufx_used[2], 28, 1)),
-                    layers.color[alpha_layer].a *
-                        float(bitfieldExtract(draw.gpufx_used[2], 29, 1)));
+        const Layer layer = LayerAt(layers, alpha_layer);
+        alpha = fma(layer.luminance_alpha, float(bitfieldExtract(draw.gpufx_used[2], 28, 1)),
+                    layer.color.a * float(bitfieldExtract(draw.gpufx_used[2], 29, 1)));
     }
     return vec4(color, alpha);
 }

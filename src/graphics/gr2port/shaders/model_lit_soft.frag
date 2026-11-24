@@ -63,7 +63,7 @@ void main() {
     vec3 surface = normal;
     const uint normal_layer = bitfieldExtract(draw.gpufx_used[0], 21, 3);
     if (normal_layer < 7u) {
-        const vec3 map = 2.0 * layers.color[normal_layer].rgb + -1.0;
+        const vec3 map = 2.0 * LayerAt(layers, normal_layer).color.rgb + -1.0;
         const vec3 tangent = attr7.xyz;
         const vec3 bitangent = vec3(tangent.y * -normal.z + normal.y * tangent.z,
                                     tangent.z * -normal.x + normal.z * tangent.x,
