@@ -114,7 +114,8 @@ float Dissolved(float alpha, vec2 place, vec4 erosion, float threshold) {
     const float row = place.y * noise_y + -fract(place.y * noise_y);
     const float column = place.x * noise_x + -fract(place.x * noise_x);
     const uint cell = (GameIntBits(Modulo4(row)) << 2) + GameIntBits(Modulo4(column));
-    const float dither = (1.0 / 16.0) * uintBitsToFloat(DitherTable[(cell << 2) >> 2]);
+    // A negative row or column puts the cell past the table, where the dither is 0.
+    const float dither = cell < 16u ? (1.0 / 16.0) * uintBitsToFloat(DitherTable[cell]) : 0.0;
     return exp2(log2(abs(alpha)) * erosion.y) * erosion.x < dither ? 0.0 : alpha;
 }
 
