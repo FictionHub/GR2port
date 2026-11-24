@@ -192,6 +192,16 @@ void Strokes(UiConstants constants, vec3 a, vec3 b, vec3 c, vec4 colour_a, vec4 
     EndPrimitive();
 }
 
+// Corner `index`'s place and colour, picked by selects: an array read at a runtime index puts the
+// corners in scratch memory on AMD's Windows driver.
+vec3 CornerPoint(vec3 points[3], uint index) {
+    return index == 0u ? points[0] : (index == 1u ? points[1] : points[2]);
+}
+
+vec4 CornerColour(uint index) {
+    return index == 0u ? ring1[0] : (index == 1u ? ring1[1] : ring1[2]);
+}
+
 void main() {
     UiDraw draw = UiDraw(draws_address + uint64_t(draw_index_in[0]) * DrawBytes);
     UiConstants constants = UiConstants(draw.vertex_palette);
@@ -217,5 +227,6 @@ void main() {
     }
     const uint b = (a + 1u) % 3u;
     const uint c = (a + 2u) % 3u;
-    Strokes(constants, points[a], points[b], points[c], ring1[a], ring1[b], ring1[c]);
+    Strokes(constants, CornerPoint(points, a), CornerPoint(points, b), CornerPoint(points, c),
+            CornerColour(a), CornerColour(b), CornerColour(c));
 }
