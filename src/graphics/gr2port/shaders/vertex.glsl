@@ -12,8 +12,10 @@ const uint FormatRg16Sint = 12u;
 const uint FormatRgba16Unorm = 10u;
 const uint FormatRgba8Unorm = 16u;
 
+// The vertex's 32-bit offset from the element's address lets the loads take that address in scalar
+// registers.
 Words Element(uint64_t vertices, uint stride, uint element) {
-    return Words(vertices + uint64_t(gl_VertexIndex) * stride + (element & 0xffu));
+    return Words(vertices + (element & 0xffu) + uint(gl_VertexIndex) * stride);
 }
 
 vec3 LoadPosition(uint64_t vertices, uint stride, uint position) {
@@ -28,7 +30,7 @@ vec3 LoadPosition(uint64_t vertices, uint stride, uint position) {
 // game's vertex programs. The skin stream holds four RGBA16 FLOAT weights, then four RGBA16 SINT
 // bone indices.
 vec3 SkinPosition(vec3 p, uint64_t skin, uint64_t palette, uint bones) {
-    Words words = Words(skin + uint64_t(gl_VertexIndex) * 16u);
+    Words words = Words(skin + uint(gl_VertexIndex) * 16u);
     const vec2 w01 = unpackHalf2x16(words.words[0]);
     const vec2 w23 = unpackHalf2x16(words.words[1]);
     const int b0 = bitfieldExtract(int(words.words[2]), 0, 16);
@@ -88,7 +90,7 @@ vec4 LoadVertexColor(uint64_t vertices, uint stride, uint element) {
 // A skinned direction: as SkinPosition, without the translation. It keeps the bones' scale, which
 // the game's vertex programs normalise away after the view matrix.
 vec3 SkinDirection(vec3 d, uint64_t skin, uint64_t palette, uint bones) {
-    Words words = Words(skin + uint64_t(gl_VertexIndex) * 16u);
+    Words words = Words(skin + uint(gl_VertexIndex) * 16u);
     const vec2 w01 = unpackHalf2x16(words.words[0]);
     const vec2 w23 = unpackHalf2x16(words.words[1]);
     const int b0 = bitfieldExtract(int(words.words[2]), 0, 16);

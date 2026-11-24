@@ -456,9 +456,12 @@ vec3 UnpackNormal(uint word) {
 }
 
 // Row r of a bone. A bone past the palette reads zeros, as the game's buffer loads past its records
-// do.
+// do. Such a bone loads the first bone's row instead, so the load needs no branch, and its 32-bit
+// offset from the palette lets the load take the palette's address in scalar registers.
 vec4 BoneRow(Rows palette, uint bones, int bone, uint r) {
-    return uint(bone) < bones ? palette.rows[uint(bone) * 3u + r] : vec4(0.0);
+    const bool inside = uint(bone) < bones;
+    const vec4 row = Rows(uint64_t(palette) + ((inside ? uint(bone) : 0u) * 48u + r * 16u)).rows[0];
+    return inside ? row : vec4(0.0);
 }
 
 struct Caster {
