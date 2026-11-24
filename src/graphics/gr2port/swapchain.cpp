@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
-#include <array>
-#include <span>
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/device_lost.h"
@@ -35,28 +33,12 @@ vk::SurfaceFormatKHR PickFormat(const std::vector<vk::SurfaceFormatKHR>& formats
     return formats.front();
 }
 
-// Without VSync frames show at once. Double and triple buffering queue frames for the display
-// (FIFO), and Mailbox replaces the frame that waits. FIFO is the one mode every device has.
+// Without VSync frames show at once where the surface allows it. Double and triple buffering
+// queue frames for the display (FIFO), the one mode every device has.
 vk::PresentModeKHR PickMode(const std::vector<vk::PresentModeKHR>& modes, Settings::VSync vsync) {
-    static constexpr std::array NoVSync{vk::PresentModeKHR::eImmediate,
-                                        vk::PresentModeKHR::eMailbox};
-    static constexpr std::array Mailbox{vk::PresentModeKHR::eMailbox};
-    std::span<const vk::PresentModeKHR> preferred;
-    switch (vsync) {
-    case Settings::VSync::Off:
-        preferred = NoVSync;
-        break;
-    case Settings::VSync::Mailbox:
-        preferred = Mailbox;
-        break;
-    case Settings::VSync::DoubleBuffered:
-    case Settings::VSync::TripleBuffered:
-        break;
-    }
-    for (const vk::PresentModeKHR wanted : preferred) {
-        if (std::ranges::find(modes, wanted) != modes.end()) {
-            return wanted;
-        }
+    if (vsync == Settings::VSync::Off &&
+        std::ranges::find(modes, vk::PresentModeKHR::eImmediate) != modes.end()) {
+        return vk::PresentModeKHR::eImmediate;
     }
     return vk::PresentModeKHR::eFifo;
 }
@@ -83,7 +65,7 @@ bool Swapchain::Create(u32 width, u32 height) {
     }
     const vk::SurfaceFormatKHR surface_format = PickFormat(formats, hdr_wanted);
     // Double and triple buffering keep two and three images where the surface allows that many;
-    // the other modes take one more than the surface's least.
+    // without VSync the swapchain takes one more than the surface's least.
     const Settings::VSync vsync = Settings::Get().display.vsync;
     u32 image_count = caps.minImageCount + 1;
     if (vsync == Settings::VSync::DoubleBuffered) {

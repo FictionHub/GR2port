@@ -9,7 +9,7 @@
 
 namespace Gr2Port {
 
-/// The window's swapchain: mailbox presentation when the surface has it, else immediate, else
+/// The window's swapchain: immediate presentation without VSync where the surface has it, else
 /// FIFO. Each image has its own semaphore for the end of the frame drawn into it.
 class Swapchain {
 public:

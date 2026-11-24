@@ -163,7 +163,6 @@ constexpr std::pair<VSync, std::string_view> VSyncNames[] = {
     {VSync::Off, "off"},
     {VSync::DoubleBuffered, "double"},
     {VSync::TripleBuffered, "triple"},
-    {VSync::Mailbox, "mailbox"},
 };
 
 void ReadGame(const json& section, Game& game) {
