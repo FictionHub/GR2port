@@ -153,14 +153,13 @@ void Add(const std::string& id) {
 
 u32 Count() {
     std::scoped_lock lk{mutex};
-    return std::min<u32>(static_cast<u32>(ids.size()), MaxPhotos);
+    return static_cast<u32>(ids.size());
 }
 
 std::vector<Photo> List(u32 start, u32 limit) {
     std::scoped_lock lk{mutex};
-    const u32 total = std::min<u32>(static_cast<u32>(ids.size()), MaxPhotos);
     std::vector<Photo> photos;
-    for (u32 i = start; i < total && photos.size() < limit; ++i) {
+    for (u64 i = start; i < ids.size() && photos.size() < limit; ++i) {
         photos.push_back({HandleOf(ids[i]), ids[i]});
     }
     return photos;

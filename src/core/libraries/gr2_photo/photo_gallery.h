@@ -17,9 +17,6 @@ namespace Libraries::Gr2Photo::Gallery {
 
 constexpr std::string_view GuestDir = "/screenshot";
 
-/// The game stops taking photos at 1000.
-constexpr u32 MaxPhotos = 999;
-
 struct Photo {
     u64 handle;     ///< What the game stores for a photo and hands back to delete it
     std::string id; ///< File name without the extension
@@ -40,7 +37,7 @@ std::string TakePending();
 /// Adds a saved photo to the album.
 void Add(const std::string& id);
 
-/// Number of photos in the album, at most MaxPhotos.
+/// Number of photos in the album.
 u32 Count();
 
 /// Photos [start, start + limit) of the album.

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <bit>
 #include <charconv>
+#include <limits>
 #include <span>
 #include <string>
 #include <fmt/format.h>
@@ -336,6 +337,40 @@ constexpr float TestHeight = 1080.0f;
 constexpr float PhotoHalfWidth = 512.0f / TestWidth;
 constexpr float PhotoHalfHeight = 512.0f / TestHeight;
 
+// The photo album shows the newest AlbumPhotos photos, 1000 in the game. Its list fetch takes the
+// newest rows of a longer album, its slot loops number at most that many photos, and its slot
+// loads stop at the last slot. Each instruction here ends with the word it compares or loads.
+constexpr s32 AlbumPhotos = 5000;
+struct AlbumWord {
+    u64 address;
+    std::string_view opcode;
+    s32 value;
+};
+constexpr std::array AlbumWords{
+    AlbumWord{0x014cc833, "b8", -AlbumPhotos},
+    AlbumWord{0x014cc838, "4881f9", AlbumPhotos + 1},
+    AlbumWord{0x014cc83f, "41bd", AlbumPhotos},
+    AlbumWord{0x017813fb, "81fa", AlbumPhotos},
+    AlbumWord{0x01781401, "41bd", AlbumPhotos},
+    AlbumWord{0x01781447, "81fb", AlbumPhotos - 1},
+    AlbumWord{0x017816f1, "81fa", AlbumPhotos},
+    AlbumWord{0x017816f7, "b8", AlbumPhotos},
+    AlbumWord{0x01781721, "81fb", AlbumPhotos - 1},
+    AlbumWord{0x01782c89, "81fa", AlbumPhotos - 1},
+    AlbumWord{0x01783a90, "81fa", AlbumPhotos - 1},
+    // The camera takes a photo while the photos it has counted since the album's last listing are
+    // fewer than this.
+    AlbumWord{0x011aea74, "813d2630ad00", std::numeric_limits<s32>::max()},
+};
+
+// Queues the patches that grow the album and let the camera shoot past its end.
+void QueuePhotoAlbum() {
+    for (const AlbumWord& word : AlbumWords) {
+        QueueBytes(word.address,
+                   std::string(word.opcode) + WordBytes(static_cast<u32>(word.value)));
+    }
+}
+
 // Queues the patches that fit the photo to the largest square of the scene the stretched window
 // holds: the window's height at wider aspects, its width at narrower ones. 16:9 keeps the game's.
 void QueuePhotoSquare(float aspect) {
@@ -431,6 +466,7 @@ void ApplySettings() {
     QueueMenuBones();
     QueueBytes(SlideKickPower, std::string(CallSkipped));
     QueuePhotoSquare(AspectRatio());
+    QueuePhotoAlbum();
 }
 
 float AspectRatio() {

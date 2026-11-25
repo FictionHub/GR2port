@@ -64,8 +64,8 @@ struct Expected {
 };
 
 // The v1.11 eboot.bin's bytes where some of the built-in patches, the detail settings, the menus'
-// bone pool and the photo's square patches write, at their addresses, read from a good dump. The
-// patches fit only an eboot.bin that holds them.
+// bone pool, the photo's square and the photo album patches write, at their addresses, read from a
+// good dump. The patches fit only an eboot.bin that holds them.
 constexpr std::array ExpectedBytes{
     Expected{0x0137a6d8, "75"},
     Expected{0x0137a738, "488b3d31529600"},
@@ -118,6 +118,14 @@ constexpr std::array ExpectedBytes{
     Expected{0x018adca4, "efee6e3e9b62d43c"},
     Expected{0x018adcd0, "4444443f9b62d43c"},
     Expected{0x018c2bf8, "0000e0430000b8440000e04100808344"},
+    Expected{0x014cc833, "b818fcffff4881f9e903000041bde8030000"},
+    Expected{0x017813fb, "81fae803000041bde8030000"},
+    Expected{0x01781447, "81fbe7030000"},
+    Expected{0x017816f1, "81fae8030000b8e8030000"},
+    Expected{0x01781721, "81fbe7030000"},
+    Expected{0x01782c89, "81fae7030000"},
+    Expected{0x01783a90, "81fae7030000"},
+    Expected{0x011aea74, "813d2630ad00e8030000"},
 };
 
 struct Segment {
