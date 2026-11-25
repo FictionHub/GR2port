@@ -814,6 +814,29 @@ alignas(64) std::array<KnownPalette, 1u << KnownPaletteBits> g_known_palettes{};
 // half-full write-combined lines in several places for the reads between items to evict.
 alignas(64) std::array<std::array<Scene::Command, 2 * Scene::MaxDraws>,
                        static_cast<u32>(Scene::DrawList::Count)> g_commands;
+// The world draws' lists, which CopyCommands writes nearest first: a pixel of what is drawn later
+// fails the depth test before it is shaded. A view distance has a step, 32 to each doubling from
+// 1/8, so that a list sorts by step in one pass. A list's steps are kept beside its commands.
+constexpr u32 WorldLists = static_cast<u32>(Scene::DrawList::Alpha) + 1;
+constexpr u32 DepthSteps = 640;
+alignas(64) std::array<std::array<u16, 2 * Scene::MaxDraws>, WorldLists> g_command_steps;
+alignas(64) std::array<u32, 2 * Scene::MaxDraws> g_command_order;
+
+u32 DepthStep(float distance) {
+    constexpr float Nearest = 0.125f;
+    const u32 bits = std::bit_cast<u32>(std::max(distance, Nearest));
+    return std::min((bits >> 18) - (std::bit_cast<u32>(Nearest) >> 18), DepthSteps - 1);
+}
+
+// The least clip w of a box under the column-major matrix m: the view distance of its nearest
+// corner. The distance of the model's origin for a box without bounds.
+float BoxDistance(const float* m, const float* low, const float* high) {
+    float distance = m[15];
+    for (u32 k = 0; k < 3; k++) {
+        distance += std::min(m[4 * k + 3] * low[k], m[4 * k + 3] * high[k]);
+    }
+    return std::isfinite(distance) ? distance : m[15];
+}
 alignas(64) std::array<std::array<Scene::Command, Scene::MaxCasterCommands>,
                        Scene::Cascades * Scene::CasterLists> g_caster_commands;
 alignas(64) std::array<Scene::Command, Scene::MaxContours> g_contour_commands;
@@ -964,9 +987,27 @@ public:
                     header.effects.water_draws * Bytes);
         u8* out = packet + Scene::CommandsOffset();
         for (u32 list = 0; list < g_commands.size(); list++) {
-            const u64 bytes = header.draw_commands[list] * Bytes;
-            std::memcpy(out, g_commands[list].data(), bytes);
-            out += bytes;
+            const u32 count = header.draw_commands[list];
+            if (list < WorldLists) {
+                // By depth step and, within a step, in the game's order.
+                std::array<u32, DepthSteps + 1> first{};
+                const u16* steps = g_command_steps[list].data();
+                for (u32 c = 0; c < count; c++) {
+                    first[steps[c] + 1]++;
+                }
+                for (u32 step = 0; step < DepthSteps; step++) {
+                    first[step + 1] += first[step];
+                }
+                for (u32 c = 0; c < count; c++) {
+                    g_command_order[first[steps[c]]++] = c;
+                }
+                for (u32 c = 0; c < count; c++) {
+                    std::memcpy(out + c * Bytes, &g_commands[list][g_command_order[c]], Bytes);
+                }
+            } else {
+                std::memcpy(out, g_commands[list].data(), count * Bytes);
+            }
+            out += count * Bytes;
         }
         for (u32 c = 0; c < Scene::Cascades; c++) {
             for (u32 list = 0; list < Scene::CasterLists; list++) {
@@ -1224,16 +1265,23 @@ public:
         draw.material = material_index;
         // World draws of the mesh's own positions leave out the chunks outside the view.
         const bool world = static_cast<u32>(list) <= static_cast<u32>(Scene::DrawList::Alpha);
+        const float* world_view_projection = reinterpret_cast<const float*>(constants) + 16;
         if (world && skin.bones == 0 && vertices == mesh->vertices && mesh->chunks > 1 &&
-            AddViewChunks(list, reinterpret_cast<const float*>(constants) + 16, *mesh, first, count,
-                          i)) {
+            AddViewChunks(list, world_view_projection, *mesh, first, count, i)) {
             return;
         }
-        AddDrawCommand(list, mesh->first_index + first, count, i);
+        const u32 step =
+            world ? DepthStep(BoxDistance(world_view_projection, mesh->box_low, mesh->box_high))
+                  : 0;
+        AddDrawCommand(list, mesh->first_index + first, count, i, step);
     }
 
-    void AddDrawCommand(Scene::DrawList list, u32 first_index, u32 count, u32 draw) {
+    // step is the depth step of a world draw's command.
+    void AddDrawCommand(Scene::DrawList list, u32 first_index, u32 count, u32 draw, u32 step) {
         u32& commands = header.draw_commands[static_cast<u32>(list)];
+        if (static_cast<u32>(list) < WorldLists) {
+            g_command_steps[static_cast<u32>(list)][commands] = static_cast<u16>(step);
+        }
         g_commands[static_cast<u32>(list)][commands++] = {
             .index_count = count,
             .instance_count = 1,
@@ -1298,6 +1346,8 @@ public:
         u32 depth = 0;
         stack[depth++] = {0, 0, mesh.chunks};
         std::array<std::array<u32, 2>, MaxRuns> runs;
+        // The view distance of each run's nearest box corner.
+        std::array<float, MaxRuns> distances;
         u32 run_count = 0;
         while (depth != 0) {
             const Node node = stack[--depth];
@@ -1336,16 +1386,25 @@ public:
             }
             const u32 low = std::max(node.low, first_chunk);
             const u32 high = std::min(node.high, end_chunk);
+            double corner = double{m[15]};
+            for (u32 k = 0; k < 3; k++) {
+                corner +=
+                    double{m[4 * k + 3]} * centre[k] - std::abs(double{m[4 * k + 3]}) * half[k];
+            }
+            const float distance = std::isfinite(corner) ? static_cast<float>(corner) : m[15];
             if (run_count != 0 && (runs[run_count - 1][1] == low || run_count == MaxRuns)) {
                 // The next chunks, or with no room for a run, the chunks between too.
                 runs[run_count - 1][1] = high;
+                distances[run_count - 1] = std::min(distances[run_count - 1], distance);
             } else {
+                distances[run_count] = distance;
                 runs[run_count++] = {low, high};
             }
         }
         // Past the room for runs, one command draws from the first run to the last.
         if (run_count > 1 && header.view_runs + run_count - 1 > Scene::g_room.draws) {
             runs[0][1] = runs[run_count - 1][1];
+            distances[0] = *std::min_element(distances.begin(), distances.begin() + run_count);
             run_count = 1;
         }
         if (run_count != 0) {
@@ -1356,7 +1415,8 @@ public:
             const u32 start = std::max(first, runs[run][0] * Meshes::ChunkIndices);
             const u32 end = std::min(first + count, runs[run][1] * Meshes::ChunkIndices);
             drawn += end - start;
-            AddDrawCommand(list, mesh.first_index + start, end - start, draw);
+            AddDrawCommand(list, mesh.first_index + start, end - start, draw,
+                           DepthStep(distances[run]));
         }
         header.view_culled_indices += count - drawn;
         return true;
