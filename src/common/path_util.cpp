@@ -128,7 +128,21 @@ fs::path GetExecutableDirectory() {
     return fs::current_path();
 #else
     const fs::path file = GetExecutableFile();
-    return file.empty() ? fs::current_path() : file.parent_path();
+    if (file.empty()) {
+        return fs::current_path();
+    }
+#ifdef __linux__
+    // An AppImage unpacked into a folder, as RecompLauncher does, starts usr/bin/gr2port through
+    // the folder's AppRun: that folder is the one the player sees.
+    const fs::path bin = file.parent_path();
+    const fs::path unpacked = bin.parent_path().parent_path();
+    std::error_code ec;
+    if (bin.filename() == "bin" && bin.parent_path().filename() == "usr" &&
+        fs::is_regular_file(unpacked / "AppRun", ec)) {
+        return unpacked;
+    }
+#endif
+    return file.parent_path();
 #endif
 }
 

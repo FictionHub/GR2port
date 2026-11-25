@@ -98,7 +98,8 @@ constexpr auto LOG_FILE = "log.txt";
 /// The executable's file, on Linux its AppImage when it runs from one. Empty when unknown.
 [[nodiscard]] std::filesystem::path GetExecutableFile();
 
-/// The folder that holds the executable, on macOS the one that holds its app bundle.
+/// The folder that holds the executable, on macOS the one that holds its app bundle, and in an
+/// unpacked AppImage the one that holds AppRun.
 [[nodiscard]] std::filesystem::path GetExecutableDirectory();
 
 /// The user folder of the global mode. Empty when the account has no application data folder.
