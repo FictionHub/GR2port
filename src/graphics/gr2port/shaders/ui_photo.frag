@@ -24,7 +24,8 @@ uint ToInt(float value) {
 // Word `word` of constant row `row`, with the word's index formed in 32 bits as the game's
 // program forms it.
 float Row(UiConstants constants, uint row, uint word) {
-    return constants.constants[((row * 16u) >> 2) + word];
+    // The constants hold 512 rows; a row past them reads 0, as the game's buffer load gives.
+    return row < 512u ? constants.constants[((min(row, 511u) * 16u) >> 2) + word] : 0.0;
 }
 
 float K(uint bits) {

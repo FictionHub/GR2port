@@ -17,15 +17,20 @@ vec2 Distort(vec2 texcoord) {
     return lens + (0.002 * coarse + 0.001 * fine) * grade.fluctuation.y * (1.0 - edge * edge);
 }
 
+// Knot i of a channel. A knot before the first reads 0, as the game's buffer load there gives.
+float Knot(uint channel, int i) {
+    return i >= 0 ? grade.knots[channel][max(i, 0)] : 0.0;
+}
+
 // A channel's Catmull-Rom curve through its knots, with the end knots repeated.
 float Curve(uint channel, float value) {
     const float scaled = value * 6.0;
     const int segment = min(int(scaled), 5);
     const float x = scaled - float(segment);
     const float p0 = grade.knots[channel][max(segment - 1, 0)];
-    const float p1 = grade.knots[channel][segment];
-    const float p2 = grade.knots[channel][segment + 1];
-    const float p3 = grade.knots[channel][min(segment + 2, 6)];
+    const float p1 = Knot(channel, segment);
+    const float p2 = Knot(channel, segment + 1);
+    const float p3 = Knot(channel, min(segment + 2, 6));
     const float a = p0 - 2.5 * p1 + 2.0 * p2 - 0.5 * p3;
     const float b = 1.5 * (p1 - p2) + 0.5 * (p3 - p0);
     return p1 + x * (0.5 * (p2 - p0) + x * (a + x * b));

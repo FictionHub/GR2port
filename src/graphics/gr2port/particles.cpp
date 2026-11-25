@@ -690,19 +690,27 @@ Buffer CreateStorage(u64 bytes) {
                                   Placement::Device);
 }
 
-// Makes the pool at the sizes the game chose, zeroed as the game's are.
+// The records of the pools the game makes. The GPU particle programs read the pools up to these
+// counts and a record past them as 0, so the pools are never smaller.
+constexpr u64 PoolParticles = 163840;
+constexpr u64 PoolObjects = 98304;
+
+// Makes the pool at the sizes the game chose, at least PoolParticles and PoolObjects records,
+// zeroed as the game's are.
 bool CreatePool(vk::CommandBuffer cmd, const Scene::ParticleHeader& frame) {
     const auto& dl = g_device->dispatch;
+    const u64 particle_bytes = std::max(frame.particle_bytes, PoolParticles * Scene::ParticleBytes);
+    const u64 object_bytes = std::max(frame.object_bytes, PoolObjects * Scene::ParticleObjectBytes);
     for (u32 i = 0; i < 2; i++) {
-        g_particles[i] = CreateStorage(frame.particle_bytes);
-        g_objects[i] = CreateStorage(frame.object_bytes);
+        g_particles[i] = CreateStorage(particle_bytes);
+        g_objects[i] = CreateStorage(object_bytes);
         if (!g_particles[i].buffer || !g_objects[i].buffer) {
             return false;
         }
         cmd.fillBuffer(g_particles[i].buffer, 0, VK_WHOLE_SIZE, 0, dl);
         cmd.fillBuffer(g_objects[i].buffer, 0, VK_WHOLE_SIZE, 0, dl);
     }
-    const u64 objects = frame.object_bytes / Scene::ParticleObjectBytes;
+    const u64 objects = object_bytes / Scene::ParticleObjectBytes;
     g_steps = CreateStorage(objects * sizeof(u32));
     g_active = g_memory->CreateBuffer(ActiveListWord * sizeof(u32) + objects * sizeof(u32),
                                       vk::BufferUsageFlagBits::eStorageBuffer |
@@ -722,13 +730,13 @@ bool CreatePool(vk::CommandBuffer cmd, const Scene::ParticleHeader& frame) {
     u32 bits;
     std::memcpy(&bits, &one, sizeof(bits));
     cmd.fillBuffer(g_colors.buffer, 0, VK_WHOLE_SIZE, bits, dl);
-    g_alive_copy = g_memory->CreateBuffer(
-        frame.particle_bytes, vk::BufferUsageFlagBits::eTransferDst, Placement::Readback);
+    g_alive_copy = g_memory->CreateBuffer(particle_bytes, vk::BufferUsageFlagBits::eTransferDst,
+                                          Placement::Readback);
     if (!g_alive_copy.buffer) {
         return false;
     }
     // Ribbons can read their particles through a list, here in the pool's order.
-    const u32 capacity = static_cast<u32>(frame.particle_bytes / Scene::ParticleBytes);
+    const u32 capacity = static_cast<u32>(particle_bytes / Scene::ParticleBytes);
     g_instances = g_memory->CreateBuffer(
         capacity * sizeof(u32), vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
     if (!g_instances.buffer) {

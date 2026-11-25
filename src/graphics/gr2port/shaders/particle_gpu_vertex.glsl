@@ -48,63 +48,65 @@ uint RecordWord(uint64_t address, uint index, uint size, uint word) {
     return RecordWords(address).words[(index * size + 4u * word) >> 2];
 }
 
-float RecordFloat(uint64_t address, uint index, uint size, uint word) {
-    return uintBitsToFloat(RecordWord(address, index, size, word));
+// Word `word` of record `index` of a table of `count`: 0 past the table, as the game's buffer
+// loads past their records give.
+uint TableWord(uint64_t address, uint index, uint count, uint size, uint word) {
+    return index < count ? RecordWord(address, min(index, count - 1u), size, word) : 0u;
 }
 
-vec4 RecordVector(uint64_t address, uint index, uint size, uint word) {
-    return vec4(RecordFloat(address, index, size, word),
-                RecordFloat(address, index, size, word + 1u),
-                RecordFloat(address, index, size, word + 2u),
-                RecordFloat(address, index, size, word + 3u));
+vec4 TableVector(uint64_t address, uint index, uint count, uint size, uint word) {
+    return uintBitsToFloat(uvec4(TableWord(address, index, count, size, word),
+                                 TableWord(address, index, count, size, word + 1u),
+                                 TableWord(address, index, count, size, word + 2u),
+                                 TableWord(address, index, count, size, word + 3u)));
 }
 
 uint ParticleWord(uint particle, uint word) {
-    return RecordWord(particle_address, particle, ParticleBytes, word);
+    return TableWord(particle_address, particle, ParticleCount, ParticleBytes, word);
 }
 
 float ParticleFloat(uint particle, uint word) {
-    return RecordFloat(particle_address, particle, ParticleBytes, word);
+    return uintBitsToFloat(ParticleWord(particle, word));
 }
 
 vec4 ParticleVector(uint particle, uint word) {
-    return RecordVector(particle_address, particle, ParticleBytes, word);
+    return TableVector(particle_address, particle, ParticleCount, ParticleBytes, word);
 }
 
 uint EmitterWord(uint emitter, uint word) {
-    return RecordWord(emitter_address, emitter, EmitterBytes, word);
+    return TableWord(emitter_address, emitter, EmitterCount, EmitterBytes, word);
 }
 
 float EmitterFloat(uint emitter, uint word) {
-    return RecordFloat(emitter_address, emitter, EmitterBytes, word);
+    return uintBitsToFloat(EmitterWord(emitter, word));
 }
 
 vec4 EmitterVector(uint emitter, uint word) {
-    return RecordVector(emitter_address, emitter, EmitterBytes, word);
+    return TableVector(emitter_address, emitter, EmitterCount, EmitterBytes, word);
 }
 
 uint DescriptionWord(uint description, uint word) {
-    return RecordWord(description_address, description, DescriptionBytes, word);
+    return TableWord(description_address, description, DescriptionCount, DescriptionBytes, word);
 }
 
 float DescriptionFloat(uint description, uint word) {
-    return RecordFloat(description_address, description, DescriptionBytes, word);
+    return uintBitsToFloat(DescriptionWord(description, word));
 }
 
 uint EffectWord(uint effect, uint word) {
-    return RecordWord(effect_address, effect, EffectBytes, word);
+    return TableWord(effect_address, effect, EffectCount, EffectBytes, word);
 }
 
 uint MaterialWord(uint material, uint word) {
-    return RecordWord(material_address, material, MaterialBytes, word);
+    return TableWord(material_address, material, MaterialCount, MaterialBytes, word);
 }
 
 float MaterialFloat(uint material, uint word) {
-    return RecordFloat(material_address, material, MaterialBytes, word);
+    return uintBitsToFloat(MaterialWord(material, word));
 }
 
 vec4 MaterialVector(uint material, uint word) {
-    return RecordVector(material_address, material, MaterialBytes, word);
+    return TableVector(material_address, material, MaterialCount, MaterialBytes, word);
 }
 
 // The game's conversion to an unsigned integer: NaN gives 0, other values are clamped.

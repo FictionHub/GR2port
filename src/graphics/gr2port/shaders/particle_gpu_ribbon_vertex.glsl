@@ -76,7 +76,8 @@ RibbonChain RibbonStart() {
     const uint instance = uint(gl_InstanceIndex) & 0xfffffu;
     uint particle = DrawWords().words[80] + instance;
     if (DrawFloat(75u) >= uintBitsToFloat(0x3f7ffffeu)) {
-        particle = RecordWords(instance_address).words[(4u * particle) >> 2];
+        // The list holds a word a particle of the pool; past it, particle 0.
+        particle = TableWord(instance_address, particle, ParticleCount, 4u, 0u);
     }
     chain.particle = particle;
     const float left = ParticleFloat(particle, 7u);

@@ -105,10 +105,8 @@ vec2 ParallaxShift(vec3 view, vec3 normal, vec4 tangent) {
 // c_materialAttr2.x reaches 1 - 2^-23.
 vec4 ListedColor(uint emitter, vec4 color) {
     if (DrawFloat(76u) >= uintBitsToFloat(0x3f7ffffeu)) {
-        RecordWords list = RecordWords(color_address);
-        const uint at = (emitter << 4) >> 2;
-        const vec3 listed =
-            uintBitsToFloat(uvec3(list.words[at], list.words[at + 1u], list.words[at + 2u]));
+        // Past the list, which holds an entry an emitter of the pool, the entry reads 0.
+        const vec3 listed = TableVector(color_address, emitter, EmitterCount, 16u, 0u).xyz;
         color.rgb = listed * color.rgb;
     }
     return color;

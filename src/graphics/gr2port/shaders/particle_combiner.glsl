@@ -29,7 +29,11 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Com
 // Word `column` of row `row` of a material's strengths, addressed in 32 bits as the game's
 // programs do.
 float MoveStrength(uint material, uint row, uint column) {
-    return CombinerMaterials(material_address).words[((material * 560u + 16u * row) >> 2) + column];
+    // A material past the table reads 0, as the game's buffer load past it gives.
+    return material < MaterialCount
+               ? CombinerMaterials(material_address)
+                     .words[((min(material, MaterialCount - 1u) * 560u + 16u * row) >> 2) + column]
+               : 0.0;
 }
 
 // The game's programs clear the lowest bit of a texture coordinate's x before reading a map.
@@ -76,6 +80,12 @@ float LuminanceAlpha(vec4 color) {
 // the colour, y keeps the alpha, z puts the luminance times alpha in all four.
 const vec4 OperandWays[4] = vec4[4](vec4(0.0, 0.0, 1.0, 0.0), vec4(1.0, 0.0, 0.0, 0.0),
                                     vec4(1.0, 1.0, 0.0, 0.0), vec4(0.0, 1.0, 0.0, 0.0));
+
+// The way a field of c_gpufxUsed.y names. Fields 4 to 7 fall past the table, where the game's
+// programs read 0.
+vec4 OperandWay(uint field) {
+    return field < 4u ? OperandWays[min(field, 3u)] : vec4(0.0);
+}
 
 // A layer taken by a stage, in the order of operations of the game's programs.
 vec4 Operand(vec4 layer, float luminance_alpha, vec4 way) {
@@ -133,9 +143,9 @@ void CombinerStage(ParticleDraw draw, inout Layers layers, int a, int b, uint in
     const Layer first = LayerAt(layers, bitfieldExtract(draw.gpufx_used[0], a, 3));
     const Layer second = LayerAt(layers, bitfieldExtract(draw.gpufx_used[0], a - 3, 3));
     const vec4 x = Operand(first.color, first.luminance_alpha,
-                           OperandWays[bitfieldExtract(draw.gpufx_used[1], b, 3)]);
+                           OperandWay(bitfieldExtract(draw.gpufx_used[1], b, 3)));
     const vec4 y = Operand(second.color, second.luminance_alpha,
-                           OperandWays[bitfieldExtract(draw.gpufx_used[1], b - 3, 3)]);
+                           OperandWay(bitfieldExtract(draw.gpufx_used[1], b - 3, 3)));
     const uint mix = bitfieldExtract(draw.gpufx_used[1], b - 6, 3);
     vec4 result = vec4(1.0);
     if (mix == 1u) {
