@@ -840,7 +840,8 @@ struct GlassMaterial {
 static_assert(sizeof(GlassMaterial) == 192);
 
 /// What the game's effect, water and model particle programs fetch and sample: a mesh, encoded as
-/// Draw's, and the handles of its displacement map, its other maps and its reflection cube.
+/// Draw's, and the handles of its displacement map, its other maps and its reflection cube. A
+/// skinned mesh's stride holds its palette's bones in the high 16 bits (SkinnedStride).
 struct EffectMesh {
     u64 vertices;
     u64 skin;
@@ -930,7 +931,8 @@ static_assert(sizeof(MetaballDraw) == 512);
 /// What the game's enemy programs fetch and sample: a mesh, the element of each of the engine's
 /// semantics (byte offset in the low 8 bits, the game's vertex format above, 0 for none), the
 /// handle of the displacement map, and the handles of the pixel program's textures: the body's
-/// t1, t2, t4, t5, t6, t8 and t9, the core's t1 and t2.
+/// t1, t2, t4, t5, t6, t8 and t9, the core's t1 and t2. A skinned mesh's stride holds its palette's
+/// bones in the high 16 bits (SkinnedStride).
 struct EnemyMesh {
     u64 vertices;
     u64 skin;
@@ -1343,7 +1345,8 @@ struct UiDraw {
     u32 first_index;
     /// UiDrawText for text: its first texture is a linear image the game writes the text into.
     u32 flags;
-    u32 padding;
+    /// The rows of 16 bytes the palette holds, which bound the skinned programs' bones.
+    u32 palette_rows;
 };
 static_assert(sizeof(UiDraw) == 160);
 inline constexpr u32 UiDrawText = 1;

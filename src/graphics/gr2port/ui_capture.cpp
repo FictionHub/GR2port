@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <mutex>
 #include <numbers>
 #include <span>
@@ -841,11 +842,15 @@ void Writer::Draw(const RecordedDraw& recorded) {
         }
     }
     if (vertex_program->palette) {
-        draw.vs_palette = constants_of(stroke ? recorded.gs_user.data() : vs_user + VsUserPalette);
+        const u32* palette_words = stroke ? recorded.gs_user.data() : vs_user + VsUserPalette;
+        draw.vs_palette = constants_of(palette_words);
         if (draw.vs_palette == 0) {
             drop("no palette");
             return;
         }
+        const Buffer palette = ReadBuffer(palette_words);
+        draw.palette_rows = static_cast<u32>(std::min<u64>(
+            u64{palette.stride} * palette.elements / 16, std::numeric_limits<u32>::max()));
     }
     // Bit 0 clamps, bit 1 filters by point, as Ui's samplers.
     const auto sampler_of = [](const u32* words) {

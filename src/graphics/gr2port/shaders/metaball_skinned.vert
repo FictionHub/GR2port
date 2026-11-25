@@ -32,9 +32,9 @@ void main() {
     const ivec2 texcoord = MeshTexcoord(mesh, mesh.texcoord);
     const vec4 weights = SkinWeights(mesh.skin);
     const uvec4 bones = SkinBones(mesh.skin);
-    const vec4 row0 = BlendedRow(mesh.palette, weights, bones, 0u);
-    const vec4 row1 = BlendedRow(mesh.palette, weights, bones, 1u);
-    const vec4 row2 = BlendedRow(mesh.palette, weights, bones, 2u);
+    const vec4 row0 = BlendedRow(mesh.palette, mesh.stride >> 16, weights, bones, 0u);
+    const vec4 row1 = BlendedRow(mesh.palette, mesh.stride >> 16, weights, bones, 1u);
+    const vec4 row2 = BlendedRow(mesh.palette, mesh.stride >> 16, weights, bones, 2u);
     const vec3 skinned =
         vec3(SkinnedRow(row0, position), SkinnedRow(row1, position), SkinnedRow(row2, position));
     const vec3 skinned_normal = vec3(SkinnedDirection(row0, normal), SkinnedDirection(row1, normal),

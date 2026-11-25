@@ -1649,7 +1649,7 @@ public:
             .vertices = vertices,
             .skin = skin.stream,
             .palette = skin.palette,
-            .stride = mesh->stride,
+            .stride = SkinnedStride(mesh->stride, skin),
             .position = mesh->position,
             .texcoord = mesh->texcoord,
             .texcoord1 = mesh->texcoord1,
@@ -1750,7 +1750,7 @@ public:
             .vertices = vertices,
             .skin = skin.stream,
             .palette = skin.palette,
-            .stride = mesh->stride,
+            .stride = SkinnedStride(mesh->stride, skin),
             .displacement = core ? 0 : handle(Load<VAddr>(item + EnemyDisplacement)),
         };
         std::memcpy(enemy_mesh.elements, elements.data(), sizeof(enemy_mesh.elements));
@@ -1837,7 +1837,7 @@ public:
             .vertices = vertices,
             .skin = skin.stream,
             .palette = skin.palette,
-            .stride = mesh->stride,
+            .stride = SkinnedStride(mesh->stride, skin),
         };
         const std::array<u32, 16> elements = MeshElements(shape + ShapeVertexBuffer);
         std::memcpy(glass_mesh.elements, elements.data(), sizeof(glass_mesh.elements));
@@ -1906,7 +1906,7 @@ public:
         out.mesh.vertices = vertices;
         out.mesh.skin = skin.stream;
         out.mesh.palette = skin.palette;
-        out.mesh.stride = mesh->stride;
+        out.mesh.stride = SkinnedStride(mesh->stride, skin);
         out.mesh.position = mesh->position;
         out.mesh.texcoord = mesh->texcoord;
         out.mesh.texcoord1 = mesh->texcoord1;
@@ -2585,6 +2585,12 @@ private:
         // The game's palette, which the packet's copies.
         VAddr source = 0;
     };
+
+    // A mesh's stride with its palette's bones in the high 16 bits, which bound the skinned
+    // programs' bone reads (0 for an unskinned mesh).
+    static u32 SkinnedStride(u32 stride, const Skin& skin) {
+        return (stride & 0xffff) | std::min<u32>(skin.bones, 0xffff) << 16;
+    }
 
     // A box around a caster's positions before its world matrix, and the largest magnitudes the
     // terms of each coordinate take.

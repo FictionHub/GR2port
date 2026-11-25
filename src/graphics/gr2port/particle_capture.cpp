@@ -778,7 +778,9 @@ void AddSample(u8* packet, Scene::ParticleHeader& out, u64& palette_bytes,
     constants[24] = emitter;
     constants[25] = kind;
     if (skinned) {
-        constants[17] = Load<u16>(skin_buffer + VertexBufferStride);
+        // The skin stride, with the palette's bones in the high 16 bits for the program's bound.
+        constants[17] = Load<u16>(skin_buffer + VertexBufferStride) | std::min<u32>(bones, 0xffff)
+                                                                          << 16;
         constants[22] = ElementOffset(skin_buffer, SemanticWeights);
         constants[23] = ElementOffset(skin_buffer, SemanticBones);
     }

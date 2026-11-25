@@ -66,7 +66,8 @@ uvec4 ElementWords(EnemyMesh mesh, uint element) {
         return uvec4(0u, 0u, 0u, one);
     }
     EnemyWords at =
-        EnemyWords(mesh.vertices + uint64_t(gl_VertexIndex) * mesh.stride + (element & 0xffu));
+        EnemyWords(mesh.vertices + uint64_t(gl_VertexIndex) * (mesh.stride & 0xffffu) +
+                   (element & 0xffu));
     if (format == FormatRg32Float) {
         return uvec4(at.words[0], at.words[1], 0u, one);
     }

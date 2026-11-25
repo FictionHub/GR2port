@@ -47,9 +47,9 @@ void main() {
     const vec4 tangent = MeshTangent(mesh);
     const vec4 weights = SkinWeights(mesh.skin);
     const uvec4 bones = SkinBones(mesh.skin);
-    const vec4 row0 = BlendedRow(mesh.palette, weights, bones, 0u);
-    const vec4 row1 = BlendedRow(mesh.palette, weights, bones, 1u);
-    const vec4 row2 = BlendedRow(mesh.palette, weights, bones, 2u);
+    const vec4 row0 = BlendedRow(mesh.palette, mesh.stride >> 16, weights, bones, 0u);
+    const vec4 row1 = BlendedRow(mesh.palette, mesh.stride >> 16, weights, bones, 1u);
+    const vec4 row2 = BlendedRow(mesh.palette, mesh.stride >> 16, weights, bones, 2u);
     vec3 position = vec3(SkinnedRow(row0, mesh_position), SkinnedRow(row1, mesh_position),
                          SkinnedRow(row2, mesh_position));
     const vec3 normal = vec3(SkinnedDirection(row0, mesh_normal),

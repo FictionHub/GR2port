@@ -19,12 +19,17 @@ uvec4 SkinBones(EnemyMesh mesh) {
                  uint(int(at.words[3] << 16) >> 16), uint(int(at.words[3]) >> 16));
 }
 
-// Row `row` of a bone's matrix: the palette holds 48 bytes a bone, addressed in 32 bits.
+// Row `row` of a bone's matrix: the palette holds 48 bytes a bone, addressed in 32 bits. A bone
+// past the palette's bones (the stride's high 16 bits) reads zeros, as the game's buffer loads
+// past it give; a count of 0 leaves the bones unbounded, for records made without one.
 vec4 BoneRow(EnemyMesh mesh, uint bone, uint row) {
+    const uint count = mesh.stride >> 16;
+    const bool inside = count == 0u || bone < count;
     EnemyWords palette = EnemyWords(mesh.palette);
-    const uint word = (48u * bone + 16u * row) >> 2;
-    return uintBitsToFloat(uvec4(palette.words[word], palette.words[word + 1u],
-                                 palette.words[word + 2u], palette.words[word + 3u]));
+    const uint word = (48u * (inside ? bone : 0u) + 16u * row) >> 2;
+    const vec4 value = uintBitsToFloat(uvec4(palette.words[word], palette.words[word + 1u],
+                                             palette.words[word + 2u], palette.words[word + 3u]));
+    return inside ? value : vec4(0.0);
 }
 
 // A row of the four bones' matrices blended by the weights, bone 0 first.

@@ -22,6 +22,9 @@ layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer UiD
     UiAttribute attributes[6];
     uint index_bits;
     uint first_index;
+    uint flags;
+    // The rows of 16 bytes the palette holds; 0 leaves them unbounded.
+    uint palette_rows;
 };
 layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer UiConstants {
     float constants[];

@@ -48,6 +48,8 @@ void main() {
     const vec3 normal_scale =
         Vector(description_address, description, 256u, DescriptionNormalScale);
     const float last_vertex = float(constants.words[SampleVertices] - 1u);
+    // The skin stride's high 16 bits hold the palette's bones.
+    const uint palette_bones = constants.words[SampleSkinStride] >> 16;
     const float scale_start = Float(emitter_out_address, object, 128u, ObjectScaleStart);
     const float scale_range =
         Float(emitter_out_address, object, 128u, ObjectScaleEnd) - scale_start;
@@ -91,7 +93,7 @@ void main() {
                             min(vertex_index, constants.words[SampleVertices] - 1u);
         cursor = GameRemainder(cursor + 1u, pool);
         // The vertex's skin: four RGBA16 FLOAT weights and four 16-bit bone indices.
-        const uint skin = constants.words[SampleSkinStride] *
+        const uint skin = (constants.words[SampleSkinStride] & 0xffffu) *
                           min(vertex_index, constants.words[SampleVertices] - 1u);
         const uint weights_at = (constants.words[SampleWeights] + skin) >> 2;
         const uint bones_at = (constants.words[SampleBones] + skin) >> 2;
@@ -104,9 +106,9 @@ void main() {
         const uint bones23 = picked.w;
         const uvec4 bones =
             uvec4(bones01 & 0xffffu, bones01 >> 16, bones23 & 0xffffu, bones23 >> 16);
-        const vec4 row0 = BlendedRow(palette_address, weights, bones, 0u);
-        const vec4 row1 = BlendedRow(palette_address, weights, bones, 1u);
-        const vec4 row2 = BlendedRow(palette_address, weights, bones, 2u);
+        const vec4 row0 = BlendedRow(palette_address, palette_bones, weights, bones, 0u);
+        const vec4 row1 = BlendedRow(palette_address, palette_bones, weights, bones, 1u);
+        const vec4 row2 = BlendedRow(palette_address, palette_bones, weights, bones, 2u);
 
         if (constants.words[SampleMode] == ModeNormals) {
             const uint packed = vertices.words[(constants.words[SampleNormal] + offset) >> 2];

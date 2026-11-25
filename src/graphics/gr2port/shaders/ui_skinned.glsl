@@ -9,27 +9,32 @@
 #include "ui_transform.glsl"
 
 // Column `column` of a bone's matrix. The game's program finds the bone's first row from the
-// bits of its number, (number << 6) >> 4 as a signed number.
-vec4 BoneColumn(UiWords palette, uint bone, uint column) {
-    const uint at = ((uint(int(bone << 6) >> 4) + column) * 16u) >> 2;
-    return uintBitsToFloat(uvec4(palette.words[at], palette.words[at + 1u], palette.words[at + 2u],
-                                 palette.words[at + 3u]));
+// bits of its number, (number << 6) >> 4 as a signed number. A row past the palette's `rows`
+// reads zeros, as the game's buffer load past it gives; 0 rows leave them unbounded.
+vec4 BoneColumn(UiWords palette, uint rows, uint bone, uint column) {
+    const uint row = uint(int(bone << 6) >> 4) + column;
+    const bool inside = rows == 0u || row < rows;
+    const uint at = ((inside ? row : 0u) * 16u) >> 2;
+    const vec4 value = uintBitsToFloat(uvec4(palette.words[at], palette.words[at + 1u],
+                                             palette.words[at + 2u], palette.words[at + 3u]));
+    return inside ? value : vec4(0.0);
 }
 
-vec4 BlendedColumn(UiWords palette, uvec4 bones, vec4 weights, uint column) {
-    return weights.w * BoneColumn(palette, bones.w, column) +
-           (weights.z * BoneColumn(palette, bones.z, column) +
-            (weights.y * BoneColumn(palette, bones.y, column) +
-             BoneColumn(palette, bones.x, column) * weights.x));
+vec4 BlendedColumn(UiWords palette, uint rows, uvec4 bones, vec4 weights, uint column) {
+    return weights.w * BoneColumn(palette, rows, bones.w, column) +
+           (weights.z * BoneColumn(palette, rows, bones.z, column) +
+            (weights.y * BoneColumn(palette, rows, bones.y, column) +
+             BoneColumn(palette, rows, bones.x, column) * weights.x));
 }
 
 vec4 SkinnedPosition(UiDraw draw, UiConstants constants, vec3 position, uvec4 bones,
                      vec4 weights) {
     UiWords palette = UiWords(draw.vertex_palette);
-    const vec4 moved = BlendedColumn(palette, bones, weights, 0u) * position.x +
-                       (BlendedColumn(palette, bones, weights, 1u) * position.y +
-                        (BlendedColumn(palette, bones, weights, 2u) * position.z +
-                         BlendedColumn(palette, bones, weights, 3u)));
+    const vec4 moved =
+        BlendedColumn(palette, draw.palette_rows, bones, weights, 0u) * position.x +
+        (BlendedColumn(palette, draw.palette_rows, bones, weights, 1u) * position.y +
+         (BlendedColumn(palette, draw.palette_rows, bones, weights, 2u) * position.z +
+          BlendedColumn(palette, draw.palette_rows, bones, weights, 3u)));
     const vec4 clip = ConstantVec4(constants, 0u) * moved.x +
                       (ConstantVec4(constants, 4u) * moved.y +
                        (ConstantVec4(constants, 8u) * moved.z +

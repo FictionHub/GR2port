@@ -25,20 +25,24 @@ uvec4 SkinBones(uint64_t skin) {
 
 #endif
 
-// Row `row` of a bone's matrix: the palette holds 48 bytes a bone, addressed in 32 bits.
-vec4 BoneRow(uint64_t palette, uint bone, uint row) {
+// Row `row` of a bone's matrix: the palette holds 48 bytes a bone, addressed in 32 bits. A bone
+// past the palette's `count` reads zeros, as the game's buffer loads past it give; a count of 0
+// leaves the bones unbounded, for records made without one.
+vec4 BoneRow(uint64_t palette, uint count, uint bone, uint row) {
+    const bool inside = count == 0u || bone < count;
     SkinWords words = SkinWords(palette);
-    const uint word = (48u * bone + 16u * row) >> 2;
-    return uintBitsToFloat(uvec4(words.words[word], words.words[word + 1u],
-                                 words.words[word + 2u], words.words[word + 3u]));
+    const uint word = (48u * (inside ? bone : 0u) + 16u * row) >> 2;
+    const vec4 value = uintBitsToFloat(uvec4(words.words[word], words.words[word + 1u],
+                                             words.words[word + 2u], words.words[word + 3u]));
+    return inside ? value : vec4(0.0);
 }
 
 // A row of the four bones' matrices blended by the weights, bone 0 first.
-vec4 BlendedRow(uint64_t palette, vec4 weights, uvec4 bones, uint row) {
-    vec4 blended = BoneRow(palette, bones.x, row) * weights.x;
-    blended = BoneRow(palette, bones.y, row) * weights.y + blended;
-    blended = BoneRow(palette, bones.z, row) * weights.z + blended;
-    blended = BoneRow(palette, bones.w, row) * weights.w + blended;
+vec4 BlendedRow(uint64_t palette, uint count, vec4 weights, uvec4 bones, uint row) {
+    vec4 blended = BoneRow(palette, count, bones.x, row) * weights.x;
+    blended = BoneRow(palette, count, bones.y, row) * weights.y + blended;
+    blended = BoneRow(palette, count, bones.z, row) * weights.z + blended;
+    blended = BoneRow(palette, count, bones.w, row) * weights.w + blended;
     return blended;
 }
 
