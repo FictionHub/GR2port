@@ -3,6 +3,7 @@
 
 // A world surface's pixel, for world.frag and, with ALPHA_TEST, world_alpha.frag.
 
+#include "reconvergence.glsl"
 #include "scene.glsl"
 #include "surface.glsl"
 
@@ -302,7 +303,7 @@ void Shade(uint draw) {
 
 // A wave can hold the pixels of several draws. It shades one draw's pixels at a time, so the draw's
 // constants and textures load once for the wave, into scalar registers.
-void main() {
+void main() MAXIMALLY_RECONVERGES {
     for (;;) {
         const uint draw = subgroupBroadcastFirst(draw_index);
         if (draw == draw_index) {

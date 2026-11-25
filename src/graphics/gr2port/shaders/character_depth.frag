@@ -6,6 +6,7 @@
 #extension GL_GOOGLE_include_directive : require
 #extension GL_KHR_shader_subgroup_ballot : require
 
+#include "reconvergence.glsl"
 #include "scene.glsl"
 
 #include "texture_slots.glsl"
@@ -53,7 +54,7 @@ void Shade(uint draw) {
 
 // A wave can hold the pixels of several draws. It shades one draw's pixels at a time, so the draw's
 // constants and textures load once for the wave, into scalar registers.
-void main() {
+void main() MAXIMALLY_RECONVERGES {
     for (;;) {
         const uint draw = subgroupBroadcastFirst(draw_index);
         if (draw == draw_index) {

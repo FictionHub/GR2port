@@ -193,6 +193,7 @@ set(GR2PORT_HEADER_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/shader_header.cmake)
 set(GR2PORT_SHADER_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/gr2port_shaders/include)
 set(GR2PORT_SHADER_DIR ${GR2PORT_SHADER_INCLUDE}/graphics/gr2port/shaders)
 set(GR2PORT_SHADER_HEADERS "")
+# Arguments after a shader's name go to glslang.
 function(gr2port_add_shader FILENAME SHADER_NAME)
     set(HEADER_FILE ${GR2PORT_SHADER_DIR}/${SHADER_NAME}.h)
     set(SPIRV_FILE ${GR2PORT_SHADER_DIR}/${SHADER_NAME}.spv)
@@ -201,7 +202,7 @@ function(gr2port_add_shader FILENAME SHADER_NAME)
     add_custom_command(
         OUTPUT ${SPIRV_FILE} ${HEADER_FILE}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${GR2PORT_SHADER_DIR}
-        COMMAND ${GR2PORT_GLSLANG} --target-env vulkan1.3
+        COMMAND ${GR2PORT_GLSLANG} --target-env vulkan1.3 ${ARGN}
                 -o ${SPIRV_FILE} --depfile ${DEPFILE}
                 ${GR2PORT_DIR}/shaders/${FILENAME}
         COMMAND spirv-opt -O ${SPIRV_FILE} -o ${SPIRV_FILE}
@@ -254,6 +255,12 @@ gr2port_add_shader(fog_apply.frag fog_apply_frag)
 gr2port_add_shader(world.vert world_vert)
 gr2port_add_shader(world.frag world_frag)
 gr2port_add_shader(world_alpha.frag world_alpha_frag)
+# The programs with a per-draw loop once more, for drivers with
+# VK_KHR_shader_maximal_reconvergence.
+gr2port_add_shader(character.frag character_reconverging_frag -DMAXIMAL_RECONVERGENCE)
+gr2port_add_shader(character_depth.frag character_depth_reconverging_frag -DMAXIMAL_RECONVERGENCE)
+gr2port_add_shader(world.frag world_reconverging_frag -DMAXIMAL_RECONVERGENCE)
+gr2port_add_shader(world_alpha.frag world_alpha_reconverging_frag -DMAXIMAL_RECONVERGENCE)
 gr2port_add_shader(world_decal.vert world_decal_vert)
 gr2port_add_shader(world_decal.frag world_decal_frag)
 gr2port_add_shader(glass.vert glass_vert)

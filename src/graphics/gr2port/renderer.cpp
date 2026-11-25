@@ -57,7 +57,9 @@
 #include "graphics/gr2port/self_translucent.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/shaders/character_depth_frag.h"
+#include "graphics/gr2port/shaders/character_depth_reconverging_frag.h"
 #include "graphics/gr2port/shaders/character_frag.h"
+#include "graphics/gr2port/shaders/character_reconverging_frag.h"
 #include "graphics/gr2port/shaders/character_vert.h"
 #include "graphics/gr2port/shaders/interior_frag.h"
 #include "graphics/gr2port/shaders/lambert_frag.h"
@@ -419,9 +421,17 @@ bool Thread::Init() {
     }
     const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout(),
                                  SelfTranslucent::SetLayout()};
+    // A driver with VK_KHR_shader_maximal_reconvergence gets the builds that keep the lanes of
+    // the per-draw loop's turns apart.
+    std::span<const u32> character_fragment{CHARACTER_FRAG};
+    std::span<const u32> character_depth_fragment{CHARACTER_DEPTH_FRAG};
+    if (d.maximal_reconvergence) {
+        character_fragment = CHARACTER_RECONVERGING_FRAG;
+        character_depth_fragment = CHARACTER_DEPTH_RECONVERGING_FRAG;
+    }
     character_pipeline = CreateGraphicsPipeline(d, {
                                                        .vertex = CHARACTER_VERT,
-                                                       .fragment = CHARACTER_FRAG,
+                                                       .fragment = character_fragment,
                                                        .color = Look::SceneFormat,
                                                        .depth = DepthFormat,
                                                        .cull = vk::CullModeFlagBits::eBack,
@@ -433,7 +443,7 @@ bool Thread::Init() {
     character_depth_pipeline =
         CreateGraphicsPipeline(d, {
                                       .vertex = CHARACTER_VERT,
-                                      .fragment = CHARACTER_DEPTH_FRAG,
+                                      .fragment = character_depth_fragment,
                                       .depth = DepthFormat,
                                       .cull = vk::CullModeFlagBits::eBack,
                                       .depth_test = true,
@@ -499,7 +509,7 @@ bool Thread::Init() {
     character_glow_pipeline =
         CreateGraphicsPipeline(d, {
                                       .vertex = CHARACTER_VERT,
-                                      .fragment = CHARACTER_FRAG,
+                                      .fragment = character_fragment,
                                       .color = Look::SceneFormat,
                                       .depth = DepthFormat,
                                       .cull = vk::CullModeFlagBits::eBack,
