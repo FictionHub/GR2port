@@ -132,6 +132,9 @@ The mouse turns the camera (native mouse input). Keys can be changed in the laun
 | First-person View | D-pad left | 4 |
 | Pause | OPTIONS | Esc |
 | Zoom In (Photo Mode) | R2 | None |
+| Hide UI (Photo Mode) | L3 + R2 | H |
+| Open Collection (Photo Mode) | L3 + L1 | [ |
+| Open Picture Roll (Photo Mode) | L3 + R1 | ] |
 | Flick Up (Touch Pad) | Flick the touch pad up | None |
 | Flick Down (Touch Pad) | Flick the touch pad down | None |
 | Flick Left (Touch Pad) | Flick the touch pad left | Z |
