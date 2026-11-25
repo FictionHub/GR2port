@@ -10,6 +10,11 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Mat
     uint words[];
 };
 
+// Four words of a material as one load.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer MaterialRow {
+    uvec4 row;
+};
+
 // A material (140 words): the dissolve's threshold and its full mark, its four erosion values,
 // the depth fade's scale, the blur's count of taps and its step, the curves that replace those
 // four where they are above 0, and the first material of the particle's set.
@@ -27,23 +32,24 @@ const uint MaterialSetFirst = 132u;
 // The particle's material: the set at c_gpufxUsed.w plus the set the particle names, then the
 // material within that set.
 uint GpuMaterial(ParticleDraw draw, uint set, uint within) {
-    MaterialWords materials = MaterialWords(material_address);
     // A set past the materials reads 0, as the game's buffer load past them gives.
     const uint first = draw.gpufx_used[3] + set;
-    const uint set_first = materials.words[(min(first, MaterialCount - 1u) * 560u + 528u) >> 2];
+    const uint set_first =
+        MaterialWords(material_address + min(first, MaterialCount - 1u) * 560u).words[132];
     return (first < MaterialCount ? set_first : 0u) + within;
 }
 
+// The material's offset is 32 bits, so the table's base stays one value for every lane.
 uint MaterialWord(uint material, uint word) {
-    const uint at = (min(material, MaterialCount - 1u) * 560u + 4u * word) >> 2;
-    const uint value = MaterialWords(material_address).words[at];
+    const uint value =
+        MaterialWords(material_address + min(material, MaterialCount - 1u) * 560u).words[word];
     return material < MaterialCount ? value : 0u;
 }
 
 vec4 MaterialVector(uint material, uint word) {
-    return uintBitsToFloat(uvec4(MaterialWord(material, word), MaterialWord(material, word + 1u),
-                                 MaterialWord(material, word + 2u),
-                                 MaterialWord(material, word + 3u)));
+    const uvec4 value =
+        MaterialRow(material_address + min(material, MaterialCount - 1u) * 560u + 4u * word).row;
+    return uintBitsToFloat(material < MaterialCount ? value : uvec4(0u));
 }
 
 // A material's curve at x, offset by the particle's curve, where the curve is above 0; else the

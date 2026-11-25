@@ -20,6 +20,11 @@ layout(set = 0, binding = 1) uniform sampler depth_sampler;
 layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
     uint words[];
 };
+
+// Four words of a record as one load or store.
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Row {
+    uvec4 row;
+};
 layout(push_constant) uniform Push {
     uint64_t particle_in_address;
     uint64_t emitter_in_address;
@@ -65,9 +70,9 @@ float SceneFloat(uint word) {
     return uintBitsToFloat(SceneWord(word));
 }
 
+// The records' offsets are 32 bits, so each table's base stays one value for every lane.
 uint EffectWord(uint effect, uint word) {
-    const uint at = (min(effect, EffectCount - 1u) * 192u + word * 4u) >> 2;
-    const uint value = Words(effect_in_address).words[at];
+    const uint value = Words(effect_in_address + min(effect, EffectCount - 1u) * 192u).words[word];
     return effect < EffectCount ? value : 0u;
 }
 
@@ -76,8 +81,8 @@ float EffectFloat(uint effect, uint word) {
 }
 
 uint DescriptionWord(uint description, uint word) {
-    const uint at = (min(description, DescriptionCount - 1u) * 256u + word * 4u) >> 2;
-    const uint value = Words(description_address).words[at];
+    const uint value =
+        Words(description_address + min(description, DescriptionCount - 1u) * 256u).words[word];
     return description < DescriptionCount ? value : 0u;
 }
 
@@ -86,8 +91,8 @@ float DescriptionFloat(uint description, uint word) {
 }
 
 uint EmitterWord(uint emitter, uint word) {
-    const uint at = (min(emitter, EmitterCount - 1u) * 128u + word * 4u) >> 2;
-    const uint value = Words(emitter_in_address).words[at];
+    const uint value =
+        Words(emitter_in_address + min(emitter, EmitterCount - 1u) * 128u).words[word];
     return emitter < EmitterCount ? value : 0u;
 }
 
@@ -96,15 +101,14 @@ float EmitterFloat(uint emitter, uint word) {
 }
 
 vec4 EmitterVector(uint emitter, uint word) {
-    return vec4(EmitterFloat(emitter, word), EmitterFloat(emitter, word + 1u),
-                EmitterFloat(emitter, word + 2u), EmitterFloat(emitter, word + 3u));
+    const uvec4 words =
+        Row(emitter_in_address + min(emitter, EmitterCount - 1u) * 128u + 4u * word).row;
+    return uintBitsToFloat(emitter < EmitterCount ? words : uvec4(0u));
 }
 
 uvec4 ParticleWords(uint particle, uint word) {
-    const uint at = (min(particle, ParticleCount - 1u) * 64u + word * 4u) >> 2;
-    const uvec4 words = uvec4(
-        Words(particle_in_address).words[at], Words(particle_in_address).words[at + 1u],
-        Words(particle_in_address).words[at + 2u], Words(particle_in_address).words[at + 3u]);
+    const uvec4 words =
+        Row(particle_in_address + min(particle, ParticleCount - 1u) * 64u + 4u * word).row;
     return particle < ParticleCount ? words : uvec4(0u);
 }
 
@@ -116,11 +120,7 @@ void SetOutWords(uint particle, uint word, uvec4 value) {
     if (particle >= ParticleCount) {
         return;
     }
-    const uint at = (particle * 64u + word * 4u) >> 2;
-    Words(particle_out_address).words[at] = value.x;
-    Words(particle_out_address).words[at + 1u] = value.y;
-    Words(particle_out_address).words[at + 2u] = value.z;
-    Words(particle_out_address).words[at + 3u] = value.w;
+    Row(particle_out_address + particle * 64u + 4u * word).row = value;
 }
 
 void SetOutVector(uint particle, uint word, vec4 value) {
@@ -1199,16 +1199,12 @@ void WindEffector(uint effector, uint effect, DepthView view, inout vec3 moved,
 // word of a 16-byte record.
 uint NoisePerm(uint index) {
     // The table holds 512 permutation records; an index past them reads 0.
-    const uint value = Words(noise_address).words[((32u + min(index, 511u)) * 16u) >> 2];
+    const uint value = Words(noise_address + (32u + min(index, 511u)) * 16u).words[0];
     return index < 512u ? value : 0u;
 }
 
 vec4 NoiseGradient(uint index) {
-    const uint at = (index * 16u) >> 2;
-    return vec4(uintBitsToFloat(Words(noise_address).words[at]),
-                uintBitsToFloat(Words(noise_address).words[at + 1u]),
-                uintBitsToFloat(Words(noise_address).words[at + 2u]),
-                uintBitsToFloat(Words(noise_address).words[at + 3u]));
+    return uintBitsToFloat(Row(noise_address + index * 16u).row);
 }
 
 // The game's float to int: NaN gives 0, the rest clamps to the int range.

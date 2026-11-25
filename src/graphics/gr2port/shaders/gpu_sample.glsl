@@ -70,8 +70,7 @@ const uint ParticleSeed = 52u;
 
 uint Word(uint64_t records, uint record, uint size, uint byte_offset) {
     const uint count = RecordsOfSize(size);
-    const uint at = (min(record, count - 1u) * size + byte_offset) >> 2;
-    const uint value = Words(records).words[at];
+    const uint value = Words(records + min(record, count - 1u) * size).words[byte_offset >> 2];
     return record < count ? value : 0u;
 }
 
@@ -89,8 +88,8 @@ void SetVector(uint64_t records, uint record, uint size, uint byte_offset, vec3 
     if (record >= RecordsOfSize(size)) {
         return;
     }
-    Words words = Words(records);
-    const uint at = (record * size + byte_offset) >> 2;
+    Words words = Words(records + record * size);
+    const uint at = byte_offset >> 2;
     words.words[at] = floatBitsToUint(value.x);
     words.words[at + 1u] = floatBitsToUint(value.y);
     words.words[at + 2u] = floatBitsToUint(value.z);

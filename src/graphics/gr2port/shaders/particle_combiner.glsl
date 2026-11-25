@@ -32,8 +32,8 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Com
 float MoveStrength(uint material, uint row, uint column) {
     // A material past the table reads 0, as the game's buffer load past it gives.
     const float strength =
-        CombinerMaterials(material_address)
-            .words[((min(material, MaterialCount - 1u) * 560u + 16u * row) >> 2) + column];
+        CombinerMaterials(material_address + min(material, MaterialCount - 1u) * 560u)
+            .words[4u * row + column];
     return material < MaterialCount ? strength : 0.0;
 }
 

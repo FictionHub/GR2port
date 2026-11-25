@@ -68,7 +68,7 @@ uint64_t DrawAddress() {
 // An element holds a byte offset in its low 8 bits and the game's vertex format above, 0 for none.
 MeshWords Element(EffectMesh mesh, uint element) {
     const uint stride = mesh.stride & 0xffffu;
-    return MeshWords(mesh.vertices + uint64_t(gl_VertexIndex) * stride + (element & 0xffu));
+    return MeshWords(mesh.vertices + (element & 0xffu) + uint(gl_VertexIndex) * stride);
 }
 
 vec3 MeshPosition(EffectMesh mesh) {

@@ -7,14 +7,19 @@
 
 #include "enemy_vertex.glsl"
 
+// A bone's row as one load of four words.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer EnemyRow {
+    uvec4 row;
+};
+
 // The skin stream at the vertex: four RGBA16 FLOAT weights, then four RGBA16 SINT bone indices.
 vec4 SkinWeights(EnemyMesh mesh) {
-    EnemyWords at = EnemyWords(mesh.skin + uint64_t(gl_VertexIndex) * 16ul);
+    EnemyWords at = EnemyWords(mesh.skin + uint(gl_VertexIndex) * 16u);
     return vec4(unpackHalf2x16(at.words[0]), unpackHalf2x16(at.words[1]));
 }
 
 uvec4 SkinBones(EnemyMesh mesh) {
-    EnemyWords at = EnemyWords(mesh.skin + uint64_t(gl_VertexIndex) * 16ul);
+    EnemyWords at = EnemyWords(mesh.skin + uint(gl_VertexIndex) * 16u);
     return uvec4(uint(int(at.words[2] << 16) >> 16), uint(int(at.words[2]) >> 16),
                  uint(int(at.words[3] << 16) >> 16), uint(int(at.words[3]) >> 16));
 }
@@ -25,11 +30,8 @@ uvec4 SkinBones(EnemyMesh mesh) {
 vec4 BoneRow(EnemyMesh mesh, uint bone, uint row) {
     const uint count = mesh.stride >> 16;
     const bool inside = count == 0u || bone < count;
-    EnemyWords palette = EnemyWords(mesh.palette);
-    const uint word = (48u * (inside ? bone : 0u) + 16u * row) >> 2;
-    const vec4 value = uintBitsToFloat(uvec4(palette.words[word], palette.words[word + 1u],
-                                             palette.words[word + 2u], palette.words[word + 3u]));
-    return inside ? value : vec4(0.0);
+    const uvec4 words = EnemyRow(mesh.palette + (48u * (inside ? bone : 0u) + 16u * row)).row;
+    return inside ? uintBitsToFloat(words) : vec4(0.0);
 }
 
 // A row of the four bones' matrices blended by the weights, bone 0 first.

@@ -18,6 +18,11 @@ layout(set = 0, binding = 1) uniform sampler curve_sampler;
 layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
     uint words[];
 };
+
+// Four words of a record as one load or store.
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Row {
+    uvec4 row;
+};
 layout(push_constant) uniform Push {
     uint64_t emitter_in_address;
     uint64_t effect_in_address;
@@ -38,10 +43,10 @@ const uint DescriptionBytes = 256u;
 const uint DeadMark = 0x27bc86aau;
 const uint ChangedMark = 0x27bc86abu;
 
+// The record's offset is 32 bits, so the table's base stays one value for every lane.
 uint Word(uint64_t address, uint record, uint size, uint byte_offset) {
     const uint count = RecordsOfSize(size);
-    const uint at = (min(record, count - 1u) * size + byte_offset) >> 2;
-    const uint value = Words(address).words[at];
+    const uint value = Words(address + min(record, count - 1u) * size).words[byte_offset >> 2];
     return record < count ? value : 0u;
 }
 
@@ -49,15 +54,14 @@ float Float(uint64_t address, uint record, uint size, uint byte_offset) {
     return uintBitsToFloat(Word(address, record, size, byte_offset));
 }
 
-vec4 Vector(uint64_t address, uint record, uint size, uint byte_offset) {
-    return vec4(Float(address, record, size, byte_offset),
-                Float(address, record, size, byte_offset + 4u),
-                Float(address, record, size, byte_offset + 8u),
-                Float(address, record, size, byte_offset + 12u));
+uvec4 Words4(uint64_t address, uint record, uint size, uint byte_offset) {
+    const uint count = RecordsOfSize(size);
+    const uvec4 value = Row(address + min(record, count - 1u) * size + byte_offset).row;
+    return record < count ? value : uvec4(0u);
 }
 
-uvec4 Words4(uint64_t address, uint record, uint size, uint byte_offset) {
-    return floatBitsToUint(Vector(address, record, size, byte_offset));
+vec4 Vector(uint64_t address, uint record, uint size, uint byte_offset) {
+    return uintBitsToFloat(Words4(address, record, size, byte_offset));
 }
 
 // A description curve at s from 0 to 1: column curve & 0x7ff, row (curve >> 11) * 64 plus s * 63.
@@ -84,7 +88,7 @@ void main() {
         return;
     }
     const uint64_t in_address = emitter_in_address;
-    const uint effect = Words(owner_in_address).words[object * 2u];
+    const uint effect = Words(owner_in_address + object * 8u).words[0];
     vec4 place = Vector(in_address, object, ObjectBytes, 0u);
     vec4 turn = Vector(in_address, object, ObjectBytes, 16u);
     uvec4 owner_words = uvec4(Word(in_address, object, ObjectBytes, 32u), effect, DeadMark, 0u);
@@ -94,7 +98,7 @@ void main() {
     vec4 tint = Vector(in_address, object, ObjectBytes, 96u);
     uint hold = Word(in_address, object, ObjectBytes, 112u);
     if (effect != 0u) {
-        const uint description = Words(owner_in_address).words[object * 2u + 1u];
+        const uint description = Words(owner_in_address + object * 8u).words[1];
         const uvec3 last = Words4(in_address, object, ObjectBytes, 36u).xyz;
         const uint mode = Word(description_address, description, DescriptionBytes, 16u);
         const uint description_seed = Word(description_address, description, DescriptionBytes, 28u);
@@ -284,25 +288,17 @@ void main() {
             }
         }
     }
-    const uvec3 tail = Words4(in_address, object, ObjectBytes, 116u).xyz;
-    Words out_words = Words(emitter_out_address);
-    const uint at = (object * ObjectBytes) >> 2;
-    const uvec4 out_place = floatBitsToUint(place);
-    const uvec4 out_turn = floatBitsToUint(turn);
-    const uvec4 out_past_place = floatBitsToUint(past_place);
-    const uvec4 out_past_turn = floatBitsToUint(past_turn);
-    const uvec4 out_tint = floatBitsToUint(tint);
-    for (uint k = 0u; k < 4u; k++) {
-        out_words.words[at + k] = out_place[k];
-        out_words.words[at + 4u + k] = out_turn[k];
-        out_words.words[at + 16u + k] = out_past_place[k];
-        out_words.words[at + 8u + k] = owner_words[k];
-        out_words.words[at + 12u + k] = seed_words[k];
-        out_words.words[at + 20u + k] = out_past_turn[k];
-        out_words.words[at + 24u + k] = out_tint[k];
-    }
-    out_words.words[at + 28u] = hold;
-    out_words.words[at + 29u] = tail.x;
-    out_words.words[at + 30u] = tail.y;
-    out_words.words[at + 31u] = tail.z;
+    // The record's last three words: a four-word read here would pass the record's end.
+    const uvec3 tail = uvec3(Word(in_address, object, ObjectBytes, 116u),
+                             Word(in_address, object, ObjectBytes, 120u),
+                             Word(in_address, object, ObjectBytes, 124u));
+    const uint64_t out_address = emitter_out_address + object * ObjectBytes;
+    Row(out_address).row = floatBitsToUint(place);
+    Row(out_address + 16u).row = floatBitsToUint(turn);
+    Row(out_address + 32u).row = owner_words;
+    Row(out_address + 48u).row = seed_words;
+    Row(out_address + 64u).row = floatBitsToUint(past_place);
+    Row(out_address + 80u).row = floatBitsToUint(past_turn);
+    Row(out_address + 96u).row = floatBitsToUint(tint);
+    Row(out_address + 112u).row = uvec4(hold, tail);
 }

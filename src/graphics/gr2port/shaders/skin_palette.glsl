@@ -9,16 +9,21 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Ski
     uint words[];
 };
 
+// A bone's row as one load of four words.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer SkinRow {
+    uvec4 row;
+};
+
 // The skin stream at the vertex: four RGBA16 FLOAT weights, then four RGBA16 SINT bone indices.
 // Programs without vertices define SKIN_PALETTE_BONES_ONLY to leave these out.
 #ifndef SKIN_PALETTE_BONES_ONLY
 vec4 SkinWeights(uint64_t skin) {
-    SkinWords at = SkinWords(skin + uint64_t(gl_VertexIndex) * 16ul);
+    SkinWords at = SkinWords(skin + uint(gl_VertexIndex) * 16u);
     return vec4(unpackHalf2x16(at.words[0]), unpackHalf2x16(at.words[1]));
 }
 
 uvec4 SkinBones(uint64_t skin) {
-    SkinWords at = SkinWords(skin + uint64_t(gl_VertexIndex) * 16ul);
+    SkinWords at = SkinWords(skin + uint(gl_VertexIndex) * 16u);
     return uvec4(uint(int(at.words[2] << 16) >> 16), uint(int(at.words[2]) >> 16),
                  uint(int(at.words[3] << 16) >> 16), uint(int(at.words[3]) >> 16));
 }
@@ -30,11 +35,8 @@ uvec4 SkinBones(uint64_t skin) {
 // leaves the bones unbounded, for records made without one.
 vec4 BoneRow(uint64_t palette, uint count, uint bone, uint row) {
     const bool inside = count == 0u || bone < count;
-    SkinWords words = SkinWords(palette);
-    const uint word = (48u * (inside ? bone : 0u) + 16u * row) >> 2;
-    const vec4 value = uintBitsToFloat(uvec4(words.words[word], words.words[word + 1u],
-                                             words.words[word + 2u], words.words[word + 3u]));
-    return inside ? value : vec4(0.0);
+    const uvec4 words = SkinRow(palette + (48u * (inside ? bone : 0u) + 16u * row)).row;
+    return inside ? uintBitsToFloat(words) : vec4(0.0);
 }
 
 // A row of the four bones' matrices blended by the weights, bone 0 first.

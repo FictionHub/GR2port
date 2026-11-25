@@ -19,6 +19,11 @@ layout(set = 0, binding = 1) uniform sampler curve_sampler;
 layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
     uint words[];
 };
+
+// Four words of a record as one load or store.
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Row {
+    uvec4 row;
+};
 layout(push_constant) uniform Push {
     uint64_t effect_in_address;
     uint64_t description_address;
@@ -33,9 +38,9 @@ layout(push_constant) uniform Push {
 // The emitter's mark of a ring to clear.
 const uint FreshMark = 0x27bc86abu;
 
+// The records' offsets are 32 bits, so each table's base stays one value for every lane.
 uint EffectWord(uint effect, uint word) {
-    const uint at = (min(effect, EffectCount - 1u) * 192u + word * 4u) >> 2;
-    const uint value = Words(effect_in_address).words[at];
+    const uint value = Words(effect_in_address + min(effect, EffectCount - 1u) * 192u).words[word];
     return effect < EffectCount ? value : 0u;
 }
 
@@ -44,8 +49,8 @@ float EffectFloat(uint effect, uint word) {
 }
 
 uint DescriptionWord(uint description, uint word) {
-    const uint at = (min(description, DescriptionCount - 1u) * 256u + word * 4u) >> 2;
-    const uint value = Words(description_address).words[at];
+    const uint value =
+        Words(description_address + min(description, DescriptionCount - 1u) * 256u).words[word];
     return description < DescriptionCount ? value : 0u;
 }
 
@@ -54,13 +59,14 @@ float DescriptionFloat(uint description, uint word) {
 }
 
 vec4 DescriptionVector(uint description, uint word) {
-    return vec4(DescriptionFloat(description, word), DescriptionFloat(description, word + 1u),
-                DescriptionFloat(description, word + 2u), DescriptionFloat(description, word + 3u));
+    const uvec4 words =
+        Row(description_address + min(description, DescriptionCount - 1u) * 256u + 4u * word).row;
+    return uintBitsToFloat(description < DescriptionCount ? words : uvec4(0u));
 }
 
 uint EmitterWord(uint emitter, uint word) {
-    const uint at = (min(emitter, EmitterCount - 1u) * 128u + word * 4u) >> 2;
-    const uint value = Words(emitter_out_address).words[at];
+    const uint value =
+        Words(emitter_out_address + min(emitter, EmitterCount - 1u) * 128u).words[word];
     return emitter < EmitterCount ? value : 0u;
 }
 
@@ -69,19 +75,20 @@ float EmitterFloat(uint emitter, uint word) {
 }
 
 vec4 EmitterVector(uint emitter, uint word) {
-    return vec4(EmitterFloat(emitter, word), EmitterFloat(emitter, word + 1u),
-                EmitterFloat(emitter, word + 2u), EmitterFloat(emitter, word + 3u));
+    const uvec4 words =
+        Row(emitter_out_address + min(emitter, EmitterCount - 1u) * 128u + 4u * word).row;
+    return uintBitsToFloat(emitter < EmitterCount ? words : uvec4(0u));
 }
 
 void SetEmitterWord(uint emitter, uint word, uint value) {
     if (emitter < EmitterCount) {
-        Words(emitter_out_address).words[(emitter * 128u + word * 4u) >> 2] = value;
+        Words(emitter_out_address + emitter * 128u).words[word] = value;
     }
 }
 
 uint ParticleWord(uint particle, uint word) {
-    const uint at = (min(particle, ParticleCount - 1u) * 64u + word * 4u) >> 2;
-    const uint value = Words(particle_out_address).words[at];
+    const uint value =
+        Words(particle_out_address + min(particle, ParticleCount - 1u) * 64u).words[word];
     return particle < ParticleCount ? value : 0u;
 }
 
@@ -89,18 +96,19 @@ float ParticleFloat(uint particle, uint word) {
     return uintBitsToFloat(ParticleWord(particle, word));
 }
 
-vec4 ParticleVector(uint particle, uint word) {
-    return vec4(ParticleFloat(particle, word), ParticleFloat(particle, word + 1u),
-                ParticleFloat(particle, word + 2u), ParticleFloat(particle, word + 3u));
+uvec4 ParticleWords(uint particle, uint word) {
+    const uvec4 words =
+        Row(particle_out_address + min(particle, ParticleCount - 1u) * 64u + 4u * word).row;
+    return particle < ParticleCount ? words : uvec4(0u);
 }
 
-uvec4 ParticleWords(uint particle, uint word) {
-    return floatBitsToUint(ParticleVector(particle, word));
+vec4 ParticleVector(uint particle, uint word) {
+    return uintBitsToFloat(ParticleWords(particle, word));
 }
 
 void SetParticleWord(uint particle, uint word, uint value) {
     if (particle < ParticleCount) {
-        Words(particle_out_address).words[(particle * 64u + word * 4u) >> 2] = value;
+        Words(particle_out_address + particle * 64u).words[word] = value;
     }
 }
 
@@ -108,11 +116,7 @@ void SetParticleWords(uint particle, uint word, uvec4 value) {
     if (particle >= ParticleCount) {
         return;
     }
-    const uint at = (particle * 64u + word * 4u) >> 2;
-    Words(particle_out_address).words[at] = value.x;
-    Words(particle_out_address).words[at + 1u] = value.y;
-    Words(particle_out_address).words[at + 2u] = value.z;
-    Words(particle_out_address).words[at + 3u] = value.w;
+    Row(particle_out_address + particle * 64u + 4u * word).row = value;
 }
 
 void SetParticleVector(uint particle, uint word, vec4 value) {

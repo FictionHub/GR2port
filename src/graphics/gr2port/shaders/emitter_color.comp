@@ -50,8 +50,9 @@ const uint DescriptionBoxMax = 112u;
 // The word at a byte of a record, addressed as the game's program does.
 uint Word(Words records, uint record, uint size, uint byte_offset) {
     const uint count = RecordsOfSize(size);
-    const uint at = (min(record, count - 1u) * size + byte_offset) >> 2;
-    const uint value = records.words[at];
+    // The record's offset is 32 bits, so the table's base stays one value for every lane.
+    const uint value =
+        Words(uint64_t(records) + min(record, count - 1u) * size).words[byte_offset >> 2];
     return record < count ? value : 0u;
 }
 

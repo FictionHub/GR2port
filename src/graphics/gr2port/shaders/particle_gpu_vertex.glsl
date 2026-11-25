@@ -14,6 +14,11 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Rec
     uint words[];
 };
 
+// Four words of a record as one load.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer RecordRow {
+    uvec4 row;
+};
+
 layout(set = 1, binding = 0) uniform texture2D curve_texture;
 layout(set = 1, binding = 1) uniform sampler curve_sampler;
 
@@ -43,9 +48,10 @@ float DrawFloat(uint word) {
     return uintBitsToFloat(DrawWords().words[word]);
 }
 
-// Word `word` of record `index` of `size` bytes at `address`, as the game addresses it.
+// Word `word` of record `index` of `size` bytes at `address`, as the game addresses it. The
+// record's offset is 32 bits, so the base stays one value for every lane.
 uint RecordWord(uint64_t address, uint index, uint size, uint word) {
-    return RecordWords(address).words[(index * size + 4u * word) >> 2];
+    return RecordWords(address + index * size).words[word];
 }
 
 // Word `word` of record `index` of a table of `count`: 0 past the table, as the game's buffer
@@ -56,10 +62,8 @@ uint TableWord(uint64_t address, uint index, uint count, uint size, uint word) {
 }
 
 vec4 TableVector(uint64_t address, uint index, uint count, uint size, uint word) {
-    return uintBitsToFloat(uvec4(TableWord(address, index, count, size, word),
-                                 TableWord(address, index, count, size, word + 1u),
-                                 TableWord(address, index, count, size, word + 2u),
-                                 TableWord(address, index, count, size, word + 3u)));
+    const uvec4 value = RecordRow(address + min(index, count - 1u) * size + 4u * word).row;
+    return uintBitsToFloat(index < count ? value : uvec4(0u));
 }
 
 uint ParticleWord(uint particle, uint word) {
