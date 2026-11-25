@@ -147,6 +147,9 @@ inline constexpr u32 UiTargetHandles = (1u << 15) - MaxUiTargets;
 /// The texture handles of the emulator's ImGui textures: the MaxImGuiTextures below the targets'.
 inline constexpr u32 MaxImGuiTextures = 256;
 inline constexpr u32 ImGuiHandles = UiTargetHandles - MaxImGuiTextures;
+/// The texture handle of the copy of the picture that the photo filter's view reads: the one
+/// below the ImGui textures'.
+inline constexpr u32 UiCopyHandle = ImGuiHandles - 1;
 /// The game's primitive types of the screen drawing: triangle lists and strips.
 inline constexpr u32 UiPrimitiveList = 4;
 inline constexpr u32 UiPrimitiveStrip = 6;
@@ -368,6 +371,9 @@ struct UiHeader {
     u32 fresh_targets;
     /// 1 when the screen drawing over the picture is hidden, by photo mode's R3.
     u32 hidden;
+    /// The run that draws the photo filter's view, plus one, or 0. It reads UiCopyHandle, a copy
+    /// of its target taken just before it.
+    u32 copy;
 };
 
 struct EffectHeader {
@@ -1368,6 +1374,8 @@ inline constexpr u32 UiDrawMovie = 8;
 inline constexpr u32 UiDrawNoDepth = 16;
 /// A piece of a marker that follows an object on the screen, which may lie past the 16:9 canvas.
 inline constexpr u32 UiDrawMarker = 32;
+/// The photo filter's view in the viewfinder, whose blur fetches each texel it reads once.
+inline constexpr u32 UiDrawPreview = 64;
 
 /// Consecutive screen draws of one target, pair of programs, blend, primitive type and viewport:
 /// x, y, width and height, with a negative height where the game's y scale is.

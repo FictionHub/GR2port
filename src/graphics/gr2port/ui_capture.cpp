@@ -55,6 +55,29 @@ constexpr u64 TargetSharp = 0x30;
 // The photo manager, whose target object at +0x580 FUN_011afe90 draws each shot into.
 constexpr VAddr PhotoManager = 0x1eed278;
 constexpr u64 PhotoObject = 0x580;
+// The sampler the filter's view reads the picture with, the shot's: wrapped and filtered linearly.
+constexpr u32 PreviewSampler = 0;
+// The film frame the filter lays over the photo: its texture object, with the T# and S# the draw
+// binds while the object's two checks pass.
+constexpr VAddr FilmFrame = 0x1ee31c8;
+constexpr u64 FilmMemory = 0xb8;
+constexpr u64 FilmState = 0xec;
+constexpr u64 FilmSharp = 0xe0;
+constexpr u64 FilmSampler = 0x100;
+// The filters, one object each from the first: each holds its curves, the filter program's
+// constants, at +0x10.
+constexpr VAddr FilterObjects = 0x1ee31d0;
+constexpr u64 FilterBytes = 0x2020;
+constexpr u64 FilterCurves = 0x10;
+constexpr u64 CurveBytes = 0x2000;
+// The shot's rectangle, a strip of four vertices: the position, the photo's coordinates in the
+// frame, the coordinates in the film frame, then the colour, which the filter does not read.
+constexpr VAddr PhotoMesh = 0x18adc40;
+constexpr u32 PhotoVertices = 4;
+constexpr u32 PhotoFloats = 11;
+constexpr float PhotoSide = 1024.0f;
+// The vertex program's constants as the shot sets them: its master colour.
+constexpr std::array<float, 4> MasterColor{1.0f, 1.0f, 1.0f, 1.0f};
 
 // The photo viewfinder's pieces, known by their textures' size and data format: the vignette over
 // the picture, the dimmed surround and the window's soft edge, the window's halves, the guide
@@ -519,6 +542,13 @@ u32 ObjectTarget(VAddr object) {
                       Load<u16>(object + TargetHeight));
 }
 
+// An S#'s sampler as Ui's samplers number them: bit 0 clamps, bit 1 filters by point.
+u32 SamplerOf(const u32* words) {
+    const u32 clamp = (words[0] & 7) != 0 ? 1 : 0;
+    const u32 point = (words[2] >> 20 & 3) == 0 ? 2 : 0;
+    return clamp | point;
+}
+
 // The target of the photo the frame drew, plus one, or 0.
 u32 PhotoTarget(const Scene::UiHeader& ui) {
     const VAddr manager = Load<VAddr>(g_base + PhotoManager - Hooks::CodeBase);
@@ -544,6 +574,7 @@ public:
     }
 
     void Draw(const RecordedDraw& recorded);
+    void Filter(u32 target);
     void Shape(std::span<const float> vertices, u32 target);
     void Finish();
 
@@ -563,6 +594,7 @@ private:
     u64 address;
     Scene::UiHeader& ui;
     u64 used = 0;
+    bool filtered = false;
 };
 
 u64 Writer::Copy(VAddr from, u64 bytes) {
@@ -853,17 +885,11 @@ void Writer::Draw(const RecordedDraw& recorded) {
         draw.palette_rows = static_cast<u32>(std::min<u64>(
             u64{palette.stride} * palette.elements / 16, std::numeric_limits<u32>::max()));
     }
-    // Bit 0 clamps, bit 1 filters by point, as Ui's samplers.
-    const auto sampler_of = [](const u32* words) {
-        const u32 clamp = (words[0] & 7) != 0 ? 1 : 0;
-        const u32 point = (words[2] >> 20 & 3) == 0 ? 2 : 0;
-        return clamp | point;
-    };
     const auto pixel_index = static_cast<u32>(pixel_program - PixelPrograms.begin());
     if (pixel_program->textures != 0) {
         bool linear = false;
         draw.textures[0] = TextureHandle(ps_user, &linear);
-        draw.samplers[0] = sampler_of(ps_user + PsUserSampler);
+        draw.samplers[0] = SamplerOf(ps_user + PsUserSampler);
         // The game writes text into linear images; movies and photos are linear too.
         if (linear && pixel_index != static_cast<u32>(Scene::UiPixelProgram::Movie) &&
             pixel_index != static_cast<u32>(Scene::UiPixelProgram::Photo)) {
@@ -907,7 +933,7 @@ void Writer::Draw(const RecordedDraw& recorded) {
         }
         table_words = Load<std::array<u32, 16>>(table);
         draw.textures[1] = TextureHandle(table_words.data());
-        draw.samplers[1] = sampler_of(table_words.data() + TableSampler);
+        draw.samplers[1] = SamplerOf(table_words.data() + TableSampler);
         draw.ps_constants = constants_of(table_words.data() + TableConstants);
     } else if (pixel_program->constants) {
         draw.ps_constants = constants_of(ps_user + pixel_program->constants_at);
@@ -932,6 +958,11 @@ void Writer::Draw(const RecordedDraw& recorded) {
     if (draw.textures[0] == NotReady || draw.textures[1] == NotReady) {
         return;
     }
+    // The filtered view goes under the viewfinder's first piece.
+    if ((draw.flags & Scene::UiDrawFinder) != 0 && !filtered) {
+        filtered = true;
+        Filter(target);
+    }
 
     if (target < Scene::MaxUiTargets) {
         g_frame_writes |= 1u << target;
@@ -949,6 +980,81 @@ void Writer::Draw(const RecordedDraw& recorded) {
     });
     g_commands[ui.draws] = {
         .vertex_count = count,
+        .instance_count = 1,
+        .first_vertex = 0,
+        .first_instance = ui.draws,
+    };
+    std::memcpy(packet + Scene::UiDrawsOffset + u64{ui.draws} * sizeof(draw), &draw, sizeof(draw));
+    ui.draws++;
+}
+
+// Draws the picked filter over the part of target the photo takes, as the shot draws it into the
+// photo, so the viewfinder shows what the photo will hold. Leaves room for one more draw.
+void Writer::Filter(u32 target) {
+    const u32 filter = PhotoUi::Filter();
+    if (filter >= PhotoUi::Filters || target >= g_target_count ||
+        ui.draws + 1 >= Scene::MaxUiDraws || ui.runs + 1 >= Scene::MaxUiRuns) {
+        return;
+    }
+    const VAddr film = Load<VAddr>(g_base + FilmFrame - Hooks::CodeBase);
+    if (film == 0 || Load<u64>(film + FilmMemory) == 0 || Load<s32>(film + FilmState) >= 0) {
+        return;
+    }
+    Scene::UiDraw draw{};
+    draw.flags = Scene::UiDrawPreview | Scene::UiDrawFinder;
+    // The shot's frame holds the world only in the frame of a shot. Between shots the world goes
+    // into the picture, which this draw writes, so it reads a copy of the picture.
+    draw.textures[0] = Scene::UiCopyHandle;
+    draw.samplers[0] = PreviewSampler;
+    const auto film_sharp = Load<std::array<u32, 8>>(film + FilmSharp);
+    draw.textures[1] = TextureHandle(film_sharp.data());
+    if (draw.textures[1] == 0 || draw.textures[1] == NotReady) {
+        return;
+    }
+    draw.samplers[1] = SamplerOf(Load<std::array<u32, 4>>(film + FilmSampler).data());
+
+    // The shot's rectangle on the viewfinder's window, the middle PhotoSide x PhotoSide of the
+    // canvas. As a piece of the viewfinder it goes where the window goes at every aspect, which is
+    // where the photo's coordinates lie in the picture.
+    auto vertices =
+        Load<std::array<float, PhotoVertices * PhotoFloats>>(g_base + PhotoMesh - Hooks::CodeBase);
+    for (u32 i = 0; i < PhotoVertices; i++) {
+        float* const vertex = vertices.data() + i * PhotoFloats;
+        vertex[0] *= PhotoSide / CanvasWidth;
+        vertex[1] *= PhotoSide / CanvasHeight;
+    }
+    const u64 data = Copy(reinterpret_cast<VAddr>(vertices.data()), sizeof(vertices));
+    draw.vs_constants = Copy(reinterpret_cast<VAddr>(MasterColor.data()), sizeof(MasterColor));
+    draw.ps_constants = Copy(
+        g_base + FilterObjects - Hooks::CodeBase + filter * FilterBytes + FilterCurves, CurveBytes);
+    if (data == 0 || draw.vs_constants == 0 || draw.ps_constants == 0) {
+        return;
+    }
+    constexpr u32 Stride = PhotoFloats * sizeof(float);
+    draw.attributes[0] = {.address = data, .stride = Stride, .format = ShapePosition};
+    draw.attributes[1] = {
+        .address = data + 3 * sizeof(float), .stride = Stride, .format = ShapeCoordinate};
+    draw.attributes[2] = {
+        .address = data + 5 * sizeof(float), .stride = Stride, .format = ShapeCoordinate};
+    draw.attributes[3] = {
+        .address = data + 7 * sizeof(float), .stride = Stride, .format = ShapeColor};
+    const float width = static_cast<float>(g_targets[target].width);
+    const float height = static_cast<float>(g_targets[target].height);
+    // Kept: Hide UI hides the screen drawing over the picture, not the picture.
+    AddRun({
+        .target = target,
+        .vertex = static_cast<u32>(Scene::UiVertexProgram::Photo),
+        .pixel = static_cast<u32>(Scene::UiPixelProgram::Photo),
+        .blend = 0,
+        .topology = Scene::UiPrimitiveStrip,
+        .viewport = {0.0f, height, width, -height},
+        .first = ui.draws,
+        .count = 1,
+        .kept = 1,
+    });
+    ui.copy = ui.runs;
+    g_commands[ui.draws] = {
+        .vertex_count = PhotoVertices,
         .instance_count = 1,
         .first_vertex = 0,
         .first_instance = ui.draws,

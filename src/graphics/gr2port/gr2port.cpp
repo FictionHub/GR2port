@@ -146,6 +146,7 @@ void Install(VAddr module_base) {
     }
     UiCapture::Install(module_base, c, StubAreaSize);
     PhotoUi::Install(module_base);
+    PhotoUi::WatchCamera(module_base, c, StubAreaSize);
     HudParts::Install(module_base);
     MouseCamera::Install(module_base, c, StubAreaSize);
     StickTilt::Install(module_base, c, StubAreaSize);

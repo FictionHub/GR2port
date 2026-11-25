@@ -81,6 +81,8 @@ float g_hdr_white = 0.0f;
 vk::DescriptorSetLayout g_gain_layout;
 // The gain images of the targets the world went into as the back buffer.
 std::array<Image, Scene::MaxUiTargets> g_gains;
+// The copy of the picture the photo filter's view reads, the size of the picture.
+Image g_copy;
 // This frame's world went into the back buffer with its gain image.
 bool g_world_gain = false;
 u32 g_open_target = Scene::MaxUiTargets;
@@ -219,6 +221,50 @@ bool GainImage(u32 target) {
 
 bool HasImage(const Scene::Header& header, u32 target) {
     return target < header.ui.targets && g_images[target].image;
+}
+
+// Outside rendering: copies the target into g_copy, which this makes on first use.
+bool CopyPicture(vk::CommandBuffer cmd, u32 target) {
+    const vk::Extent2D extent = g_images[target].extent;
+    if (!g_copy.image) {
+        g_copy = g_memory->CreateImage(TargetFormat, extent,
+                                       vk::ImageUsageFlagBits::eSampled |
+                                           vk::ImageUsageFlagBits::eTransferDst,
+                                       vk::ImageAspectFlagBits::eColor);
+        if (!g_copy.image) {
+            LOG_ERROR(Render_Vulkan, "GR2port UI: no image for the picture's copy");
+            return false;
+        }
+        Textures::SetExternal(Scene::UiCopyHandle, g_copy.view);
+    }
+    if (g_copy.extent != extent) {
+        return false;
+    }
+    TargetBarrier(cmd, target, vk::ImageLayout::eShaderReadOnlyOptimal,
+                  vk::ImageLayout::eTransferSrcOptimal,
+                  vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                  vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eCopy,
+                  vk::AccessFlagBits2::eTransferRead);
+    ImageBarrier(*g_device, cmd, g_copy.image, vk::ImageLayout::eUndefined,
+                 vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits2::eFragmentShader,
+                 vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eCopy,
+                 vk::AccessFlagBits2::eTransferWrite);
+    const vk::ImageCopy region{
+        .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        .extent = {extent.width, extent.height, 1},
+    };
+    cmd.copyImage(g_images[target].image, vk::ImageLayout::eTransferSrcOptimal, g_copy.image,
+                  vk::ImageLayout::eTransferDstOptimal, region, g_device->dispatch);
+    TargetBarrier(cmd, target, vk::ImageLayout::eTransferSrcOptimal,
+                  vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eCopy,
+                  vk::AccessFlagBits2::eTransferRead, vk::PipelineStageFlagBits2::eFragmentShader,
+                  vk::AccessFlagBits2::eShaderSampledRead);
+    ImageBarrier(*g_device, cmd, g_copy.image, vk::ImageLayout::eTransferDstOptimal,
+                 vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eCopy,
+                 vk::AccessFlagBits2::eTransferWrite, vk::PipelineStageFlagBits2::eFragmentShader,
+                 vk::AccessFlagBits2::eShaderSampledRead);
+    return true;
 }
 
 vk::BlendFactor Factor(u32 value) {
@@ -701,6 +747,14 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
                                        : PipelineFor(run, over_world);
         if (!pipeline.pipeline) {
             continue;
+        }
+        if (i + 1 == header.ui.copy) {
+            if (g_open_target != Scene::MaxUiTargets) {
+                EndTarget(cmd);
+            }
+            if (!CopyPicture(cmd, run.target)) {
+                continue;
+            }
         }
         if (g_open_target != run.target) {
             if (g_open_target != Scene::MaxUiTargets) {

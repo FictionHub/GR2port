@@ -34,6 +34,15 @@ u64 FindText(u64 texts, const char* key, GraphicsMenu::FindTextFunction find);
 /// Any thread: whether the camera is out.
 bool CameraOut();
 
+/// The filters of photo mode.
+inline constexpr u32 Filters = 5;
+
+/// Notes the camera each frame of photo mode, for Filter.
+bool WatchCamera(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
+
+/// Any thread: the filter the player picked while the camera is out, else Filters.
+u32 Filter();
+
 /// Input handling, at a press of Hide UI: while the camera is out, hides the screen drawing over
 /// the picture or shows it again.
 void ToggleHidden();

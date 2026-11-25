@@ -26,6 +26,11 @@ using namespace Xbyak::util;
 // puts it away (HUD.isPhotoMode, FUN_011b0f90, reads it).
 constexpr VAddr CameraOutByte = 0x1ee3105;
 
+// void FUN_011aa4a0(camera): photo mode's frame on the game's main thread. The camera holds the
+// filter the player picked, which the shot hands to the photo's draw.
+constexpr Hooks::Entry CameraFrame{0x11aa4a0, 6, Hooks::FramePrologue};
+constexpr u64 CameraFilter = 0x3628;
+
 // void FUN_011ba250(list): the control list's frame, which hands each of its slots the row the
 // slot asks for.
 constexpr Hooks::Entry ListFrame{0x11ba250, 6, Hooks::FramePrologue};
@@ -83,6 +88,7 @@ constexpr u32 ItemFunction = 0x10;
 using ItemFunctionPointer = void PS4_SYSV_ABI (*)(VAddr item);
 
 std::atomic<VAddr> g_base{0};
+std::atomic<VAddr> g_camera{0};
 std::atomic<bool> g_hidden{false};
 std::mutex g_record_mutex;
 std::vector<u8> g_record;
@@ -106,6 +112,10 @@ void PS4_SYSV_ABI OnListFrame(u32, const Hooks::Registers* registers, u64) {
     } else if (!wanted && row == &HideRow) {
         MenuKit::Write<const ListRow*>(slots + RowSlot * sizeof(VAddr), nullptr);
     }
+}
+
+void PS4_SYSV_ABI OnCameraFrame(u32, const Hooks::Registers* registers, u64) {
+    g_camera.store(registers->rdi, std::memory_order_relaxed);
 }
 
 // Notes which draw items are the gesture window's.
@@ -145,6 +155,23 @@ void Install(VAddr module_base) {
 bool CameraOut() {
     const VAddr base = g_base.load(std::memory_order_relaxed);
     return base != 0 && *Hooks::Code(base, CameraOutByte) != 0;
+}
+
+bool WatchCamera(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
+    if (!Hooks::Hooked(
+            Hooks::ObserveEntry(module_base, CameraFrame, c, capacity, &OnCameraFrame, 0))) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the photo mode's frame is not the expected code");
+        return false;
+    }
+    return true;
+}
+
+u32 Filter() {
+    const VAddr camera = g_camera.load(std::memory_order_relaxed);
+    if (!CameraOut() || camera == 0) {
+        return Filters;
+    }
+    return std::min(MenuKit::Read<u32>(camera + CameraFilter), Filters);
 }
 
 void ToggleHidden() {

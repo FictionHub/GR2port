@@ -9,12 +9,16 @@
 // brightness.
 #version 460
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_samplerless_texture_functions : require
 
 #include "ui_pixel.glsl"
 
 // Location 1: the photo's coordinates, then the frame's.
 layout(location = 1) in vec4 attr0;
 layout(location = 0) out vec4 color0;
+
+// Scene::UiDrawPreview.
+const uint DrawPreview = 64u;
 
 // The game's conversion to an integer: 0 for NaN, and saturating.
 uint ToInt(float value) {
@@ -31,6 +35,62 @@ float Row(UiConstants constants, uint row, uint word) {
 
 float K(uint bits) {
     return uintBitsToFloat(bits);
+}
+
+// The most texels the viewfinder's blur fetches along each axis.
+const int SpanTexels = 16;
+
+// The viewfinder's blur: the photo's sum, which weights each read by a factor per axis and mixes
+// the two nearest texels per axis in each read. So it is a sum of texels, each weighted by a
+// column weight times a row weight, and fetching each texel once replaces the 1089 reads. False
+// when the reads span more than SpanTexels texels along an axis.
+bool PreviewBlur(uvec2 first, vec2 photo, float radius, out vec4 blurred) {
+    // Without a radius each read takes the same place.
+    if (radius == 0.0) {
+        blurred = clamp(Sample(first, photo), 0.0, 1.0);
+        return true;
+    }
+    const uint slot = first.x & TextureSlotMask;
+    const ivec2 size = textureSize(textures[nonuniformEXT(slot)], 0);
+    const vec2 step = radius * K(0x3a800000u) * vec2(size);
+    const vec2 middle = photo * vec2(size) - 0.5;
+    const ivec2 low = ivec2(floor(middle - 16.0 * step));
+    const ivec2 span = ivec2(floor(middle + 16.0 * step)) - low + 2;
+    if (span.x > SpanTexels || span.y > SpanTexels) {
+        return false;
+    }
+    float columns[SpanTexels];
+    float rows[SpanTexels];
+    for (int k = 0; k < SpanTexels; k++) {
+        columns[k] = 0.0;
+        rows[k] = 0.0;
+    }
+    float total = 0.0;
+    for (int i = -16; i <= 16; i++) {
+        const float weight = exp2(K(0x3bb8aa3bu) * float(-(i * i)));
+        const vec2 at = middle + float(i) * step;
+        const vec2 cell = floor(at);
+        const vec2 part = at - cell;
+        const ivec2 index = ivec2(cell) - low;
+        columns[index.x] += weight * (1.0 - part.x);
+        columns[index.x + 1] += weight * part.x;
+        rows[index.y] += weight * (1.0 - part.y);
+        rows[index.y + 1] += weight * part.y;
+        total += weight;
+    }
+    vec4 sum = vec4(0.0);
+    for (int y = 0; y < span.y; y++) {
+        vec4 line = vec4(0.0);
+        for (int x = 0; x < span.x; x++) {
+            // The shot's sampler wraps.
+            const ivec2 texel = low + ivec2(x, y);
+            const ivec2 wrapped = texel - size * ivec2(floor(vec2(texel) / vec2(size)));
+            line += texelFetch(textures[nonuniformEXT(slot)], wrapped, 0) * columns[x];
+        }
+        sum += line * rows[y];
+    }
+    blurred = clamp(sum / (total * total), 0.0, 1.0);
+    return true;
 }
 
 void main() {
@@ -50,20 +110,23 @@ void main() {
 
     // The blur: weights e^(-(i^2 + j^2) / 256) over offsets i, j of -16..16 times radius / 1024.
     const uvec2 first = FirstTexture(draw);
-    vec4 sum = vec4(0.0);
-    float total = 0.0;
-    for (int i = -16; i <= 16; i++) {
-        const float x = float(i) * radius * K(0x3a800000u) + photo.x;
-        for (int j = -16; j <= 16; j++) {
-            const float y = float(j) * radius * K(0x3a800000u) + photo.y;
-            const vec4 texel = Sample(first, vec2(x, y));
-            const float weight = exp2(K(0x3bb8aa3bu) * float(-(i * i + j * j)));
-            total = weight + total;
-            sum = texel * weight + sum;
+    vec4 blurred;
+    if ((draw.flags & DrawPreview) == 0u || !PreviewBlur(first, photo, radius, blurred)) {
+        vec4 sum = vec4(0.0);
+        float total = 0.0;
+        for (int i = -16; i <= 16; i++) {
+            const float x = float(i) * radius * K(0x3a800000u) + photo.x;
+            for (int j = -16; j <= 16; j++) {
+                const float y = float(j) * radius * K(0x3a800000u) + photo.y;
+                const vec4 texel = Sample(first, vec2(x, y));
+                const float weight = exp2(K(0x3bb8aa3bu) * float(-(i * i + j * j)));
+                total = weight + total;
+                sum = texel * weight + sum;
+            }
         }
+        const float inverse = 1.0 / total;
+        blurred = clamp(inverse * sum, 0.0, 1.0);
     }
-    const float inverse = 1.0 / total;
-    const vec4 blurred = clamp(inverse * sum, 0.0, 1.0);
 
     // The curves.
     const float red = Row(constants, ToInt(255.0 * blurred.r), 0u);
