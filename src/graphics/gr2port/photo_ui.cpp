@@ -37,7 +37,8 @@ constexpr u32 RowSlot = 12;
 
 // A row of the control list, as the game's own rows are.
 struct ListRow {
-    // The game's numbers of the buttons whose presses play the row's press, or -1.
+    // The game's numbers of the buttons whose presses play the row's press. The first must be a
+    // button: the list reads its press time for every row it shows. The second may be -1.
     s32 button;
     s32 second_button;
     // The row's text in the game's table of them, or -1 for the text of key.
@@ -59,8 +60,10 @@ constexpr char RowKey[] = "gr2port_photo_hide";
 // column.
 constexpr char ModelKey[] = "ui_camera_guide_06";
 constexpr char English[] = "Hide UI";
+// The game's number of L3, the first button of Hide UI.
+constexpr s32 L3Number = 8;
 
-constexpr ListRow HideRow{-1, -1, -1, -1, RowKey, HideIcon, HideIcon};
+constexpr ListRow HideRow{L3Number, -1, -1, -1, RowKey, HideIcon, HideIcon};
 
 // void FUN_0171aa10(window): the gesture window's frame on the game's main thread, each frame,
 // which adds the window's draw items for the draw thread to run.
