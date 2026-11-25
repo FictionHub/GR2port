@@ -249,7 +249,8 @@ void main() {
         const float own = 1.0 / -own_term;
         const float to_ndc = 1.0 / WaterConstant(48u);
         float deepest = 0.0;
-        for (uint k = 0u; k < bubbles; k++) {
+        // The record holds two barriers.
+        for (uint k = 0u; k < min(bubbles, 2u); k++) {
             const uint at = 116u + 4u * k;
             const vec4 bubble = vec4(WaterConstant(at), WaterConstant(at + 1u),
                                      WaterConstant(at + 2u), WaterConstant(at + 3u));
@@ -490,7 +491,8 @@ void main() {
     const uint column = LightUint(60.0 * screen.x);
     const uint first = 48u * (column + 60u * row + 2160u * slice);
     const uint count = floatBitsToUint(WaterConstant(63u));
-    for (uint k = 0u; k < count; k++) {
+    // A cell holds 48 entries, the last after its lights ~0.
+    for (uint k = 0u; k < min(count, 48u); k++) {
         const uint index = CellLight(first, k);
         if (index == 0xffffffffu) {
             break;

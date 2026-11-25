@@ -443,7 +443,8 @@ vec4 EffectLight(EffectLayers layers, EffectPixel pixel, vec3 view) {
                        EffectConstant(EffectLightColor + 2u) * sum);
     const uint first = EffectLightCell(pixel);
     const uint count = floatBitsToUint(EffectConstant(EffectPointLights));
-    for (uint k = 0u; k < count; k++) {
+    // A cell holds 48 entries, the last after its lights ~0.
+    for (uint k = 0u; k < min(count, 48u); k++) {
         const uint index = CellLight(first, k);
         if (index == 0xffffffffu) {
             break;

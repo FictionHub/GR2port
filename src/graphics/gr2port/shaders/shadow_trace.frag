@@ -139,7 +139,8 @@ void main() {
                                -2.0 * (down * height) + height, -distance);
 
     float shadow = 0.0;
-    for (uint i = 0u; i < trace.lights; i++) {
+    // A cell holds 48 entries, the last after its lights ~0.
+    for (uint i = 0u; i < min(trace.lights, 48u); i++) {
         const uint light = GridWord(((48u * cell + i) << 2) >> 2);
         if (light == 0xffffffffu) {
             break;

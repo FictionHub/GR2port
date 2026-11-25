@@ -98,9 +98,10 @@ uint Hit(uint list, vec3 a, vec3 b) {
     Grid grid = scene_grid;
     const uint spheres = effectors.count;
     uint hit = 0u;
-    for (uint entry = 0u; entry < spheres; entry++) {
+    for (uint entry = 0u; entry < min(spheres, GridEntries); entry++) {
         const uint sphere_index = grid.entries[list + entry];
-        if (sphere_index == 0xffffffffu) {
+        // ~0 ends the cell's list; an index past the spheres ends it too.
+        if (sphere_index >= MaxSpheres) {
             break;
         }
         const uvec4 sphere = effectors.spheres[2u * sphere_index];

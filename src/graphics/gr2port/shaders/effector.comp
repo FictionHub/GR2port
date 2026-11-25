@@ -33,7 +33,7 @@ void main() {
     const float slice_end = effector.slice + slice_start;
     uint entry = ((cell.z * 6u + cell.y) * 6u + cell.x) * GridEntries;
     const uint last = entry + GridEntries - 1u;
-    for (uint s = 0u; s < effector.count; s++) {
+    for (uint s = 0u; s < min(effector.count, MaxSpheres); s++) {
         const uvec4 sphere = effector.spheres[2u * s];
         const vec3 c = (effector.view * vec4(uintBitsToFloat(sphere.xyz), 1.0)).xyz;
         const float sides = min(min(dot(bottom, c.yz), min(dot(left, c.xz), dot(right, c.xz))),

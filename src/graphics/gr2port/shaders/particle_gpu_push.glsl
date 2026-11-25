@@ -26,9 +26,4 @@ layout(push_constant) uniform Push {
 #endif
 };
 
-// Records in the pools and tables the game makes (particles.cpp checks the pools at creation).
-const uint ParticleCount = 163840u;
-const uint EmitterCount = 98304u;
-const uint DescriptionCount = 0x8000u;
-const uint EffectCount = 0x600u;
-const uint MaterialCount = 0x10000u;
+#include "particle_pools.glsl"

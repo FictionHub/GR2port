@@ -77,7 +77,8 @@ void main() {
     const uint first = Word(emitter_out_address, object, 128u, ObjectFirst);
     uint cursor = Word(emitter_out_address, object, 128u, ObjectCursor);
 
-    for (uint i = 0u; i < count; i++) {
+    // A count past the pool is cut at its size, which keeps the loop short on bad data.
+    for (uint i = 0u; i < min(count, ParticleCount); i++) {
         // Without the description's fixed word, the scale goes from its start to its end over the
         // placing's duration, back from the time it ends, and the object's rotation turns it.
         float scale = 1.0;
@@ -104,13 +105,18 @@ void main() {
                     (uintBitsToFloat(0x402a91b9u) *
                      fract(abs(uintBitsToFloat(0x3ac01c14u) * float(seed))));
         }
-        const uint offset = constants.words[SampleStride] * GameUint(last_vertex * along);
+        const uint vertex_index = GameUint(last_vertex * along);
+        // A vertex past the mesh reads 0, as the game's buffer load past it gives.
+        const bool inside = vertex_index < constants.words[SampleVertices];
+        const uint offset = constants.words[SampleStride] *
+                            min(vertex_index, constants.words[SampleVertices] - 1u);
         cursor = GameRemainder(cursor + 1u, pool);
 
         if (constants.words[SampleMode] == ModeNormals) {
             const vec3 normal =
                 normal_scale *
-                VertexNormal(vertices.words[(constants.words[SampleNormal] + offset) >> 2]);
+                VertexNormal(inside ? vertices.words[(constants.words[SampleNormal] + offset) >> 2]
+                                    : 0u);
             const vec3 world = vec3(MatrixDirectionRow(constants, 0u, normal),
                                     MatrixDirectionRow(constants, 1u, normal),
                                     MatrixDirectionRow(constants, 2u, normal));
@@ -120,7 +126,8 @@ void main() {
         }
         const uint at = (constants.words[SamplePosition] + offset) >> 2;
         const vec3 vertex = uintBitsToFloat(
-            uvec3(vertices.words[at], vertices.words[at + 1u], vertices.words[at + 2u]));
+            inside ? uvec3(vertices.words[at], vertices.words[at + 1u], vertices.words[at + 2u])
+                   : uvec3(0u));
         const vec3 world = vec3(ScaledPointRow(constants, 0u, position_scale, vertex),
                                 ScaledPointRow(constants, 1u, position_scale, vertex),
                                 ScaledPointRow(constants, 2u, position_scale, vertex));

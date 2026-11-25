@@ -45,7 +45,7 @@ void main() {
     const vec2 lower =
         normalize(vec2(half_grid.y * light.grid_scale.y, half_grid.y - 1.0 - cell_xy.y));
     const vec2 upper = normalize(vec2(-half_grid.y * light.grid_scale.y, cell_xy.y - half_grid.y));
-    for (uint i = thread; i < light.point_lights; i += gl_WorkGroupSize.x) {
+    for (uint i = thread; i < min(light.point_lights, MaxPointLights); i += gl_WorkGroupSize.x) {
         const vec3 p = lights.point_lights[i].position;
         const float across = min(dot(right, p.xz), dot(left, p.xz));
         const float up = min(dot(lower, p.yz), dot(upper, p.yz));

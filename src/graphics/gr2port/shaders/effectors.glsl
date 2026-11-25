@@ -7,6 +7,8 @@
 // 6 x 6 x 10 cells, each listing up to 127 sphere indices, then -1.
 const uint GridCells = 360u;
 const uint GridEntries = 128u;
+// Scene::MaxSpheres: the spheres the packet holds.
+const uint MaxSpheres = 256u;
 
 // Two vec4s a sphere: {center xyz, radii (outer and inner half floats)}, {..., mask and strength
 // half float}.

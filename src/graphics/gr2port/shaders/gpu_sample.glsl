@@ -5,6 +5,8 @@
 // constants, the effect objects, the descriptions and the particles they read, the game's integer
 // conversions, the turn by the object's rotation and the vertex's normal.
 
+#include "particle_pools.glsl"
+
 layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
     uint words[];
 };
@@ -67,7 +69,9 @@ const uint ParticleVelocity = 16u;
 const uint ParticleSeed = 52u;
 
 uint Word(uint64_t records, uint record, uint size, uint byte_offset) {
-    return Words(records).words[(record * size + byte_offset) >> 2];
+    const uint count = RecordsOfSize(size);
+    const uint at = (min(record, count - 1u) * size + byte_offset) >> 2;
+    return record < count ? Words(records).words[at] : 0u;
 }
 
 float Float(uint64_t records, uint record, uint size, uint byte_offset) {
@@ -81,6 +85,9 @@ vec3 Vector(uint64_t records, uint record, uint size, uint byte_offset) {
 }
 
 void SetVector(uint64_t records, uint record, uint size, uint byte_offset, vec3 value) {
+    if (record >= RecordsOfSize(size)) {
+        return;
+    }
     Words words = Words(records);
     const uint at = (record * size + byte_offset) >> 2;
     words.words[at] = floatBitsToUint(value.x);

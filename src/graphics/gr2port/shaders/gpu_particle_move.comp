@@ -11,6 +11,7 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive : require
 
 layout(local_size_x = 64) in;
 layout(set = 0, binding = 0) uniform texture2D depth_texture;
@@ -32,6 +33,8 @@ layout(push_constant) uniform Push {
     // The game's noise table: 32 gradients, then the permutation, 16 bytes a record.
     uint64_t noise_address;
 };
+
+#include "particle_pools.glsl"
 
 // The emitter's mark of a ring to clear.
 const uint FreshMark = 0x27bc86abu;
@@ -63,7 +66,8 @@ float SceneFloat(uint word) {
 }
 
 uint EffectWord(uint effect, uint word) {
-    return Words(effect_in_address).words[(effect * 192u + word * 4u) >> 2];
+    const uint at = (min(effect, EffectCount - 1u) * 192u + word * 4u) >> 2;
+    return effect < EffectCount ? Words(effect_in_address).words[at] : 0u;
 }
 
 float EffectFloat(uint effect, uint word) {
@@ -71,7 +75,8 @@ float EffectFloat(uint effect, uint word) {
 }
 
 uint DescriptionWord(uint description, uint word) {
-    return Words(description_address).words[(description * 256u + word * 4u) >> 2];
+    const uint at = (min(description, DescriptionCount - 1u) * 256u + word * 4u) >> 2;
+    return description < DescriptionCount ? Words(description_address).words[at] : 0u;
 }
 
 float DescriptionFloat(uint description, uint word) {
@@ -79,7 +84,8 @@ float DescriptionFloat(uint description, uint word) {
 }
 
 uint EmitterWord(uint emitter, uint word) {
-    return Words(emitter_in_address).words[(emitter * 128u + word * 4u) >> 2];
+    const uint at = (min(emitter, EmitterCount - 1u) * 128u + word * 4u) >> 2;
+    return emitter < EmitterCount ? Words(emitter_in_address).words[at] : 0u;
 }
 
 float EmitterFloat(uint emitter, uint word) {
@@ -92,10 +98,11 @@ vec4 EmitterVector(uint emitter, uint word) {
 }
 
 uvec4 ParticleWords(uint particle, uint word) {
-    const uint at = (particle * 64u + word * 4u) >> 2;
-    return uvec4(Words(particle_in_address).words[at], Words(particle_in_address).words[at + 1u],
-                 Words(particle_in_address).words[at + 2u],
-                 Words(particle_in_address).words[at + 3u]);
+    const uint at = (min(particle, ParticleCount - 1u) * 64u + word * 4u) >> 2;
+    const uvec4 words = uvec4(
+        Words(particle_in_address).words[at], Words(particle_in_address).words[at + 1u],
+        Words(particle_in_address).words[at + 2u], Words(particle_in_address).words[at + 3u]);
+    return particle < ParticleCount ? words : uvec4(0u);
 }
 
 vec4 ParticleVector(uint particle, uint word) {
@@ -103,6 +110,9 @@ vec4 ParticleVector(uint particle, uint word) {
 }
 
 void SetOutWords(uint particle, uint word, uvec4 value) {
+    if (particle >= ParticleCount) {
+        return;
+    }
     const uint at = (particle * 64u + word * 4u) >> 2;
     Words(particle_out_address).words[at] = value.x;
     Words(particle_out_address).words[at + 1u] = value.y;
@@ -1185,7 +1195,8 @@ void WindEffector(uint effector, uint effect, DepthView view, inout vec3 moved,
 // The noise table: 32 gradients of 4 floats, then the permutation twice over, each entry the first
 // word of a 16-byte record.
 uint NoisePerm(uint index) {
-    return Words(noise_address).words[((32u + index) * 16u) >> 2];
+    // The table holds 512 permutation records; an index past them reads 0.
+    return index < 512u ? Words(noise_address).words[((32u + min(index, 511u)) * 16u) >> 2] : 0u;
 }
 
 vec4 NoiseGradient(uint index) {

@@ -9,7 +9,9 @@
 uint GridCellFirst(vec2 uv, float depth, float start) {
     const float beyond = depth - start;
     const uint slice = beyond > 1.0 ? min(uint(log2(beyond)), LightGridSlices - 1u) : 0u;
-    const uvec2 tile = uvec2(vec2(LightGridColumns, LightGridRows) * uv);
+    // A place past the screen takes the edge tile.
+    const uvec2 tile = min(uvec2(vec2(LightGridColumns, LightGridRows) * clamp(uv, 0.0, 1.0)),
+                           uvec2(LightGridColumns - 1u, LightGridRows - 1u));
     return ((slice * LightGridRows + tile.y) * LightGridColumns + tile.x) * LightsPerCell;
 }
 

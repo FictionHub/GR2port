@@ -68,9 +68,10 @@ vec3 BentTip(uint index, vec3 root, vec3 tip) {
     const uint list = GridList(instances.instances[index].world_view_projection * vec4(tip, 1.0),
                                instances.instances[index].cluster_scale);
     const uint spheres = effectors.count;
-    for (uint entry = 0u; entry < spheres; entry++) {
+    for (uint entry = 0u; entry < min(spheres, GridEntries); entry++) {
         const uint sphere_index = grid.entries[list + entry];
-        if (sphere_index == 0xffffffffu) {
+        // ~0 ends the cell's list; an index past the spheres ends it too.
+        if (sphere_index >= MaxSpheres) {
             break;
         }
         const uvec4 sphere = effectors.spheres[2u * sphere_index];
@@ -116,7 +117,12 @@ void main() {
     if (count == 0u) {
         return;
     }
-    const uint first = atomicAdd(count_out.vertices, 3u * count) / 3u;
+    // A tuft past the blades' room clamps the vertex count, so the draw never runs more vertices
+    // than the blades the buffer holds, whatever the game's counts.
+    const uint first = atomicAdd(count_out.vertices, 3u * min(count, MaxBlades)) / 3u;
+    if (first >= MaxBlades || min(count, MaxBlades) > MaxBlades - first) {
+        atomicMin(count_out.vertices, 3u * MaxBlades);
+    }
     if (first >= MaxBlades) {
         return;
     }

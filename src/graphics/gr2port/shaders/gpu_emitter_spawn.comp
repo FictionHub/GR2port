@@ -10,6 +10,7 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive : require
 
 layout(local_size_x = 64) in;
 layout(set = 0, binding = 0) uniform texture2D curve_texture;
@@ -27,11 +28,14 @@ layout(push_constant) uniform Push {
     uint64_t active_address;
 };
 
+#include "particle_pools.glsl"
+
 // The emitter's mark of a ring to clear.
 const uint FreshMark = 0x27bc86abu;
 
 uint EffectWord(uint effect, uint word) {
-    return Words(effect_in_address).words[(effect * 192u + word * 4u) >> 2];
+    const uint at = (min(effect, EffectCount - 1u) * 192u + word * 4u) >> 2;
+    return effect < EffectCount ? Words(effect_in_address).words[at] : 0u;
 }
 
 float EffectFloat(uint effect, uint word) {
@@ -39,7 +43,8 @@ float EffectFloat(uint effect, uint word) {
 }
 
 uint DescriptionWord(uint description, uint word) {
-    return Words(description_address).words[(description * 256u + word * 4u) >> 2];
+    const uint at = (min(description, DescriptionCount - 1u) * 256u + word * 4u) >> 2;
+    return description < DescriptionCount ? Words(description_address).words[at] : 0u;
 }
 
 float DescriptionFloat(uint description, uint word) {
@@ -52,7 +57,8 @@ vec4 DescriptionVector(uint description, uint word) {
 }
 
 uint EmitterWord(uint emitter, uint word) {
-    return Words(emitter_out_address).words[(emitter * 128u + word * 4u) >> 2];
+    const uint at = (min(emitter, EmitterCount - 1u) * 128u + word * 4u) >> 2;
+    return emitter < EmitterCount ? Words(emitter_out_address).words[at] : 0u;
 }
 
 float EmitterFloat(uint emitter, uint word) {
@@ -65,11 +71,14 @@ vec4 EmitterVector(uint emitter, uint word) {
 }
 
 void SetEmitterWord(uint emitter, uint word, uint value) {
-    Words(emitter_out_address).words[(emitter * 128u + word * 4u) >> 2] = value;
+    if (emitter < EmitterCount) {
+        Words(emitter_out_address).words[(emitter * 128u + word * 4u) >> 2] = value;
+    }
 }
 
 uint ParticleWord(uint particle, uint word) {
-    return Words(particle_out_address).words[(particle * 64u + word * 4u) >> 2];
+    const uint at = (min(particle, ParticleCount - 1u) * 64u + word * 4u) >> 2;
+    return particle < ParticleCount ? Words(particle_out_address).words[at] : 0u;
 }
 
 float ParticleFloat(uint particle, uint word) {
@@ -86,10 +95,15 @@ uvec4 ParticleWords(uint particle, uint word) {
 }
 
 void SetParticleWord(uint particle, uint word, uint value) {
-    Words(particle_out_address).words[(particle * 64u + word * 4u) >> 2] = value;
+    if (particle < ParticleCount) {
+        Words(particle_out_address).words[(particle * 64u + word * 4u) >> 2] = value;
+    }
 }
 
 void SetParticleWords(uint particle, uint word, uvec4 value) {
+    if (particle >= ParticleCount) {
+        return;
+    }
     const uint at = (particle * 64u + word * 4u) >> 2;
     Words(particle_out_address).words[at] = value.x;
     Words(particle_out_address).words[at + 1u] = value.y;
@@ -394,7 +408,8 @@ void main() {
     uint bursts = EmitterWord(object, 15u);
     float carried = EmitterFloat(object, 24u);
     if (head == FreshMark) {
-        for (uint k = 0u; k < ring; k++) {
+        // A ring past the pool is cut at its size, which keeps the loop short on bad data.
+        for (uint k = 0u; k < min(ring, ParticleCount); k++) {
             const uint particle = k + first;
             SetParticleWords(particle, 8u, uvec4(0x3f7fffefu, 0u, 0x3f800000u, 0u));
             SetParticleWord(particle, 12u, self);
@@ -505,7 +520,7 @@ void main() {
                 const float gain_u = CurveU(columns.z);
                 gain = 0u;
                 last_along = 0u;
-                for (uint k = 0u; k < parent_ring; k++) {
+                for (uint k = 0u; k < min(parent_ring, ParticleCount); k++) {
                     const uint base = first + k * per;
                     const uint source = k + parent_first;
                     const vec3 header = ParticleVector(base, 8u).xyz;
@@ -610,7 +625,7 @@ void main() {
                         const vec4 place_range = high - low;
                         const vec3 velocity_range = velocity_top - velocity_bottom;
                         const float to_increment = 1.0 / increment;
-                        for (float i = 0.0; i < spawns; i = 1.0 + i) {
+                        for (float i = 0.0; i < spawns && i < float(ParticleCount); i = 1.0 + i) {
                             const uint next_cursor = GameModulo(cursor + 1u, per_rest);
                             float along = 0.0;
                             if (mode != 2u) {
@@ -757,7 +772,7 @@ void main() {
                 gain = 0u;
                 last_along = 0u;
                 uint cursor = head;
-                for (float i = 0.0; i < count; i = 1.0 + i) {
+                for (float i = 0.0; i < count && i < float(ParticleCount); i = 1.0 + i) {
                     const uint next_cursor = GameModulo(cursor + 1u, ring);
                     const float along = to_increment * (-1.0 + (total - i));
                     const float share = float(cursor) * to_share_count;

@@ -5,6 +5,9 @@
 // pool copy to zeros with 1.0 in its third 16 bytes.
 #version 460
 #extension GL_EXT_buffer_reference : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "particle_pools.glsl"
 
 layout(local_size_x = 64) in;
 
@@ -16,7 +19,12 @@ layout(push_constant) uniform Push {
 };
 
 void main() {
-    const uint first = (gl_WorkGroupID.x * 64u + gl_LocalInvocationID.x) * 4u;
+    const uint particle = gl_WorkGroupID.x * 64u + gl_LocalInvocationID.x;
+    // A particle past the pool is not written.
+    if (particle >= ParticleCount) {
+        return;
+    }
+    const uint first = particle * 4u;
     particles.quarters[first] = uvec4(0u);
     particles.quarters[first + 1u] = uvec4(0u);
     particles.quarters[first + 2u] = floatBitsToUint(vec4(1.0));

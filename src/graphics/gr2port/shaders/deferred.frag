@@ -117,7 +117,7 @@ vec3 Radiance(vec3 direction, float lod) {
 // What the occluders leave of the ambient light at a position.
 float OccluderShade(vec3 position, float strength) {
     float shade = 1.0;
-    for (uint i = 0u; i < light.occluders; i++) {
+    for (uint i = 0u; i < min(light.occluders, MaxOccluders); i++) {
         const vec4 sphere = light.occluder_spheres[i];
         const vec3 offset = position - sphere.xyz;
         const float along = dot(light.occluder_direction.xyz, offset);
@@ -236,9 +236,10 @@ void main() {
         const float traced = light.shadow_trace != 0u && grid.light_indices[first] != ~0u
                                  ? texelFetch(traced_shadow, ivec2(gl_FragCoord.xy), 0).x
                                  : 0.0;
-        for (uint i = 0u; i < light.point_lights; i++) {
+        for (uint i = 0u; i < min(light.point_lights, LightsPerCell); i++) {
             const uint index = grid.light_indices[first + i];
-            if (index == ~0u) {
+            // ~0 ends the cell's list; an index past the lights ends it too.
+            if (index >= MaxPointLights) {
                 break;
             }
             const PointLight point = lights.point_lights[index];

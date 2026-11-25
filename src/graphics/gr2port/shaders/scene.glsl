@@ -528,6 +528,8 @@ const uint LightGridColumns = 60u;
 const uint LightGridRows = 36u;
 const uint LightGridSlices = 8u;
 const uint LightsPerCell = 48u;
+// Scene::MaxPointLights: the point lights the packet holds.
+const uint MaxPointLights = 1024u;
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Shadows {
     mat4 inverse_view;

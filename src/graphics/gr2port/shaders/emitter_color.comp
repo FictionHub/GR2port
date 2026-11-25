@@ -8,6 +8,7 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive : require
 
 layout(local_size_x = 64) in;
 layout(set = 0, binding = 0) uniform texture2D color_texture;
@@ -29,6 +30,8 @@ layout(push_constant) uniform Push {
 
 // An effect object (128 bytes): its position, its description, a mark of a dead object, its time,
 // its random seed, and a word that holds the tint back.
+#include "particle_pools.glsl"
+
 const uint ObjectBytes = 128u;
 const uint ObjectPosition = 0u;
 const uint ObjectDescription = 32u;
@@ -46,7 +49,9 @@ const uint DescriptionBoxMax = 112u;
 
 // The word at a byte of a record, addressed as the game's program does.
 uint Word(Words records, uint record, uint size, uint byte_offset) {
-    return records.words[(record * size + byte_offset) >> 2];
+    const uint count = RecordsOfSize(size);
+    const uint at = (min(record, count - 1u) * size + byte_offset) >> 2;
+    return record < count ? records.words[at] : 0u;
 }
 
 float Float(Words records, uint record, uint size, uint byte_offset) {
@@ -77,6 +82,10 @@ vec3 Tap(float u, float v) {
 
 void main() {
     const uint index = gl_WorkGroupID.x * 64u + gl_LocalInvocationID.x;
+    // An emitter past the pool, and its colour, are not touched.
+    if (index >= EmitterCount) {
+        return;
+    }
     Words objects = Words(objects_address);
     Words descriptions = Words(descriptions_address);
     if (Word(objects, index, ObjectBytes, ObjectDead) == DeadMark) {

@@ -213,9 +213,10 @@ void Shade(uint draw) {
         const float key_lit = max(-dot(travel, n), 0.0) * shadow;
         const float key_reach = 1.0 + table.characters[index].shadow_influence * (key_lit - 1.0);
         const float scale = table.characters[index].light_intensity_scale * key_reach;
-        for (uint i = 0u; i < light.point_lights; i++) {
+        for (uint i = 0u; i < min(light.point_lights, LightsPerCell); i++) {
             const uint light_index = grid.light_indices[first + i];
-            if (light_index == ~0u) {
+            // ~0 ends the cell's list; an index past the lights ends it too.
+            if (light_index >= MaxPointLights) {
                 break;
             }
             const PointLight point = lights.point_lights[light_index];

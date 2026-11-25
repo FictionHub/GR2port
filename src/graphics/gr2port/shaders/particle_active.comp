@@ -10,6 +10,7 @@
 
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive : require
 
 layout(local_size_x = 64) in;
 
@@ -34,18 +35,23 @@ layout(push_constant) uniform Constants {
     uint objects;
 };
 
+#include "particle_pools.glsl"
+
 const uint Settled = 4u;
 const uint SpawnBit = 0x100u;
 const uint StepMask = 0xffu;
 
 void main() {
     const uint emitter = gl_GlobalInvocationID.x;
-    if (emitter >= objects) {
+    if (emitter >= objects || emitter >= EmitterCount) {
         return;
     }
     const bool owned = owners.w[2u * emitter] != 0u;
     const uint description = emitters.w[32u * emitter + 8u];
-    const uint spawns = descriptions.w[64u * description + 4u] == 1u ? SpawnBit : 0u;
+    // A description past the table reads 0.
+    const uint known = min(description, DescriptionCount - 1u);
+    const uint spawns =
+        description < DescriptionCount && descriptions.w[64u * known + 4u] == 1u ? SpawnBit : 0u;
     const uint last = steps.w[emitter];
     uint count = 0u;
     if (!owned && (last & SpawnBit) == spawns) {

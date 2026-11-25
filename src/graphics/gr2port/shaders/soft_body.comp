@@ -61,11 +61,12 @@ void main() {
     Effectors effector = Effectors(effectors);
     Grid cells = Grid(grid);
     const uint mask = Word(job, 0x30u) & 0xffffu;
-    const uint spheres = Word(job, 0x31u);
+    // The game's sphere count is cut far above any cell's list, which keeps the loop short.
+    const uint spheres = min(Word(job, 0x31u), 1024u);
     for (uint s = 0u; s < spheres; s++) {
         const uint index = cell * GridEntries + s;
         const uint entry = index < GridCells * GridEntries ? cells.entries[index] : 0u;
-        if (entry >= effector.count) {
+        if (entry >= min(effector.count, MaxSpheres)) {
             break;
         }
         const uvec4 sphere = effector.spheres[2u * entry];
@@ -88,14 +89,18 @@ void main() {
     // Distance constraints: u32s of neighbour particle and half float rest length.
     Words constraints = Words(job.constraints + uint64_t(w0 >> 16) * 4u);
     const uint links = w1 & 0xffffu;
-    const uint iterations = Word(job, 0x2fu);
+    // The game's iteration count is cut far above any real one, which keeps the loop short.
+    const uint iterations = min(Word(job, 0x2fu), 256u);
     const float rest_scale = Constant(job, 0x38u);
     const float stiffness = Constant(job, 0x35u);
     for (uint k = 0u; k < iterations; k++) {
         vec3 sum = vec3(0.0);
         for (uint j = 0u; j < links; j++) {
             const uint link = constraints.words[j];
-            const vec3 d = state.particles[2u * (link & 0xffffu)].xyz - x;
+            // A neighbour past the job's particles reads 0, as the game's buffer load gives.
+            const uint neighbour = link & 0xffffu;
+            const vec3 at = state.particles[2u * min(neighbour, count - 1u)].xyz;
+            const vec3 d = (neighbour < count ? at : vec3(0.0)) - x;
             const float l2 = max(1e-6, dot(d, d));
             sum += 0.5 *
                    (d * ((sqrt(l2) - rest_scale * unpackHalf2x16(link).y) * inversesqrt(l2)));

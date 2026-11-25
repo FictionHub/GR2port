@@ -58,7 +58,8 @@ void main() {
     // Each neighbour pulls the position toward its centre and bends the normal away, by 1 less
     // the distance over its radius plus 4. The loop stays rolled, as in the game's program.
     const uint neighbours = words.words[NeighbourCount];
-    [[dont_unroll]] for (uint i = 0u; i < neighbours; i++) {
+    // The record's 96 words hold at most seven.
+    [[dont_unroll]] for (uint i = 0u; i < min(neighbours, 7u); i++) {
         const uint at = Neighbours + 4u * i;
         const vec3 toward = vec3(constants.constants[at], constants.constants[at + 1u],
                                  constants.constants[at + 2u]) -

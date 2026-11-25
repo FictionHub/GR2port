@@ -9,6 +9,7 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive : require
 
 layout(local_size_x = 64) in;
 layout(set = 0, binding = 0) uniform texture2D curve_texture;
@@ -28,6 +29,8 @@ layout(push_constant) uniform Push {
     uint64_t active_address;
 };
 
+#include "particle_pools.glsl"
+
 const uint ObjectBytes = 128u;
 const uint EffectBytes = 192u;
 const uint DescriptionBytes = 256u;
@@ -36,7 +39,9 @@ const uint DeadMark = 0x27bc86aau;
 const uint ChangedMark = 0x27bc86abu;
 
 uint Word(uint64_t address, uint record, uint size, uint byte_offset) {
-    return Words(address).words[(record * size + byte_offset) >> 2];
+    const uint count = RecordsOfSize(size);
+    const uint at = (min(record, count - 1u) * size + byte_offset) >> 2;
+    return record < count ? Words(address).words[at] : 0u;
 }
 
 float Float(uint64_t address, uint record, uint size, uint byte_offset) {
@@ -72,6 +77,10 @@ void main() {
             return;
         }
         object = listing.words[4u + object];
+    }
+    // An object past the pool is not run.
+    if (object >= EmitterCount) {
+        return;
     }
     const uint64_t in_address = emitter_in_address;
     const uint effect = Words(owner_in_address).words[object * 2u];

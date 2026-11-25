@@ -423,7 +423,8 @@ vec3 LitColor(BodyConstants body, vec3 color, vec3 s, vec3 view_position) {
     LightWords grid = LightWords(light_grid_address);
     LightWords lights = LightWords(point_lights_address);
     const uint count = floatBitsToUint(body.constants[PntLight]);
-    for (uint k = 0u; k < count; k++) {
+    // A cell holds 48 entries, the last after its lights ~0.
+    for (uint k = 0u; k < min(count, 48u); k++) {
         const uint at = (first + k) & 0x3fffffffu;
         const uint index = at < 829440u ? grid.words[min(at, 829439u)] : 0xffffffffu;
         if (index == 0xffffffffu) {
