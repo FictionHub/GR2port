@@ -21,6 +21,12 @@ void main() {
     const uint64_t vertices = draws.draws[gl_BaseInstance].vertices;
     const uint stride = draws.draws[gl_BaseInstance].stride;
     const uint bones = draws.draws[gl_BaseInstance].bones;
+    // A blanked record draws nothing.
+    if (!Loadable(vertices, bones, draws.draws[gl_BaseInstance].skin,
+                  draws.draws[gl_BaseInstance].palette)) {
+        gl_Position = vec4(0.0);
+        return;
+    }
     const vec3 normal = LoadNormal(vertices, stride, draws.draws[gl_BaseInstance].normal);
     vec3 model = LoadPosition(vertices, stride, draws.draws[gl_BaseInstance].position) +
                  draws.draws[gl_BaseInstance].world_view_projection[0][0] * normal;

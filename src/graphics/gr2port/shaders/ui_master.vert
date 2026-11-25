@@ -13,6 +13,11 @@ layout(location = 1) out vec4 attr1;
 
 void main() {
     UiDraw draw = Draw();
+    // A blanked block has no constants and draws nothing.
+    if (draw.vertex_constants == 0ul) {
+        gl_Position = vec4(0.0);
+        return;
+    }
     const uint vertex = Vertex(draw);
     gl_Position = ClipPosition(vec4(Attribute(draw, 0u, vertex).xyz, 1.0));
     attr1 = vec4(Attribute(draw, 1u, vertex).xy, 0.0, 0.0);

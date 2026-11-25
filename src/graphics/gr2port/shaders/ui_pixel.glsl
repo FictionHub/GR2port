@@ -18,7 +18,11 @@ UiDraw Draw() {
     return UiDraw(draws_address + uint64_t(draw_index) * DrawBytes);
 }
 
+// The draw's pixel constants. A blanked block has none, and its pixels are dropped.
 UiConstants PixelConstants(UiDraw draw) {
+    if (draw.pixel_constants == 0ul) {
+        discard;
+    }
     return UiConstants(draw.pixel_constants);
 }
 

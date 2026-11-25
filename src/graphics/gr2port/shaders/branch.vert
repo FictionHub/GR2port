@@ -32,10 +32,15 @@ void main() {
     const uint corner = QuadCorners[gl_VertexIndex % 6u];
     const uint quad = gl_VertexIndex / 6u;
     const uint segments = branches.branches[branch].segments;
+    const uint64_t vertices = branches.branches[branch].vertices;
+    // A blanked record draws nothing.
+    if (vertices == 0ul || segments == 0u) {
+        gl_Position = vec4(0.0);
+        return;
+    }
     const uint first_point = quad / segments * 3u;
     const uint side_index = corner & 1u;
     const float u = float(quad % segments + (corner >> 1u)) / float(segments);
-    const uint64_t vertices = branches.branches[branch].vertices;
     const uint stride = branches.branches[branch].stride;
     const vec3 p0 = Point(vertices, first_point, stride);
     const vec3 p1 = Point(vertices, first_point + 1u, stride);

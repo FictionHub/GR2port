@@ -18,6 +18,10 @@ layout(local_size_x = 1) in;
 void main() {
     Words constants = Words(constants_address);
     Words vertices = Words(vertices_address);
+    // A sample with no mesh vertices places nothing.
+    if (vertices_address == 0ul || constants.words[SampleVertices] == 0u) {
+        return;
+    }
     const uint object = constants.words[SampleObject];
     if (Word(emitter_out_address, object, 128u, ObjectPlacing) != 1u) {
         return;

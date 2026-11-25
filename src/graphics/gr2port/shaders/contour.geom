@@ -97,6 +97,12 @@ void Edge(int a, int adjacent, int b, int opposite, float turn) {
 // The game's G2_CH_Contour geometry program: triangles that face the eye give the silhouette edges
 // they share with triangles that do not.
 void main() {
+    // A blanked record's triangles give no ribbon: contour.vert drops their vertices.
+    const uint record = contour_index[0];
+    if (!Loadable(scene_contours.contours[record].vertices, scene_contours.contours[record].bones,
+                  scene_contours.contours[record].skin, scene_contours.contours[record].palette)) {
+        return;
+    }
     const vec3 p0 = Ndc(0);
     const vec3 p2 = Ndc(2);
     const vec3 p4 = Ndc(4);

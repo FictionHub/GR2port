@@ -20,13 +20,17 @@ layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Po
 
 void main() {
     SoftBodyJob job = Job();
+    // A blanked job has no state and writes nothing.
+    if (job.state == 0ul) {
+        return;
+    }
     State state = State(job.state);
     const uint v = gl_GlobalInvocationID.x;
     if (v == 0u) {
         state.valid = 1u;
     }
     // Write constants: the matrix, then vertex count and stride.
-    if (v >= job.write[4].x) {
+    if (v >= job.write[4].x || job.map == 0ul || job.destination == 0ul) {
         return;
     }
     const uint pair = Words(job.map).words[v >> 1u];

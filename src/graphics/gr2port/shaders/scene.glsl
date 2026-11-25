@@ -238,6 +238,9 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Ch
 };
 
 const uint CharacterBytes = 656u;
+// Scene::MaxCharacters and Scene::MaxGlassMaterials: the entries the packet's tables hold.
+const uint MaxCharacters = 1024u;
+const uint MaxGlassMaterials = 1024u;
 
 // The start of a G2_CH_Interior draw's Character: the game's pixel constants.
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer InteriorConstants {
@@ -492,6 +495,12 @@ vec4 BoneRow(Rows palette, uint bones, int bone, uint r) {
     const bool inside = uint(bone) < bones;
     const vec4 row = Rows(uint64_t(palette) + ((inside ? uint(bone) : 0u) * 48u + r * 16u)).rows[0];
     return inside ? row : vec4(0.0);
+}
+
+// Whether a record's vertices can be pulled: a blanked record has no vertex address, and a skinned
+// one needs its skin stream and palette too.
+bool Loadable(uint64_t vertices, uint bones, uint64_t skin, uint64_t palette) {
+    return vertices != 0ul && (bones == 0u || (skin != 0ul && palette != 0ul));
 }
 
 struct Caster {

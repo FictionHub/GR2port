@@ -13,6 +13,11 @@ layout(location = 1) out vec4 attr1;
 
 void main() {
     UiDraw draw = Draw();
+    // A blanked block has no constants and draws nothing.
+    if (draw.vertex_constants == 0ul) {
+        gl_Position = vec4(0.0);
+        return;
+    }
     UiConstants constants = VertexConstants(draw);
     const uint vertex = Vertex(draw);
     gl_Position = TransformPosition(constants, Attribute(draw, 0u, vertex).xyz);

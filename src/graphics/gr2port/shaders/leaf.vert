@@ -19,6 +19,11 @@ layout(location = 1) out uint leaf_index;
 void main() {
     Leaves leaves = scene_leaves;
     leaf_index = gl_BaseInstance;
+    // A blanked record loads nothing; leaf.tesc gives its patch no isolines.
+    if (leaves.leaves[gl_BaseInstance].vertices == 0ul) {
+        control_point = vec3(0.0);
+        return;
+    }
     control_point = LoadPosition(leaves.leaves[gl_BaseInstance].vertices,
                                  leaves.leaves[gl_BaseInstance].stride,
                                  leaves.leaves[gl_BaseInstance].position);

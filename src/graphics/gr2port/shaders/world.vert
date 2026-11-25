@@ -31,6 +31,11 @@ void main() {
     const uint bones = draws.draws[gl_BaseInstance].bones;
     const uint64_t skin = draws.draws[gl_BaseInstance].skin;
     const uint64_t palette = draws.draws[gl_BaseInstance].palette;
+    // A blanked record draws nothing.
+    if (!Loadable(vertices, bones, skin, palette)) {
+        gl_Position = vec4(0.0);
+        return;
+    }
     const vec3 unskinned = LoadPosition(vertices, stride, draws.draws[gl_BaseInstance].position);
     const vec3 model =
         bones != 0u ? SkinPosition(unskinned, skin, palette, bones) : unskinned;

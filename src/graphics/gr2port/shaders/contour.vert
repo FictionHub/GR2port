@@ -29,6 +29,11 @@ void main() {
     const uint bones = table.contours[gl_DrawID].bones;
     const uint64_t skin = table.contours[gl_DrawID].skin;
     const uint64_t palette = table.contours[gl_DrawID].palette;
+    // A blanked record draws nothing; contour.geom drops its triangles.
+    if (!Loadable(vertices, bones, skin, palette)) {
+        gl_Position = vec4(0.0);
+        return;
+    }
     const vec3 unskinned = LoadPosition(vertices, stride, table.contours[gl_DrawID].position);
     const vec3 model = bones != 0u ? SkinPosition(unskinned, skin, palette, bones) : unskinned;
     vec3 n = LoadNormal(vertices, stride, table.contours[gl_DrawID].normal);

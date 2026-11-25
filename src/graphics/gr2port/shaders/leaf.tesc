@@ -24,7 +24,10 @@ void main() {
     if (gl_InvocationID == 0) {
         Leaves leaves = scene_leaves;
         leaf = leaf_index[0];
-        gl_TessLevelOuter[0] = leaves.leaves[leaf_index[0]].isolines;
+        // A blanked record's patch has no isolines, which drops it.
+        gl_TessLevelOuter[0] = leaves.leaves[leaf_index[0]].vertices != 0ul
+                                   ? leaves.leaves[leaf_index[0]].isolines
+                                   : 0.0;
         gl_TessLevelOuter[1] = leaves.leaves[leaf_index[0]].tessellation;
     }
 }

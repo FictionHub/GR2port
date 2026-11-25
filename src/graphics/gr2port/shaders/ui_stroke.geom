@@ -204,6 +204,10 @@ vec4 CornerColour(uint index) {
 
 void main() {
     UiDraw draw = UiDraw(draws_address + uint64_t(draw_index_in[0]) * DrawBytes);
+    // A blanked block has no constants and gives no stroke.
+    if (draw.vertex_palette == 0ul || draw.vertex_constants == 0ul) {
+        return;
+    }
     UiConstants constants = UiConstants(draw.vertex_palette);
     if (!(constants.constants[16] != 0.0)) {
         return;

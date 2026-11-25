@@ -14,6 +14,10 @@ layout(location = 1) out vec4 ring1;
 
 void main() {
     UiDraw draw = Draw();
+    // A blanked block has no constants; ui_stroke.geom gives it no stroke.
+    if (draw.vertex_constants == 0ul) {
+        return;
+    }
     const uint vertex = Vertex(draw);
     ring0.xyz = Attribute(draw, 0u, vertex).xyz;
     ring1 = ConstantVec4(VertexConstants(draw), 0u) * Attribute(draw, 2u, vertex);

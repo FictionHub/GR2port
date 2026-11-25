@@ -23,6 +23,13 @@ layout(location = 2) flat out float alpha_reference;
 void main() {
     Casters casters = scene_casters;
     const uint i = gl_BaseInstance;
+    // A blanked record, or a caster of a table past the cascade's, draws nothing.
+    if (!Loadable(casters.casters[i].vertices, casters.casters[i].bones, casters.casters[i].skin,
+                  casters.casters[i].palette) ||
+        casters.casters[i].table >= CasterTables) {
+        gl_Position = vec4(0.0);
+        return;
+    }
     vec3 model = LoadPosition(casters.casters[i].vertices, casters.casters[i].stride,
                               casters.casters[i].position);
     const uint bones = casters.casters[i].bones;
