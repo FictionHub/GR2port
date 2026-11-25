@@ -1346,8 +1346,8 @@ public:
         u32 depth = 0;
         stack[depth++] = {0, 0, mesh.chunks};
         std::array<std::array<u32, 2>, MaxRuns> runs;
-        // The view distance of each run's nearest box corner.
-        std::array<float, MaxRuns> distances;
+        // The view distance of the nearest box corner of the chunks drawn.
+        float nearest = std::numeric_limits<float>::infinity();
         u32 run_count = 0;
         while (depth != 0) {
             const Node node = stack[--depth];
@@ -1391,32 +1391,30 @@ public:
                 corner +=
                     double{m[4 * k + 3]} * centre[k] - std::abs(double{m[4 * k + 3]}) * half[k];
             }
-            const float distance = std::isfinite(corner) ? static_cast<float>(corner) : m[15];
+            nearest = std::min(nearest, std::isfinite(corner) ? static_cast<float>(corner) : m[15]);
             if (run_count != 0 && (runs[run_count - 1][1] == low || run_count == MaxRuns)) {
                 // The next chunks, or with no room for a run, the chunks between too.
                 runs[run_count - 1][1] = high;
-                distances[run_count - 1] = std::min(distances[run_count - 1], distance);
             } else {
-                distances[run_count] = distance;
                 runs[run_count++] = {low, high};
             }
         }
         // Past the room for runs, one command draws from the first run to the last.
         if (run_count > 1 && header.view_runs + run_count - 1 > Scene::g_room.draws) {
             runs[0][1] = runs[run_count - 1][1];
-            distances[0] = *std::min_element(distances.begin(), distances.begin() + run_count);
             run_count = 1;
         }
         if (run_count != 0) {
             header.view_runs += run_count - 1;
         }
+        // The draw's runs share one step, so they stay in the order of its indices.
+        const u32 step = DepthStep(nearest);
         u32 drawn = 0;
         for (u32 run = 0; run < run_count; run++) {
             const u32 start = std::max(first, runs[run][0] * Meshes::ChunkIndices);
             const u32 end = std::min(first + count, runs[run][1] * Meshes::ChunkIndices);
             drawn += end - start;
-            AddDrawCommand(list, mesh.first_index + start, end - start, draw,
-                           DepthStep(distances[run]));
+            AddDrawCommand(list, mesh.first_index + start, end - start, draw, step);
         }
         header.view_culled_indices += count - drawn;
         return true;
