@@ -40,7 +40,8 @@ void main() {
           constants.constants[PunchThrough + 1u])) {
         const vec2 texcoord = attr2.zw;
         const vec3 normal_map =
-            textureLod(sampler2D(textures[nonuniformEXT(normal_handle)], texture_sampler),
+            textureLod(sampler2D(textures[nonuniformEXT(normal_handle & TextureSlotMask)],
+                                 texture_sampler),
                        texcoord, 0.0)
                 .xyz;
         const vec3 surface = Normalized(CoreSurface(constants, attr0, attr1.xyz, normal_map));
@@ -49,9 +50,9 @@ void main() {
         const float cosine = surface.z * view.z + (surface.y * view.y + view.x * surface.x);
         const vec3 ramp = CoreRamp(constants, clamp(-tex_scale * cosine + tex_scale, 0.0, 1.0));
 
-        const vec4 color =
-            texture(sampler2D(textures[nonuniformEXT(color_handle)], texture_sampler),
-                    vec2(LowBitCleared(texcoord.x), texcoord.y));
+        const vec4 color = texture(
+            sampler2D(textures[nonuniformEXT(color_handle & TextureSlotMask)], texture_sampler),
+            vec2(LowBitCleared(texcoord.x), texcoord.y));
         // The light reflected about the surface's normal against the view, in the game's order.
         const vec3 light = CoreColor(constants, LightWorldDir);
         const float twice =

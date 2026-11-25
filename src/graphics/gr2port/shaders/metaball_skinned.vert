@@ -47,10 +47,11 @@ void main() {
                             (1.0 / 1024.0) * (constants.constants[DisplacementScale + 1u] *
                                               float(texcoord.y)) +
                                 constants.constants[DisplacementOffset + 1u]);
-    const float height = textureLod(sampler2D(textures[nonuniformEXT(mesh.displacement)],
-                                              texture_sampler),
-                                    place, 0.0)
-                             .x;
+    const float height =
+        textureLod(sampler2D(textures[nonuniformEXT(mesh.displacement & TextureSlotMask)],
+                             texture_sampler),
+                   place, 0.0)
+            .x;
     vec3 bent = TransformDirection(constants, World, skinned_normal);
     const float amount = constants.constants[DisplacementIntensity] * height;
     vec3 world = TransformPoint(constants, World, bent * amount + skinned);

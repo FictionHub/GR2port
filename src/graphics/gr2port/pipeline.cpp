@@ -25,6 +25,7 @@
 #include "common/logging/log.h"
 #include "common/path_util.h"
 #include "graphics/gr2port/pipeline.h"
+#include "graphics/gr2port/textures.h"
 
 namespace Gr2Port {
 
@@ -63,10 +64,42 @@ constexpr std::chrono::seconds LongBuild{10};
 // game starts after ... pipelines" of a log gives the number to keep here.
 constexpr u32 ExpectedPipelines = 338;
 
+// The specialization constant id of shaders/texture_slots.glsl's slot mask.
+constexpr u32 TextureSlotsId = 100;
+
+// The code with the texture array's slot mask set to the device's slot count less one, as a
+// specialization sets it. Empty when the code has no such constant.
+std::vector<u32> WithTextureSlots(std::span<const u32> code) {
+    constexpr u32 OpDecorate = 71;
+    constexpr u32 OpSpecConstant = 50;
+    constexpr u32 SpecId = 1;
+    constexpr std::size_t HeaderWords = 5;
+    u32 target = 0;
+    for (std::size_t i = HeaderWords; i < code.size();) {
+        const u32 words = code[i] >> 16;
+        const u32 opcode = code[i] & 0xffff;
+        if (words == 0 || i + words > code.size()) {
+            break;
+        }
+        if (opcode == OpDecorate && words == 4 && code[i + 2] == SpecId &&
+            code[i + 3] == TextureSlotsId) {
+            target = code[i + 1];
+        } else if (opcode == OpSpecConstant && words == 4 && target != 0 && code[i + 2] == target) {
+            std::vector<u32> result(code.begin(), code.end());
+            result[i + 3] = Textures::Slots() - 1;
+            return result;
+        }
+        i += words;
+    }
+    return {};
+}
+
 vk::ShaderModule CreateModule(const Device& d, std::span<const u32> code) {
+    const std::vector<u32> masked = WithTextureSlots(code);
+    const std::span<const u32> used = masked.empty() ? code : std::span<const u32>(masked);
     const vk::ShaderModuleCreateInfo info{
-        .codeSize = code.size_bytes(),
-        .pCode = code.data(),
+        .codeSize = used.size_bytes(),
+        .pCode = used.data(),
     };
     return d.device.createShaderModule(info, nullptr, d.dispatch).value;
 }

@@ -3,7 +3,9 @@
 
 #version 460
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_GOOGLE_include_directive : require
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
@@ -18,5 +20,7 @@ layout(location = 0) out vec4 frag_color;
 
 // As the emulator's ImGui backend: the vertex colour times the texture, bilinear and repeating.
 void main() {
-    frag_color = color * texture(sampler2D(textures[texture_handle], texture_sampler), texcoord);
+    frag_color =
+        color *
+        texture(sampler2D(textures[texture_handle & TextureSlotMask], texture_sampler), texcoord);
 }

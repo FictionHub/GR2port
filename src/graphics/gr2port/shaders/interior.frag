@@ -7,6 +7,7 @@
 
 #include "scene.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform textureCube cubes[];
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
 
@@ -29,7 +30,8 @@ vec4 CubeMap(uint handle, vec3 direction) {
     if (handle == 0u) {
         return vec4(0.0);
     }
-    return texture(samplerCube(cubes[nonuniformEXT(handle)], clamp_sampler), direction);
+    return texture(samplerCube(cubes[nonuniformEXT(handle & TextureSlotMask)], clamp_sampler),
+                   direction);
 }
 
 // The share of a cube map's colour scale at a texel's alpha.
@@ -68,7 +70,8 @@ void main() {
     vec3 radiance = vec3(0.0);
     if (light.radiance[0] != 0u) {
         radiance =
-            textureLod(samplerCube(cubes[light.radiance[0]], clamp_sampler), reflect(ray, n), lod)
+            textureLod(samplerCube(cubes[light.radiance[0] & TextureSlotMask], clamp_sampler),
+                       reflect(ray, n), lod)
                 .rgb;
     }
     const vec3 fresnel =

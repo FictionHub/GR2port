@@ -9,6 +9,7 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_GOOGLE_include_directive : require
 
 // Scene::CharacterGlassDraw: 80 words of vertex constants, 28 of pixel constants, then the mesh,
 // whose maps hold the colour, normal and reflection maps.
@@ -31,6 +32,7 @@ const uint ColorMap = 0u;
 const uint NormalMap = 1u;
 const uint ReflectionMap = 2u;
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 // The first two shadow cascades' layers and the last cascade's map, with the compare sampler.
@@ -141,7 +143,8 @@ void main() {
     // tangent, times the tangent's sign.
     const vec2 texcoord = attr5.zw;
     const vec4 normal_map = texture(
-        sampler2D(textures[nonuniformEXT(mesh.maps[NormalMap])], texture_sampler), texcoord);
+        sampler2D(textures[nonuniformEXT(mesh.maps[NormalMap] & TextureSlotMask)], texture_sampler),
+        texcoord);
     const vec3 tangent = Normalized(attr0.xyz);
     const vec3 normal = Normalized(attr4.xyz);
     const float handedness = float((0.0 < attr0.w ? 1 : 0) - (0.0 > attr0.w ? 1 : 0));
@@ -180,12 +183,14 @@ void main() {
     const float light = max(0.2, lit);
     const vec3 reflection =
         pixel.constants[ReflectionIntensity] *
-        texture(sampler2D(textures[nonuniformEXT(mesh.maps[ReflectionMap])], texture_sampler),
+        texture(sampler2D(textures[nonuniformEXT(mesh.maps[ReflectionMap] & TextureSlotMask)],
+                          texture_sampler),
                 reflection_place)
             .rgb;
     const float rim = pixel.constants[HighlightIntensity] * highlight;
     const vec4 color = texture(
-        sampler2D(textures[nonuniformEXT(mesh.maps[ColorMap])], texture_sampler), texcoord);
+        sampler2D(textures[nonuniformEXT(mesh.maps[ColorMap] & TextureSlotMask)], texture_sampler),
+        texcoord);
     const float luminance = reflection.b * 0.114 + (reflection.g * 0.587 + 0.299 * reflection.r);
     const float red = (pixel.constants[LightColor] * light) *
                       (pixel.constants[LightColor] * rim +

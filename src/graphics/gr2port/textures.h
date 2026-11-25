@@ -81,6 +81,10 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed);
 vk::DescriptorSetLayout SetLayout();
 vk::DescriptorSet Set();
 
+/// The texture array's slot count, a power of two, once the set is made. Every slot holds a
+/// texture, white until one is installed.
+u32 Slots();
+
 struct Stats {
     u32 textures;
     u32 pending;

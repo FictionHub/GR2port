@@ -40,6 +40,7 @@ const uint TexScale = 13u;
 const uint GlowScale = 14u;
 const uint PunchThrough = 24u;
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 layout(push_constant) uniform Push {

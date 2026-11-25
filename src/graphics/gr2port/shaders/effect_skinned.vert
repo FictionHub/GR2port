@@ -12,6 +12,7 @@
 #include "effect_mesh.glsl"
 #include "skin_palette.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 layout(push_constant) uniform Push {
@@ -70,7 +71,8 @@ void main() {
                  (1.0 / 1024.0) * (constants.constants[DispUVRepeat + 1u] * float(texcoord1.y)) +
                      constants.constants[DispUVOffset + 1u]);
         const float height =
-            textureLod(sampler2D(textures[nonuniformEXT(mesh.displacement)], texture_sampler),
+            textureLod(sampler2D(textures[nonuniformEXT(mesh.displacement & TextureSlotMask)],
+                                 texture_sampler),
                        place, 0.0)
                 .x;
         position = (constants.constants[DispIntensity] * height) * normal + position;

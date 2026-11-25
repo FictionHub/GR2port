@@ -32,9 +32,10 @@ const uint LayeredNormalMap = 4u;
 // The game has flat normals where the layered normal map's handle is 0.
 vec4 SampleLayeredNormalMap(ParticleMaterial material, vec2 place) {
     const uint handle = material.maps[LayeredNormalMap];
-    return handle == 0u
-               ? vec4(0.50196, 0.50196, 1.0, 1.0)
-               : texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), place);
+    return handle == 0u ? vec4(0.50196, 0.50196, 1.0, 1.0)
+                        : texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)],
+                                            texture_sampler),
+                                  place);
 }
 
 // The normal maps' normals, stored from 0 to 1, mixed by the weight in the game's program's

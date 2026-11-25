@@ -11,6 +11,7 @@ layout(local_size_x = 8, local_size_y = 8) in;
 
 layout(set = 0, binding = 0) uniform sampler3D fbm;
 layout(set = 0, binding = 1, r8) uniform writeonly image3D map;
+#include "texture_slots.glsl"
 layout(set = 1, binding = 0) uniform texture2D textures[];
 layout(set = 1, binding = 1) uniform sampler texture_sampler;
 
@@ -39,9 +40,11 @@ void main() {
     // The game's default texture is white until the cumulus texture loads.
     const uint handle = fog.bake_cumulus[layer];
     const float cumulus =
-        handle != 0u
-            ? textureLod(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), uv, 0.0).r
-            : 1.0;
+        handle != 0u ? textureLod(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)],
+                                            texture_sampler),
+                                  uv, 0.0)
+                           .r
+                     : 1.0;
     const float h = humidity.z + humidity.w * cumulus + edge * edge_humidity;
     const float kept = clamp((noise - (1.0 - h)) / edges.x, 0.0, 1.0);
     imageStore(map, texel, vec4(pow(kept, edges.y)));

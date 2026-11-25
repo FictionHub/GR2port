@@ -6,6 +6,7 @@
 #include "scene.glsl"
 #include "surface.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform textureCube cubes[];
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
 
@@ -178,7 +179,7 @@ void WriteRooms(uint index, uint color_handle, vec3 color_scale, vec3 n) {
     vec4 room = vec4(0.0);
     const uint room_map = table.rooms[index].room_map;
     if (room_map != 0u) {
-        room = texture(samplerCube(cubes[nonuniformEXT(room_map)], clamp_sampler),
+        room = texture(samplerCube(cubes[nonuniformEXT(room_map & TextureSlotMask)], clamp_sampler),
                        place + leave * ray, table.rooms[index].smokiness);
     }
     const vec4 plane = table.rooms[index].plane;

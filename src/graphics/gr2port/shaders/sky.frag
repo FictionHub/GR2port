@@ -8,6 +8,7 @@
 #include "scene.glsl"
 
 // Cube maps and 2D textures share the texture array; a handle's kind picks the declaration.
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 0) uniform textureCube cubes[];
 layout(set = 0, binding = 1) uniform sampler repeat_sampler;
@@ -22,7 +23,7 @@ layout(location = 0) in vec2 position;
 layout(location = 0) out vec4 color;
 
 vec3 CubeMap(uint index, vec3 ray) {
-    return textureLod(samplerCube(cubes[sky.cubes[index]], clamp_sampler),
+    return textureLod(samplerCube(cubes[sky.cubes[index] & TextureSlotMask], clamp_sampler),
                       mat3(sky.transforms[index]) * ray, 0.0)
         .rgb;
 }
@@ -30,9 +31,10 @@ vec3 CubeMap(uint index, vec3 ray) {
 // A layer's cloud density at a point of the plane the clouds lie in, fading with distance.
 float CloudLayer(vec4 layer, vec2 plane) {
     const vec2 scaled = layer.x * plane;
-    const float density = textureLod(sampler2D(textures[sky.cloud], repeat_sampler),
-                                     (layer.yz + scaled) * layer.w, 0.0)
-                              .r;
+    const float density =
+        textureLod(sampler2D(textures[sky.cloud & TextureSlotMask], repeat_sampler),
+                   (layer.yz + scaled) * layer.w, 0.0)
+            .r;
     const float fade = sky.cloud_fade.y * (length(scaled) - sky.cloud_fade.x);
     return density * (1.0 - clamp(fade, 0.0, 1.0));
 }

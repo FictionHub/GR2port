@@ -8,6 +8,7 @@
 
 #include "scene.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
@@ -23,7 +24,8 @@ layout(location = 3) in vec2 texcoord;
 layout(location = 7) flat in uint draw_index;
 
 vec4 Sample(uint handle, vec2 uv) {
-    return texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), uv);
+    return texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                   uv);
 }
 
 // A character's depth for the ambient occlusion: the pixels G2_CH_Main keeps, past its alpha step

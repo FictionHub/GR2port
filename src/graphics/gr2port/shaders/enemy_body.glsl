@@ -8,6 +8,7 @@
 
 #include "enemy_vertex.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
@@ -40,10 +41,11 @@ vec3 Displaced(EnemyConstants constants, EnemyMesh mesh, vec3 position, vec3 nor
                             constants.constants[Texture + 1u] * texcoord.x +
                                 (constants.constants[Texture + 5u] * texcoord.y +
                                  constants.constants[Texture + 13u]));
-    const float height = textureLod(sampler2D(textures[nonuniformEXT(mesh.displacement)],
-                                              texture_sampler),
-                                    place, 0.0)
-                             .x;
+    const float height =
+        textureLod(sampler2D(textures[nonuniformEXT(mesh.displacement & TextureSlotMask)],
+                             texture_sampler),
+                   place, 0.0)
+            .x;
     const float amount = constants.constants[DispIntensity] * red * (2.0 * height + -1.0);
     return normal * amount + position;
 }

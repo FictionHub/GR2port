@@ -100,6 +100,7 @@ const uint MaskDistortionScale = 123u;
 // u_nFlags: bit 5 lights the body.
 const uint FlagLit = 0x20u;
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
@@ -199,8 +200,9 @@ vec2 Distortion(BodyConstants body, uint handle, vec2 texcoord3) {
     const vec2 place =
         vec2(body.constants[UVUVRepeat] * texcoord3.x + body.constants[UVUVOffset],
              texcoord3.y * body.constants[UVUVRepeat + 1u] + body.constants[UVUVOffset + 1u]);
-    return 2.0 * texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler),
-                         vec2(LowBitCleared(place.x), place.y))
+    return 2.0 * texture(
+                     sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                     vec2(LowBitCleared(place.x), place.y))
                      .xy +
            -1.0;
 }
@@ -255,9 +257,9 @@ InnerLayer Inner(BodyConstants body, uint handle, vec3 normal, vec3 position, ve
             const vec2 place =
                 Pair(body, InnerUVRepeat) * distorted +
                 (vec2(along_tangent, along_bitangent) * scale + Pair(body, InnerUVOffset));
-            const vec4 map =
-                texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler),
-                        vec2(LowBitCleared(place.x), place.y));
+            const vec4 map = texture(
+                sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                vec2(LowBitCleared(place.x), place.y));
             const float smooth_start =
                 uintBitsToFloat(0x3c8efa35u) * -body.constants[SmoothAngle] + clip;
             const float inverse = 1.0 / (clip - smooth_start);
@@ -332,10 +334,12 @@ AddLayer Added(BodyConstants body, uint add_handle, uint add2_handle, float inne
     const vec2 add_place =
         Pair(body, AddUVRepeat) * (body.constants[OuterDistortionScale] * distortion + texcoord3) +
         Pair(body, AddUVOffset);
-    const vec4 add2 = texture(sampler2D(textures[nonuniformEXT(add2_handle)], texture_sampler),
-                              vec2(LowBitCleared(add2_place.x), add2_place.y));
-    const vec4 add = texture(sampler2D(textures[nonuniformEXT(add_handle)], texture_sampler),
-                             vec2(LowBitCleared(add_place.x), add_place.y));
+    const vec4 add2 =
+        texture(sampler2D(textures[nonuniformEXT(add2_handle & TextureSlotMask)], texture_sampler),
+                vec2(LowBitCleared(add2_place.x), add2_place.y));
+    const vec4 add =
+        texture(sampler2D(textures[nonuniformEXT(add_handle & TextureSlotMask)], texture_sampler),
+                vec2(LowBitCleared(add_place.x), add_place.y));
     AddLayer added;
     added.alpha = min(uintBitsToFloat(0x3f7fbe77u),
                       body.constants[AlphaScale] * max(max(add2.a, inner_alpha), add.a));

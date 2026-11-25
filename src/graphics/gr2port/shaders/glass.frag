@@ -8,6 +8,7 @@
 #include "scene.glsl"
 #include "surface.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform textureCube cubes[];
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
 layout(set = 1, binding = 0) uniform sampler2DArrayShadow shadow_map;
@@ -126,7 +127,9 @@ void main() {
             reflect(normalize(view_to_world * ray), normalize(view_to_world * n));
         const float lod = clamp(6.0 + 1.15 * log2(rough), 0.0, 6.5);
         radiance =
-            textureLod(samplerCube(cubes[light.radiance[0]], clamp_sampler), reflected, lod).rgb;
+            textureLod(samplerCube(cubes[light.radiance[0] & TextureSlotMask], clamp_sampler),
+                       reflected, lod)
+                .rgb;
     }
 
     const vec3 seen = materials.materials[index].translucency.rgb * behind;

@@ -83,8 +83,9 @@ vec4 EffectTexel(EffectLayers layers, uint map, bool first) {
     const float u = EffectConstant(words + 2u) * uv.x + EffectConstant(words);
     const float v =
         EffectFlippedSign(EffectConstant(words + 3u) * uv.y + EffectConstant(words + 1u));
-    vec4 texel = textureLod(sampler2D(textures[nonuniformEXT(EffectMap(map))], texture_sampler),
-                            vec2(u, v), 0.0);
+    vec4 texel = textureLod(
+        sampler2D(textures[nonuniformEXT(EffectMap(map) & TextureSlotMask)], texture_sampler),
+        vec2(u, v), 0.0);
 #ifndef EFFECT_NO_RED_FLAGS
     if ((floatBitsToUint(EffectConstant(EffectFlags)) & (EffectFlagRed << map)) != 0u) {
         texel.yz = texel.xx;
@@ -301,8 +302,11 @@ void EffectOtherMethod(inout EffectLayers layers, uint map, uint method, vec4 te
                              scale * (0.01 * pixel.place.y) + pixel.world.y);
         const float edge = (alpha_scale * layers.alpha) * layers.fresnel;
         layers.fresnel = 1.0;
-        const float cut = textureLod(sampler2D(textures[nonuniformEXT(EffectMap(map))],
-                                               texture_sampler), at, 0.0).x;
+        const float cut =
+            textureLod(sampler2D(textures[nonuniformEXT(EffectMap(map) & TextureSlotMask)],
+                                 texture_sampler),
+                       at, 0.0)
+                .x;
         if (edge <= cut) {
             discard;
         }

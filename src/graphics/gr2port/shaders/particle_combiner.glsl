@@ -11,6 +11,7 @@
 
 #include "particle_pixel.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
@@ -51,19 +52,22 @@ vec4 CombinerMap(ParticleDraw draw, uint map, vec2 place) {
 #ifdef PARTICLE_COMBINER_NEAREST_MAP3
     // The shadow programs read map 3 through the depth's sampler (nearest, clamped).
     if (map == 3u) {
-        const vec4 texel =
-            texture(sampler2D(textures[nonuniformEXT(handle)], depth_sampler), at, 0.0);
+        const vec4 texel = texture(
+            sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], depth_sampler), at, 0.0);
         return bitfieldExtract(draw.gpufx_used[2], 0, 1) != 0u ? vec4(1.0, 1.0, 1.0, texel.x)
                                                                 : texel;
     }
 #endif
     vec4 color;
     if (bitfieldExtract(draw.gpufx_used[2], 3 - int(map), 1) != 0u) {
-        color = vec4(1.0, 1.0, 1.0,
-                     texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), at, 0.0)
-                         .x);
+        color = vec4(
+            1.0, 1.0, 1.0,
+            texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                    at, 0.0)
+                .x);
     } else {
-        color = texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), at, 0.0);
+        color = texture(
+            sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler), at, 0.0);
     }
     return color;
 }

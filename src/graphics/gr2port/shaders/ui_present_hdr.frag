@@ -7,6 +7,7 @@
 
 #include "hdr.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 1, binding = 0) uniform sampler samplers[4];
 // The world's colour as Composite drew it, and its gain.
@@ -30,7 +31,8 @@ layout(location = 0) out vec4 color;
 // alpha alone, so the colour it leaves also caps that part.
 void main() {
     const vec2 texcoord = 0.5 * position + 0.5;
-    const vec4 shown = texture(sampler2D(textures[picture], samplers[1]), texcoord);
+    const vec4 shown =
+        texture(sampler2D(textures[picture & TextureSlotMask], samplers[1]), texcoord);
     vec3 light = DecodeSrgb(shown.rgb);
     if (has_world != 0u) {
         const vec4 drawn = texture(sampler2D(world, samplers[1]), texcoord);

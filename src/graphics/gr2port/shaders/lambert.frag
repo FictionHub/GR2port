@@ -7,6 +7,7 @@
 
 #include "scene.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 layout(set = 1, binding = 0) uniform sampler2DArrayShadow shadow_map;
@@ -45,7 +46,9 @@ void main() {
         LambertConstants(uint64_t(scene_characters) + uint64_t(index) * CharacterBytes);
     const uint handle = scene_draws.draws[draw_index].texture;
     const vec3 albedo =
-        texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), texcoord).rgb;
+        texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                texcoord)
+            .rgb;
     const float half_lambert = 0.5 - 0.5 * dot(normalize(model_normal), m.light_direction.xyz);
     color = vec4(albedo * m.color_scale.rgb * (0.7 * half_lambert * KeyShadow() + 0.2), 1.0);
 }

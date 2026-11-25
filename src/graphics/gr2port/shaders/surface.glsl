@@ -3,11 +3,13 @@
 
 // What the fragment shaders of the world's surfaces share.
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
 vec4 Sample(uint handle, vec2 uv) {
-    return texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), uv);
+    return texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                   uv);
 }
 
 vec2 Transformed(vec4 transform, vec2 uv) {
@@ -41,8 +43,10 @@ vec2 Parallax(uint handle, vec2 start, vec2 direction, float facing) {
     float last_height = 1.0;
     for (int i = 0; i < steps; i++) {
         uv -= direction * step_size;
-        height =
-            textureGrad(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), uv, dx, dy).a;
+        height = textureGrad(
+                     sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                     uv, dx, dy)
+                     .a;
         level -= step_size;
         if (height > level) {
             break;

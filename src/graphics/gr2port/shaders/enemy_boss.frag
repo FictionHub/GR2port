@@ -46,16 +46,18 @@ void main() {
         const vec2 distortion = Distortion(body, distortion_handle, texcoord3);
         const InnerLayer inner = Inner(body, inner_handle, Normalized(attr1.xyz), attr6.yzw,
                                        attr2, attr1.w, distortion, texcoord0);
-        const vec4 normal_map =
-            textureLod(sampler2D(textures[nonuniformEXT(normal_handle)], texture_sampler),
-                       Pair(body, NormalUVRepeat) * texcoord0 + Pair(body, NormalUVOffset), 0.0);
+        const vec4 normal_map = textureLod(
+            sampler2D(textures[nonuniformEXT(normal_handle & TextureSlotMask)], texture_sampler),
+            Pair(body, NormalUVRepeat) * texcoord0 + Pair(body, NormalUVOffset), 0.0);
         const vec3 boss_map =
-            textureLod(sampler2D(textures[nonuniformEXT(normal_boss_handle)], texture_sampler),
+            textureLod(sampler2D(textures[nonuniformEXT(normal_boss_handle & TextureSlotMask)],
+                                 texture_sampler),
                        Pair(body, NormalBossUVRepeat) * texcoord1 + Pair(body, NormalBossUVOffset),
                        0.0)
                 .rgb;
         const float mask =
-            textureLod(sampler2D(textures[nonuniformEXT(mask_boss_handle)], texture_sampler),
+            textureLod(sampler2D(textures[nonuniformEXT(mask_boss_handle & TextureSlotMask)],
+                                 texture_sampler),
                        Pair(body, MaskBossUVRepeat) *
                                (body.constants[MaskDistortionScale] * distortion + texcoord2) +
                            Pair(body, MaskBossUVOffset),

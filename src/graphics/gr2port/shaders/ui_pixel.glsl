@@ -9,6 +9,7 @@
 
 #include "ui_draw.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 1, binding = 0) uniform sampler samplers[4];
 
@@ -37,15 +38,15 @@ uvec2 SecondTexture(UiDraw draw) {
 }
 
 vec4 Sample(uvec2 texture_sampler, vec2 position) {
-    return texture(sampler2D(textures[nonuniformEXT(texture_sampler.x)],
-                             samplers[nonuniformEXT(texture_sampler.y)]),
+    return texture(sampler2D(textures[nonuniformEXT(texture_sampler.x & TextureSlotMask)],
+                             samplers[nonuniformEXT(texture_sampler.y & 3u)]),
                    position);
 }
 
 // A read of the texture's top level.
 vec4 SampleTop(uvec2 texture_sampler, vec2 position) {
-    return textureLod(sampler2D(textures[nonuniformEXT(texture_sampler.x)],
-                                samplers[nonuniformEXT(texture_sampler.y)]),
+    return textureLod(sampler2D(textures[nonuniformEXT(texture_sampler.x & TextureSlotMask)],
+                                samplers[nonuniformEXT(texture_sampler.y & 3u)]),
                       position, 0.0);
 }
 

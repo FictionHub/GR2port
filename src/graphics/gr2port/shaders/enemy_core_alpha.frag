@@ -39,7 +39,8 @@ void main() {
           constants.constants[PunchThrough + 1u])) {
         const vec2 texcoord = attr2.zw;
         const vec3 normal_map =
-            textureLod(sampler2D(textures[nonuniformEXT(normal_handle)], texture_sampler),
+            textureLod(sampler2D(textures[nonuniformEXT(normal_handle & TextureSlotMask)],
+                                 texture_sampler),
                        texcoord, 0.0)
                 .xyz;
         const vec3 surface = CoreSurface(constants, attr0, attr1.xyz, normal_map);
@@ -53,9 +54,9 @@ void main() {
         const float x = clamp(-scale * facing + constants.constants[TexScale], 0.0, 1.0);
         const vec3 ramp = CoreRamp(constants, x);
 
-        const vec4 color =
-            texture(sampler2D(textures[nonuniformEXT(color_handle)], texture_sampler),
-                    vec2(LowBitCleared(texcoord.x), texcoord.y));
+        const vec4 color = texture(
+            sampler2D(textures[nonuniformEXT(color_handle & TextureSlotMask)], texture_sampler),
+            vec2(LowBitCleared(texcoord.x), texcoord.y));
         const float glow = constants.constants[GlowScale];
         const vec3 mixed = color.a * (-glow * ramp + color.rgb) + glow * ramp;
         const float alpha = CoreAlpha(draw + CoreAlphaOffset).alpha.x;

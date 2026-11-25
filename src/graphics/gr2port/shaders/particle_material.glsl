@@ -8,6 +8,7 @@
 
 #include "particle_pixel.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
@@ -27,15 +28,18 @@ ParticleMaterial Material() {
 }
 
 vec4 SampleMap(ParticleMaterial material, uint map, vec2 place) {
-    return texture(sampler2D(textures[nonuniformEXT(material.maps[map])], texture_sampler), place);
+    return texture(
+        sampler2D(textures[nonuniformEXT(material.maps[map] & TextureSlotMask)], texture_sampler),
+        place);
 }
 
 // The game has flat normals where the normal map's handle is 0.
 vec4 SampleNormalMap(ParticleMaterial material, vec2 place) {
     const uint handle = material.maps[NormalMap];
-    return handle == 0u
-               ? vec4(0.50196, 0.50196, 1.0, 1.0)
-               : texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), place);
+    return handle == 0u ? vec4(0.50196, 0.50196, 1.0, 1.0)
+                        : texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)],
+                                            texture_sampler),
+                                  place);
 }
 
 // The vector over its length, in the order of operations of the game's programs.

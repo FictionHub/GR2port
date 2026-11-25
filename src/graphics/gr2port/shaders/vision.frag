@@ -21,9 +21,12 @@ layout(location = 0) out vec4 color;
 
 // A texel of the screen at uv, as a point sampler reads it.
 float ScreenTexel(uint handle, vec2 uv) {
-    const ivec2 size = textureSize(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), 0);
+    const ivec2 size = textureSize(
+        sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler), 0);
     const ivec2 texel = clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
-    return texelFetch(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), texel, 0).r;
+    return texelFetch(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                      texel, 0)
+        .r;
 }
 
 // A movie frame in the game's surface: luma in the top two thirds, then rows of chroma pairs, U

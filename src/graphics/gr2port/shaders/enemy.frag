@@ -44,9 +44,9 @@ void main() {
         const vec2 distortion = Distortion(body, distortion_handle, texcoord3);
         const InnerLayer inner = Inner(body, inner_handle, Normalized(attr1.xyz), attr5.yzw,
                                        attr2, attr1.w, distortion, texcoord0);
-        const vec4 normal_map =
-            textureLod(sampler2D(textures[nonuniformEXT(normal_handle)], texture_sampler),
-                       Pair(body, NormalUVRepeat) * texcoord0 + Pair(body, NormalUVOffset), 0.0);
+        const vec4 normal_map = textureLod(
+            sampler2D(textures[nonuniformEXT(normal_handle & TextureSlotMask)], texture_sampler),
+            Pair(body, NormalUVRepeat) * texcoord0 + Pair(body, NormalUVOffset), 0.0);
         const vec3 surface = Normalized(
             ViewSurface(body.constants[ColorScaleNormal], normal_map.rgb, attr0, attr3.xyz));
         vec3 color = SurfaceColor(body, Normalized(vec3(attr4.zw, attr5.x)), surface.z);

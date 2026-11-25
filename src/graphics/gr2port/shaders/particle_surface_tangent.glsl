@@ -55,11 +55,12 @@ vec2 ParallaxPlace(ParticleMaterial material, vec2 place, vec2 view, float norma
     float above = 1.0;
     for (int i = 0; i < steps; i++) {
         at -= step_offset;
-        height = handle == 0u ? 1.0
-                              : textureGrad(sampler2D(textures[nonuniformEXT(handle)],
-                                                      texture_sampler),
-                                            at, dx, dy)
-                                    .a;
+        height = handle == 0u
+                     ? 1.0
+                     : textureGrad(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)],
+                                             texture_sampler),
+                                   at, dx, dy)
+                           .a;
         depth -= step;
         if (height > depth) {
             break;

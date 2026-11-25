@@ -8,6 +8,7 @@
 #include "scene.glsl"
 #include "point_lights.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform textureCube cubes[];
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
 layout(set = 1, binding = 0) uniform sampler2DArrayShadow shadow_map;
@@ -89,12 +90,15 @@ vec3 Irradiance(vec3 direction) {
         return vec3(0.0);
     }
     const vec3 first =
-        textureLod(samplerCube(cubes[light.irradiance[0]], clamp_sampler), direction, 0.0).rgb;
+        textureLod(samplerCube(cubes[light.irradiance[0] & TextureSlotMask], clamp_sampler),
+                   direction, 0.0)
+            .rgb;
     return light.irradiance[1] == 0u
                ? first
                : mix(first,
-                     textureLod(samplerCube(cubes[light.irradiance[1]], clamp_sampler), direction,
-                                0.0)
+                     textureLod(
+                         samplerCube(cubes[light.irradiance[1] & TextureSlotMask], clamp_sampler),
+                         direction, 0.0)
                          .rgb,
                      light.ibl_blend);
 }
@@ -104,12 +108,15 @@ vec3 Radiance(vec3 direction, float lod) {
         return vec3(0.0);
     }
     const vec3 first =
-        textureLod(samplerCube(cubes[light.radiance[0]], clamp_sampler), direction, lod).rgb;
+        textureLod(samplerCube(cubes[light.radiance[0] & TextureSlotMask], clamp_sampler),
+                   direction, lod)
+            .rgb;
     return light.radiance[1] == 0u
                ? first
                : mix(first,
-                     textureLod(samplerCube(cubes[light.radiance[1]], clamp_sampler), direction,
-                                lod)
+                     textureLod(
+                         samplerCube(cubes[light.radiance[1] & TextureSlotMask], clamp_sampler),
+                         direction, lod)
                          .rgb,
                      light.ibl_blend);
 }
@@ -304,9 +311,10 @@ void main() {
         clamp((distance_to_eye - light.background_start) * light.background_range, 0.0, 1.0) *
         light.background_intensity;
     if (background_amount > 0.0 && light.radiance[0] != 0u) {
-        const vec3 background = textureLod(samplerCube(cubes[light.radiance[0]], clamp_sampler),
-                                           sky_ray, light.background_lod)
-                                    .rgb;
+        const vec3 background =
+            textureLod(samplerCube(cubes[light.radiance[0] & TextureSlotMask], clamp_sampler),
+                       sky_ray, light.background_lod)
+                .rgb;
         shaded = mix(shaded, background, background_amount);
     }
     // The lines and the hatching in occluded places darken or lighten by the contour colour, with

@@ -9,6 +9,7 @@
 
 #include "particle_pixel.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
@@ -28,10 +29,14 @@ vec4 DistortionMap(ParticleDraw draw, vec2 place) {
     const vec2 at = vec2(uintBitsToFloat(floatBitsToUint(place.x) & ~1u), place.y);
     vec4 map;
     if (bitfieldExtract(draw.gpufx_used[2], 3, 1) != 0u) {
-        map = vec4(1.0, 1.0, 1.0,
-                   texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), at, 0.0).x);
+        map = vec4(
+            1.0, 1.0, 1.0,
+            texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                    at, 0.0)
+                .x);
     } else {
-        map = texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), at, 0.0);
+        map = texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                      at, 0.0);
     }
     return 2.0 * map + -1.0;
 }

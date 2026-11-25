@@ -13,6 +13,7 @@
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 layout(set = 0, binding = 0) uniform textureCube cubes[];
@@ -134,11 +135,11 @@ vec4 WaterMapColor(uint map, vec2 uv, vec2 flow) {
     const float u = push * flow.x + uv.x;
     const float v = push * flow.y + uv.y;
     const uint words = 24u + 4u * map;
-    const vec4 texel =
-        textureLod(sampler2D(textures[nonuniformEXT(WaterMap(map))], texture_sampler),
-                   vec2(WaterConstant(words + 2u) * u + WaterConstant(words),
-                        WaterConstant(words + 3u) * v + WaterConstant(words + 1u)),
-                   0.0);
+    const vec4 texel = textureLod(
+        sampler2D(textures[nonuniformEXT(WaterMap(map) & TextureSlotMask)], texture_sampler),
+        vec2(WaterConstant(words + 2u) * u + WaterConstant(words),
+             WaterConstant(words + 3u) * v + WaterConstant(words + 1u)),
+        0.0);
     const float scale = WaterConstant(12u + map);
     return vec4(scale * texel.x, scale * texel.y, scale * texel.z,
                 WaterConstant(16u + map) * texel.w);
@@ -309,11 +310,11 @@ void main() {
 
     // The flow map (map 3) at the texture coordinates through its offset and repeat (36).
     const vec2 uv = attr7.yz;
-    const vec4 flow_texel =
-        textureLod(sampler2D(textures[nonuniformEXT(WaterMap(3u))], texture_sampler),
-                   vec2(WaterConstant(38u) * uv.x + WaterConstant(36u),
-                        WaterConstant(39u) * uv.y + WaterConstant(37u)),
-                   0.0);
+    const vec4 flow_texel = textureLod(
+        sampler2D(textures[nonuniformEXT(WaterMap(3u) & TextureSlotMask)], texture_sampler),
+        vec2(WaterConstant(38u) * uv.x + WaterConstant(36u),
+             WaterConstant(39u) * uv.y + WaterConstant(37u)),
+        0.0);
     const vec2 flow = flow_texel.xy;
 
     // The tangent frame: the tangent less the tangent times its dot with the normal (as the
@@ -338,11 +339,11 @@ void main() {
     // repeat (40), turned into the frame.
     const float flow_x = WaterConstant(50u) * (2.0 * flow.x + -1.0) + uv.x;
     const float flow_y = WaterConstant(50u) * (2.0 * flow.y + -1.0) + uv.y;
-    const vec4 normal_texel =
-        textureLod(sampler2D(textures[nonuniformEXT(WaterMap(4u))], texture_sampler),
-                   vec2(WaterConstant(42u) * flow_x + WaterConstant(40u),
-                        WaterConstant(43u) * flow_y + WaterConstant(41u)),
-                   0.0);
+    const vec4 normal_texel = textureLod(
+        sampler2D(textures[nonuniformEXT(WaterMap(4u) & TextureSlotMask)], texture_sampler),
+        vec2(WaterConstant(42u) * flow_x + WaterConstant(40u),
+             WaterConstant(43u) * flow_y + WaterConstant(41u)),
+        0.0);
     const float bx = 2.0 * normal_texel.x + -1.0;
     const float by = 2.0 * normal_texel.y + -1.0;
     const float bz = 2.0 * normal_texel.z + -1.0;
@@ -382,10 +383,11 @@ void main() {
         const vec3 direction = CubeDirection(CubeS(r) * major + 1.5, CubeT(r) * major + 1.5,
                                              CubeFace(r));
         const uint cube = WaterDraw().words[299];
-        const vec4 sky = cube == 0u ? vec4(0.0)
-                                    : textureLod(samplerCube(cubes[nonuniformEXT(cube)],
-                                                             clamp_sampler),
-                                                 direction, 6.0);
+        const vec4 sky = cube == 0u
+                             ? vec4(0.0)
+                             : textureLod(samplerCube(cubes[nonuniformEXT(cube & TextureSlotMask)],
+                                                      clamp_sampler),
+                                          direction, 6.0);
         const float edge = log2(clamp(max(0.0, 1.0 + facing), 0.0, 1.0));
         const float base = WaterConstant(46u);
         const float k = base * uintBitsToFloat(0x3ee7a0f7u) +

@@ -8,6 +8,7 @@
 
 #extension GL_EXT_nonuniform_qualifier : require
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
@@ -36,8 +37,9 @@ vec3 Displaced(EffectMesh mesh, vec3 position, vec3 normal) {
         (1.0 / 1024.0) * (VertexConstant(98u) * float(texcoord1.x)) + VertexConstant(96u),
         (1.0 / 1024.0) * (VertexConstant(99u) * float(texcoord1.y)) + VertexConstant(97u));
     const float height =
-        textureLod(sampler2D(textures[nonuniformEXT(mesh.displacement)], texture_sampler), place,
-                   0.0)
+        textureLod(sampler2D(textures[nonuniformEXT(mesh.displacement & TextureSlotMask)],
+                             texture_sampler),
+                   place, 0.0)
             .x;
     return (VertexConstant(101u) * height) * normal + position;
 }

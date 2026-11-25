@@ -1986,7 +1986,20 @@ bool Start(const Device& device, Memory& memory) {
     if (!g_white.image) {
         return false;
     }
-    WriteDescriptor(0, g_white.view);
+    // Every slot holds white until a texture is installed, so a slot read before then, or one
+    // that a bad record names, reads a texture.
+    const std::vector<vk::DescriptorImageInfo> white(
+        Slots(), vk::DescriptorImageInfo{.imageView = g_white.view,
+                                         .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal});
+    const vk::WriteDescriptorSet write{
+        .dstSet = g_set,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = Slots(),
+        .descriptorType = vk::DescriptorType::eSampledImage,
+        .pImageInfo = white.data(),
+    };
+    device.device.updateDescriptorSets(write, {}, device.dispatch);
     g_worker = new Worker;
     std::thread{Work}.detach();
     return true;
@@ -2018,6 +2031,10 @@ vk::DescriptorSetLayout SetLayout() {
 
 vk::DescriptorSet Set() {
     return g_set;
+}
+
+u32 Slots() {
+    return g_streaming ? Descriptors : Capacity;
 }
 
 Stats TakeStats() {

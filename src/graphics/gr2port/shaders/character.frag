@@ -9,6 +9,7 @@
 #include "scene.glsl"
 #include "point_lights.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
@@ -49,7 +50,8 @@ const vec2 SecondCascadeTaps[4] = vec2[4](vec2(1.3e-4, 3.64e-4), vec2(3.56e-4, 1
                                           vec2(-2.24e-4, 7.96e-5), vec2(2.02e-4, -4.23e-4));
 
 vec4 Sample(uint handle, vec2 uv) {
-    return texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), uv);
+    return texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
+                   uv);
 }
 
 float CascadeTap(uint cascade, vec3 coord, vec2 offset) {
@@ -186,7 +188,8 @@ void Shade(uint draw) {
     const uint decal_index = scene_draws.draws[draw].decal;
     if (decal_index != 0u) {
         const uint handle = scene_decals.decals[decal_index - 1u].texture;
-        decal = texture(sampler2D(textures[nonuniformEXT(handle)], clamp_sampler), decal_texcoord);
+        decal = texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], clamp_sampler),
+                        decal_texcoord);
     }
     albedo *= mix(vec3(1.0), mix(decal.rgb, gradation.rgb, gradation.a), decal.a * mask);
 

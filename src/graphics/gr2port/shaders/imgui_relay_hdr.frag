@@ -7,6 +7,7 @@
 
 #include "hdr.glsl"
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
@@ -23,6 +24,8 @@ layout(location = 0) out vec4 frag_color;
 
 // imgui_relay.frag's colour at the paper white of the HDR window, which blends it by alpha.
 void main() {
-    const vec4 c = color * texture(sampler2D(textures[texture_handle], texture_sampler), texcoord);
+    const vec4 c =
+        color *
+        texture(sampler2D(textures[texture_handle & TextureSlotMask], texture_sampler), texcoord);
     frag_color = vec4(Hdr10(c.rgb, 1.0, white), c.a);
 }

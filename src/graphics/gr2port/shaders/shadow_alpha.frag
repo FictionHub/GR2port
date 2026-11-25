@@ -3,7 +3,9 @@
 
 #version 460
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_GOOGLE_include_directive : require
 
+#include "texture_slots.glsl"
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 
@@ -13,8 +15,10 @@ layout(location = 2) flat in float alpha_reference;
 
 // Texels with less alpha than the caster's reference let the light through.
 void main() {
-    const float alpha =
-        texture(sampler2D(textures[nonuniformEXT(texture_index)], texture_sampler), texcoord).a;
+    const float alpha = texture(sampler2D(textures[nonuniformEXT(texture_index & TextureSlotMask)],
+                                          texture_sampler),
+                                texcoord)
+                            .a;
     if (alpha < alpha_reference) {
         discard;
     }
