@@ -413,6 +413,7 @@ struct Category {
     bool lambert = false;
     bool vision = false;
     bool glow = false;
+    bool rooms = false;
 };
 constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
 // The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
@@ -420,8 +421,14 @@ constexpr std::array<Category, 6> WorldCategories{{
     {16, 0x38, 0x48, 0x40, 0x80, 0x00, None, false, false, false, true}, // BG layer
     {17, 0x38, 0x48, 0x40, 0x00, None},                                  // BG single
     {19, 0x38, 0x48, 0x40, None, None, None, false, false, false, false, false, false,
-     true},                             // BG gem
-    {21, 0x38, 0x48, 0x40, 0x00, None}, // BG interior
+     true}, // BG gem
+    {.index = 21,
+     .constants = 0x38,
+     .texture = 0x48,
+     .material = 0x40,
+     .color_scale = 0x00,
+     .texcoord_transform = None,
+     .rooms = true},                    // BG interior
     {22, 0x38, 0x48, 0x40, 0x30, 0x00}, // BG vein
     {23, 0x30, None, None, None, None}, // Far: untextured
 }};
@@ -522,6 +529,15 @@ constexpr u64 GemColorMap = 0x48;
 constexpr u64 GemNormalMap = 0x50;
 constexpr u64 GemPixelBytes = 0x60;
 constexpr u64 GemPunchThrough = 0x50;
+// G2_BG_Interior, the rooms behind a building's windows: the texture objects of its normal map,
+// room cube map and plane map after its colour texture; its pixel constants, whose last word is
+// the screen door's threshold; and the eye in the model's space in its vertex constants.
+constexpr u64 RoomsNormalMap = 0x50;
+constexpr u64 RoomsCubeMap = 0x58;
+constexpr u64 RoomsPlaneMap = 0x60;
+constexpr u64 RoomsPixelBytes = 0x50;
+constexpr u64 RoomsPunchThrough = 0x4c;
+constexpr u64 RoomsEye = 0xc0;
 // G2_CH_Contour: the constants of its vertex, geometry and pixel programs. The submesh holds the
 // range of its adjacency indices at +0x50, when it has more than 2 ranges.
 // G2_BG_Glass: normal map, and the pixel constants whole.
@@ -1121,6 +1137,10 @@ public:
         if (category.layers && material != 0) {
             material_index = AddLayers(item, constants, material);
             alpha_tested = material_index != 0 && Load<float>(material + LayerPunchThrough) < 1.0f;
+        }
+        if (category.rooms && material != 0) {
+            material_index = AddRooms(item, constants, material);
+            alpha_tested = material_index != 0 && Load<float>(material + RoomsPunchThrough) < 1.0f;
         }
         // These categories' materials each take a Character.
         if ((category.character || category.interior || category.lambert || category.vision) &&
@@ -2810,6 +2830,30 @@ private:
         return ++header.materials;
     }
 
+    // Writes a G2_BG_Interior item's constants, eye and maps to the packet and returns the index
+    // of its Material plus 1. A room cube map not converted yet has handle 0.
+    u32 AddRooms(VAddr item, VAddr vertex_constants, VAddr pixel_constants) {
+        if (header.materials == Scene::g_room.materials ||
+            header.layer_materials == Scene::g_room.layer_materials) {
+            header.dropped_materials++;
+            return 0;
+        }
+        const auto handle = [item](u64 field) { return Textures::Get(Load<VAddr>(item + field)); };
+        // The fields are written in order: the packet is write-combined.
+        Scene::LayerMaterial& rooms = layer_materials[header.layer_materials];
+        std::memcpy(rooms.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    RoomsPixelBytes);
+        std::memcpy(rooms.pixel_constants + RoomsPixelBytes / sizeof(u32),
+                    reinterpret_cast<const void*>(vertex_constants + RoomsEye), 4 * sizeof(float));
+        rooms.color_maps[0] = handle(RoomsPlaneMap);
+        rooms.normal_maps[0] = handle(RoomsNormalMap);
+        rooms.normal_maps[1] = Textures::GetCube(Load<VAddr>(item + RoomsCubeMap));
+        Scene::Material& out = materials[header.materials];
+        out.flags = Scene::MaterialRooms;
+        out.layer_material = header.layer_materials++;
+        return ++header.materials;
+    }
+
     // Writes a G2_CH_Main item's constants to the packet and returns their index plus 1; a glow
     // item's blend constant too.
     u32 AddCharacter(VAddr item, VAddr vertex_constants, VAddr pixel_constants, bool glow) {
@@ -3101,7 +3145,7 @@ void PrefetchObjects(VAddr item, u64 matrices, u64 pixel_constants, const Ahead&
 
 // What Writer::Add reads of a category's item: the gradation of G2_BG_Main and of the layers, and
 // the texture objects after the colour texture, which are G2_BG_Main's four maps, a character's
-// three maps and decal, the layers' other seven maps and a gem's normal map.
+// three maps and decal, the layers' other seven maps, a gem's normal map and the rooms' three maps.
 constexpr Ahead AheadOf(const Category& category) {
     return {
         .more = category.main_material || category.layers ? MainGradation : None,
@@ -3110,6 +3154,7 @@ constexpr Ahead AheadOf(const Category& category) {
         .texture_count = category.texture == None                       ? 0u
                          : category.main_material || category.character ? 5u
                          : category.layers                              ? 8u
+                         : category.rooms                               ? 4u
                          : category.gem                                 ? 2u
                                                                         : 1u,
     };
@@ -3125,6 +3170,8 @@ static_assert(LayerColorMaps == WorldCategories[0].texture && WorldCategories[0]
               LayerNormalMaps == LayerColorMaps + 4 * 8);
 static_assert(GemColorMap == WorldCategories[2].texture && WorldCategories[2].gem &&
               GemNormalMap == GemColorMap + 8);
+static_assert(WorldCategories[3].rooms && RoomsNormalMap == WorldCategories[3].texture + 8 &&
+              RoomsCubeMap == RoomsNormalMap + 8 && RoomsPlaneMap == RoomsCubeMap + 8);
 
 template <typename ItemAt, typename Visit>
 void ForEachItem(s32 count, u64 matrices, u64 pixel_constants, ItemAt item_at, Visit visit,

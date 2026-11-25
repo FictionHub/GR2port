@@ -6,6 +6,9 @@
 #include "scene.glsl"
 #include "surface.glsl"
 
+layout(set = 0, binding = 0) uniform textureCube cubes[];
+layout(set = 0, binding = 2) uniform sampler clamp_sampler;
+
 layout(push_constant) uniform Constants {
     Draws scene_draws;
     Materials scene_materials;
@@ -135,6 +138,68 @@ void WriteGem(uint index, vec3 n) {
                      table.gems[index].translucency, table.gems[index].emissive);
 }
 
+// HLSL's fmod, as the game's program takes it: the remainder of x over y, with the sign of x.
+vec3 Remainder(vec3 x, float y) {
+    const vec3 r = abs(y) * fract(abs(x * (1.0 / y)));
+    return mix(r, -r, lessThan(x, vec3(0.0)));
+}
+
+// The game's G2_BG_Interior pixel program without its velocity: where the colour map is clear, a
+// building's window shows a room. The model's space is a lattice of rooms; the view ray from the
+// pixel's place in its room meets the walls in the room cube map, unless a plane stands before them
+// at its depth behind the window. The room cube map's alpha lights the room.
+void WriteRooms(uint index, uint color_handle, vec3 color_scale, vec3 n) {
+    RoomMaterials table = RoomMaterials(scene_layers);
+#ifdef ALPHA_TEST
+    if (ScreenDoorShut(table.rooms[index].punch_through)) {
+        discard;
+    }
+#endif
+    const vec2 uv = texcoord.xy;
+    // world.vert's position and normal in the model's space.
+    const vec3 position = gradation;
+    const vec3 model_normal = normalize(vertex_color.xyz);
+    const vec3 ray = position - table.rooms[index].eye.xyz;
+    const uint normal_map = table.rooms[index].normal_map;
+    vec3 tangent_normal = vec3(0.0, 0.0, 1.0);
+    if (normal_map != 0u) {
+        tangent_normal = normalize(2.0 * Sample(normal_map, uv).rgb - 1.0);
+    }
+    const float distortion = table.rooms[index].distortion;
+    const vec4 lattice = table.rooms[index].lattice;
+    // The pixel's place in its room, from -1 to 1 on each axis, moved across by the normal map.
+    const vec3 place =
+        2.0 * Remainder(position + lattice.xyz + lattice.w, lattice.w) * (1.0 / lattice.w) - 1.0 +
+        vec3(distortion * tangent_normal.xy, 0.0);
+    // How far along the ray the room's walls lie.
+    const vec3 inverse = 1.0 / ray;
+    const vec3 walls = abs(inverse) - place * inverse;
+    const float leave = min(min(walls.x, walls.y), walls.z);
+    vec4 room = vec4(0.0);
+    const uint room_map = table.rooms[index].room_map;
+    if (room_map != 0u) {
+        room = texture(samplerCube(cubes[nonuniformEXT(room_map)], clamp_sampler),
+                       place + leave * ray, table.rooms[index].smokiness);
+    }
+    const vec4 plane = table.rooms[index].plane;
+    const uint plane_map = table.rooms[index].plane_map;
+    const float to_plane = -plane.z / dot(ray, model_normal);
+    if (plane_map != 0u && lattice.w * leave > to_plane) {
+        const vec3 hit = position + to_plane * ray;
+        const float across = abs(model_normal.x) < abs(model_normal.y) ? hit.x : hit.z;
+        const vec2 plane_uv = vec2(plane.x + plane.w * across, plane.y - plane.w * hit.y) +
+                              0.1 * distortion * tangent_normal.xy;
+        const vec4 sheet = Sample(plane_map, plane_uv);
+        room = vec4(mix(room.rgb, sheet.rgb, sheet.a), room.a * (1.0 - sheet.a));
+    }
+    const vec4 color = Sample(color_handle, uv);
+    g_albedo = vec4(mix(room.rgb, color_scale * color.rgb, color.a), 1.0);
+    g_normal = PackNormal(TurnedNormal(n, tangent_normal));
+    g_surface = vec4(mix(table.rooms[index].roughness[1], table.rooms[index].roughness[0], color.a),
+                     mix(table.rooms[index].metallic[1], table.rooms[index].metallic[0], color.a),
+                     0.0, table.rooms[index].emissive * room.a * (1.0 - color.a));
+}
+
 // The game's G2_BG_Main pixel programs without their velocity, one program for all their variants.
 void Shade(uint draw) {
     const float facing_sign = gl_FrontFacing ? 1.0 : -1.0;
@@ -164,6 +229,10 @@ void Shade(uint draw) {
     }
     if ((table.materials[index].flags & MaterialGem) != 0u) {
         WriteGem(table.materials[index].layer_material, n);
+        return;
+    }
+    if ((table.materials[index].flags & MaterialRooms) != 0u) {
+        WriteRooms(table.materials[index].layer_material, color_handle, color_scale.rgb, n);
         return;
     }
     const bool layered = (table.materials[index].flags & MaterialLayered) != 0u;

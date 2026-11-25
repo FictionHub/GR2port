@@ -50,9 +50,11 @@ void main() {
     const uint tangent_element = draws.draws[gl_BaseInstance].tangent;
     normal = vec3(0.0);
     tangent = vec4(0.0);
+    vec3 model_normal = vec3(0.0);
     if ((normal_element >> 8) != 0u) {
         vec3 n = LoadNormal(vertices, stride, normal_element);
         n = bones != 0u ? SkinDirection(n, skin, palette, bones) : n;
+        model_normal = n;
         normal = normalize(mat3(world_view) * n);
     }
     if ((normal_element >> 8) != 0u && (tangent_element >> 8) != 0u) {
@@ -76,6 +78,12 @@ void main() {
         // A gem has no gradation: its pixels refract the view ray instead.
         if ((scene_materials.materials[index].flags & MaterialGem) != 0u) {
             gradation = view_position;
+        }
+        // Nor do rooms: their pixels look into rooms laid out in the model's space, from the
+        // position and normal there.
+        if ((scene_materials.materials[index].flags & MaterialRooms) != 0u) {
+            gradation = model;
+            vertex_color = vec4(model_normal, 0.0);
         }
     }
 }

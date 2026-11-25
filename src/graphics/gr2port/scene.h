@@ -720,6 +720,10 @@ inline constexpr u32 MaterialLayers = 4;
 /// The draw is a gem's: its LayerMaterial holds the game's G2_BG_Gem pixel constants, its
 /// colour map first of the colour maps and its normal map first of the normal maps.
 inline constexpr u32 MaterialGem = 8;
+/// The draw shows the rooms behind a building's windows: its LayerMaterial holds the game's
+/// G2_BG_Interior pixel constants and then the eye in the model's space, its plane map first of
+/// the colour maps, and its normal map and room cube map first of the normal maps.
+inline constexpr u32 MaterialRooms = 16;
 
 /// A surface of four mixed layers: the game's G2_BG_Layer pixel constants, which shaders/scene.glsl
 /// names, then the layers' texture handles; 0 is white. A normal map of 0 means the layer has none.

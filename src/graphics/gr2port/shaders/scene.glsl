@@ -126,6 +126,35 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Ge
     GemMaterial gems[];
 };
 
+// The game's G2_BG_Interior pixel constants and the eye in the model's space, then its maps, in the
+// place of a LayerMaterial. roughness[0] and metallic[0] apply where the colour map is opaque, [1]
+// where it shows the room.
+struct RoomMaterial {
+    vec4 color_scale;
+    // The lattice of rooms: its offset in xyz, the size of a room in w.
+    vec4 lattice;
+    // The plane before the rooms' far walls: its texture offset in xy, depth z and texture scale w.
+    vec4 plane;
+    float roughness[2];
+    float metallic[2];
+    float emissive;
+    // The room cube map's level of detail bias.
+    float smokiness;
+    float distortion;
+    float punch_through;
+    vec4 eye;
+    float constants_padding[56];
+    uint plane_map;
+    uint color_maps_padding[3];
+    uint normal_map;
+    uint room_map;
+    uint normal_maps_padding[2];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer RoomMaterials {
+    RoomMaterial rooms[];
+};
+
 // The game's G2_CH_Main pixel constants, then what its programs take from elsewhere.
 struct Character {
     mat4 view_inverse;
@@ -432,6 +461,7 @@ const uint MaterialLayered = 1u;
 const uint MaterialGradation = 2u;
 const uint MaterialLayers = 4u;
 const uint MaterialGem = 8u;
+const uint MaterialRooms = 16u;
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Materials {
     Material materials[];
