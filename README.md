@@ -8,11 +8,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <b>GR2port - a genuine native PC port for Gravity Rush 2</b>
 </h1>
 
-**No CPU emulation, no GPU emulation, no GPU command translation, no shader recompiler:** GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC. **The game's graphics were completely rewritten for PC** via a native Vulkan renderer (the game’s render passes have been rebuilt as its own Vulkan code: `glass.cpp, shadows.cpp, countours.cpp, deformers.cpp, enemies.cpp, world.cpp` etc.) in `src/graphics/gr2port` that runs **handwritten (`src/graphics/gr2port/shaders`) plus recompiled (`src/graphics/gr2port/shaders/pfx`) GLSL shaders** in that recreate visuals produced by the original GCN shaders. 
+**No CPU emulation, no GPU emulation, no GPU command translation, no shader recompiler, no reading and/or writing PM4:** GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC. **The game's graphics were completely rewritten for PC** via a native Vulkan renderer (the game’s render passes have been rebuilt as its own Vulkan code: `glass.cpp, shadows.cpp, countours.cpp, deformers.cpp, enemies.cpp, world.cpp` etc.) in `src/graphics/gr2port` that runs **handwritten (`src/graphics/gr2port/shaders`) GLSL shaders** that recreate visuals produced by the original GCN shaders. 
 
 <b>
   
-To reiterate, the game's render passes are **NOT EMULATED OR STATICALLY RECOMPILED IN ANY SHAPE OR FORM** - they were completely rewritten. Regarding the shaders, half of the more complex shaders were recompiled to GLSL rather than handwriting original GLSL shaders that reproduce the game's visuals. This, however, only adds slight GPU overhead rather than CPU overhead and is in the process of being replaced.
+To reiterate, the game's render passes are **NOT EMULATED OR STATICALLY RECOMPILED IN ANY SHAPE OR FORM** - they were completely rewritten.
 Each frame, GR2port takes the game's scene at the start of its frame graph and draws it on its own render thread, so it never builds or translates per-draw PS4 GPU commands. **The CPU overhead of the native renderer was measured as only 0.8ms in frame time**. 
 
 <b>
@@ -57,10 +57,12 @@ Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU
 
 **Included Features for Gravity Rush 2**
 - Fully game region-agnostic (Asia, Europe, USA, Japan regions all supported); **update v1.11 is required**.
-- Launcher GUI contains all 31 console region languages.
+- Launcher GUI contains all 31 console region languages, fully navigable via controller input.
 - Native mouse input (controls camera)
 - Fully bindable gamepad and keyboard bindings and button prompts
+- in game sliders for special attack and panther mode controller sensitivity
 - Fully customizable graphics presets
+- graphics settings to hide HUD, gravity meter, and crosshair
 - In-game exit to desktop button below return to title
 - Graphics Settings page in the pause menu's System Menu, with changes applied live where the renderer allows
 - Field of view setting: 80% to 150% of the game's own angle
@@ -76,11 +78,13 @@ Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU
 - HDR support
 - Feature-complete online mode
 - Feature-complete photo mode, photo export, and in-game photo gallery
+- extra photo mode features (Hide UI)
 - All GR2fork patches
 - GR2fork Halloween items
 - FSR 3.1 + FSR 4.1 + DLSS support (Windows + Linux) + XeSS support (Windows Only)
 - Keyboard, XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2
 - Auto update checker on launcher startup
+- f12 to screenshot
 
 <img width="789" height="523" alt="image" src="https://github.com/user-attachments/assets/38b3f128-b28f-4862-b502-2a0ce746af1e" /> <b>
 
