@@ -12,7 +12,7 @@
 
 // The game's constants of a particle draw (Scene::ParticleDraw), whose 64 and 65 are the game's
 // render size.
-layout(buffer_reference, std430, buffer_reference_align = 4) buffer ParticleDraw {
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer ParticleDraw {
     float constants[88];
 };
 

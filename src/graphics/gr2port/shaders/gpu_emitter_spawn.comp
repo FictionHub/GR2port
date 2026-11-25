@@ -24,6 +24,15 @@ layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
 layout(buffer_reference, std430, buffer_reference_align = 4) buffer Row {
     uvec4 row;
 };
+
+// The effects, descriptions and active list are read-only to the program, so loads of values the
+// wave shares can be scalar loads.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer TableWords {
+    uint words[];
+};
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer TableRow {
+    uvec4 row;
+};
 layout(push_constant) uniform Push {
     uint64_t effect_in_address;
     uint64_t description_address;
@@ -40,7 +49,8 @@ const uint FreshMark = 0x27bc86abu;
 
 // The records' offsets are 32 bits, so each table's base stays one value for every lane.
 uint EffectWord(uint effect, uint word) {
-    const uint value = Words(effect_in_address + min(effect, EffectCount - 1u) * 192u).words[word];
+    const uint value =
+        TableWords(effect_in_address + min(effect, EffectCount - 1u) * 192u).words[word];
     return effect < EffectCount ? value : 0u;
 }
 
@@ -50,7 +60,8 @@ float EffectFloat(uint effect, uint word) {
 
 uint DescriptionWord(uint description, uint word) {
     const uint value =
-        Words(description_address + min(description, DescriptionCount - 1u) * 256u).words[word];
+        TableWords(description_address + min(description, DescriptionCount - 1u) * 256u)
+            .words[word];
     return description < DescriptionCount ? value : 0u;
 }
 
@@ -60,7 +71,8 @@ float DescriptionFloat(uint description, uint word) {
 
 vec4 DescriptionVector(uint description, uint word) {
     const uvec4 words =
-        Row(description_address + min(description, DescriptionCount - 1u) * 256u + 4u * word).row;
+        TableRow(description_address + min(description, DescriptionCount - 1u) * 256u + 4u * word)
+            .row;
     return uintBitsToFloat(description < DescriptionCount ? words : uvec4(0u));
 }
 
@@ -397,7 +409,7 @@ vec4 ParentTurn(uint mode, vec4 t) {
 void main() {
     uint object = gl_GlobalInvocationID.x;
     if (active_address != 0ul) {
-        Words listing = Words(active_address);
+        TableWords listing = TableWords(active_address);
         if (object >= listing.words[0]) {
             return;
         }

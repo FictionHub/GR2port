@@ -15,12 +15,19 @@ layout(local_size_x = 64) in;
 layout(set = 0, binding = 0) uniform texture2D curve_texture;
 layout(set = 0, binding = 1) uniform sampler curve_sampler;
 
-layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
+// Everything the program reads is read-only to it, so loads of values the wave shares can be
+// scalar loads.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words {
     uint words[];
 };
 
-// Four words of a record as one load or store.
-layout(buffer_reference, std430, buffer_reference_align = 4) buffer Row {
+// Four words of a record as one load.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Row {
+    uvec4 row;
+};
+
+// Four words of an out object as one store: the only memory the program writes.
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer OutRow {
     uvec4 row;
 };
 layout(push_constant) uniform Push {
@@ -293,12 +300,12 @@ void main() {
                              Word(in_address, object, ObjectBytes, 120u),
                              Word(in_address, object, ObjectBytes, 124u));
     const uint64_t out_address = emitter_out_address + object * ObjectBytes;
-    Row(out_address).row = floatBitsToUint(place);
-    Row(out_address + 16u).row = floatBitsToUint(turn);
-    Row(out_address + 32u).row = owner_words;
-    Row(out_address + 48u).row = seed_words;
-    Row(out_address + 64u).row = floatBitsToUint(past_place);
-    Row(out_address + 80u).row = floatBitsToUint(past_turn);
-    Row(out_address + 96u).row = floatBitsToUint(tint);
-    Row(out_address + 112u).row = uvec4(hold, tail);
+    OutRow(out_address).row = floatBitsToUint(place);
+    OutRow(out_address + 16u).row = floatBitsToUint(turn);
+    OutRow(out_address + 32u).row = owner_words;
+    OutRow(out_address + 48u).row = seed_words;
+    OutRow(out_address + 64u).row = floatBitsToUint(past_place);
+    OutRow(out_address + 80u).row = floatBitsToUint(past_turn);
+    OutRow(out_address + 96u).row = floatBitsToUint(tint);
+    OutRow(out_address + 112u).row = uvec4(hold, tail);
 }

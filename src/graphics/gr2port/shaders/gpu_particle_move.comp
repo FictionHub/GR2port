@@ -17,12 +17,19 @@ layout(local_size_x = 64) in;
 layout(set = 0, binding = 0) uniform texture2D depth_texture;
 layout(set = 0, binding = 1) uniform sampler depth_sampler;
 
-layout(buffer_reference, std430, buffer_reference_align = 4) buffer Words {
+// Everything the program reads is read-only to it, so loads of values the wave shares can be
+// scalar loads.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words {
     uint words[];
 };
 
-// Four words of a record as one load or store.
-layout(buffer_reference, std430, buffer_reference_align = 4) buffer Row {
+// Four words of a record as one load.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Row {
+    uvec4 row;
+};
+
+// Four words of an out particle as one store: the only memory the program writes.
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer OutRow {
     uvec4 row;
 };
 layout(push_constant) uniform Push {
@@ -120,7 +127,7 @@ void SetOutWords(uint particle, uint word, uvec4 value) {
     if (particle >= ParticleCount) {
         return;
     }
-    Row(particle_out_address + particle * 64u + 4u * word).row = value;
+    OutRow(particle_out_address + particle * 64u + 4u * word).row = value;
 }
 
 void SetOutVector(uint particle, uint word, vec4 value) {

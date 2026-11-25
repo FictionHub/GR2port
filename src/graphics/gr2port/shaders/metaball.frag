@@ -13,7 +13,7 @@
 
 // The pixel constants of a metaball draw (Scene::MetaballDraw): the albedo, then roughness,
 // metallic, translucency and emissive, then the alpha.
-layout(buffer_reference, std430, buffer_reference_align = 4) buffer MetaballPixel {
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer MetaballPixel {
     vec4 albedo;
     vec4 surface;
     float alpha;
