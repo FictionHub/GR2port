@@ -75,18 +75,23 @@ void main() {
     vertex_color = (color_element >> 8) != 0u ? LoadVertexColor(vertices, stride, color_element)
                                               : vec4(1.0);
     gradation = vec3(1.0);
+    uint flags = 0u;
     if (material != 0u) {
+        flags = scene_materials.materials[material - 1u].flags;
+    }
+    // The pixels of a material with one of these flags read the gradation.
+    if ((flags & (MaterialGradation | MaterialGem | MaterialRooms)) != 0u) {
         const uint index = material - 1u;
         const vec4 low = scene_materials.materials[index].gradation_low;
         const vec4 high = scene_materials.materials[index].gradation_high;
         gradation = mix(low.rgb, high.rgb, clamp(high.w * (unskinned.y - low.w), 0.0, 1.0));
         // A gem has no gradation: its pixels refract the view ray instead.
-        if ((scene_materials.materials[index].flags & MaterialGem) != 0u) {
+        if ((flags & MaterialGem) != 0u) {
             gradation = view_position;
         }
         // Nor do rooms: their pixels look into rooms laid out in the model's space, from the
         // position and normal there.
-        if ((scene_materials.materials[index].flags & MaterialRooms) != 0u) {
+        if ((flags & MaterialRooms) != 0u) {
             gradation = model;
             vertex_color = vec4(model_normal, 0.0);
         }
