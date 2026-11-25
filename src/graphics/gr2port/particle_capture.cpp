@@ -755,8 +755,11 @@ void AddSample(u8* packet, Scene::ParticleHeader& out, u64& palette_bytes,
     const Meshes::Mesh* mesh = Meshes::Get(vertex_buffer - ShapeVertexBufferObject);
     const bool skinned = skin_buffer != 0 && palette != 0 && bones != 0;
     const u64 skin_bytes = skinned ? u64{bones} * BoneBytes : 0;
+    const u32 skin_stride = skinned ? Load<u16>(skin_buffer + VertexBufferStride) : 0;
+    // The program reads each sampled vertex's skin, so the skin stream covers them all.
     if (mesh == nullptr || out.samples == Scene::MaxParticleSamples ||
-        u64{vertices} * stride > mesh->vertex_bytes || (skinned && mesh->skin == 0) ||
+        u64{vertices} * stride > mesh->vertex_bytes ||
+        (skinned && (mesh->skin == 0 || u64{vertices} * skin_stride > mesh->skin_bytes)) ||
         palette_bytes + skin_bytes > Scene::MaxParticleSamplePaletteBytes) {
         out.dropped_samples++;
         return;
@@ -779,8 +782,7 @@ void AddSample(u8* packet, Scene::ParticleHeader& out, u64& palette_bytes,
     constants[25] = kind;
     if (skinned) {
         // The skin stride, with the palette's bones in the high 16 bits for the program's bound.
-        constants[17] = Load<u16>(skin_buffer + VertexBufferStride) | std::min<u32>(bones, 0xffff)
-                                                                          << 16;
+        constants[17] = skin_stride | std::min<u32>(bones, 0xffff) << 16;
         constants[22] = ElementOffset(skin_buffer, SemanticWeights);
         constants[23] = ElementOffset(skin_buffer, SemanticBones);
     }
@@ -1414,7 +1416,9 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
         const VAddr item = Load<VAddr>(items + u64{i} * 8);
         const VAddr resource = Load<VAddr>(item + ItemResource);
         const VAddr emitter = Load<VAddr>(item + ItemEmitter);
-        const u32 instances = Load<u32>(item + ItemCount);
+        // A draw holds no more particles than the pool, which keeps a bad count from drawing
+        // billions of instances.
+        const u32 instances = std::min(Load<u32>(item + ItemCount), Scene::ParticlePoolParticles);
         if (resource == 0 || emitter == 0 || instances == 0) {
             continue;
         }

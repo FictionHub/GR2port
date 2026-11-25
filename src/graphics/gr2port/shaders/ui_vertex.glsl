@@ -53,7 +53,12 @@ uvec4 AttributeWords(UiDraw draw, uint slot, uint vertex) {
     const UiAttribute source = draw.attributes[slot];
     const uint data_format = bitfieldExtract(source.format, 15, 4);
     const uint number_format = bitfieldExtract(source.format, 12, 3);
-    UiWords data = UiWords(source.address + uint64_t(vertex) * uint64_t(source.stride));
+    // The stride's high 16 bits hold the vertices copied; a vertex past them reads 0, as the
+    // game's fetch past its buffer gives. 0 leaves them unbounded.
+    const uint copied = source.stride >> 16;
+    const bool inside = copied == 0u || vertex < copied;
+    UiWords data = UiWords(source.address +
+                           uint64_t(inside ? vertex : 0u) * uint64_t(source.stride & 0xffffu));
     const uint one = number_format == 7u || number_format == 0u ? floatBitsToUint(1.0) : 1u;
     uvec4 loaded = uvec4(0u, 0u, 0u, one);
     if (data_format == 14u) {
@@ -72,6 +77,7 @@ uvec4 AttributeWords(UiDraw draw, uint slot, uint vertex) {
                                    data.words[1] & 0xffffu, data.words[1] >> 16);
         loaded = number_format == 0u ? floatBitsToUint(vec4(shorts) / 65535.0) : shorts;
     }
+    loaded = inside ? loaded : uvec4(0u);
     const uvec4 selects = uvec4(source.format) >> uvec4(0u, 3u, 6u, 9u) & 7u;
     return uvec4(Select(selects.x, loaded, one), Select(selects.y, loaded, one),
                  Select(selects.z, loaded, one), Select(selects.w, loaded, one));

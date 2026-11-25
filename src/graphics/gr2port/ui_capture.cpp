@@ -663,9 +663,10 @@ bool Writer::CopyInputs(VAddr table, u32 inputs, u32 first_vertex, u32 vertices,
         if (copied == 0) {
             return false;
         }
+        const u32 elements = std::min(buffers[i].elements, std::max(vertices, 1u));
         draw.attributes[i] = {
             .address = copied,
-            .stride = buffers[i].stride,
+            .stride = (buffers[i].stride & 0xffff) | std::min<u32>(elements, 0xffff) << 16,
             .format = buffers[i].word3,
         };
     }

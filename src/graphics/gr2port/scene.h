@@ -82,6 +82,10 @@ inline constexpr u64 ParticleObjectBytes = 0x80;
 inline constexpr u64 ParticleBytes = 0x40;
 inline constexpr u64 MaxParticleEffectBytes = 0x600 * ParticleEffectBytes;
 inline constexpr u32 MaxParticleOwners = 0x18000;
+/// The records of the GPU particle pools the game makes. Particles makes the pools at least this
+/// large, draws and dispatches stay within them, and shaders/particle_pools.glsl reads up to them.
+inline constexpr u32 ParticlePoolParticles = 163840;
+inline constexpr u32 ParticlePoolObjects = 98304;
 /// Descriptions the game rewrites each frame, at most, and the bytes of one.
 inline constexpr u32 MaxParticleLiveDescriptions = 0x40;
 inline constexpr u64 ParticleDescriptionBytes = 0x100;
@@ -1323,7 +1327,8 @@ struct Light {
 static_assert(sizeof(Light) % 16 == 0);
 
 /// An input of a screen draw: its vertices' device address, stride and the V#'s last word, which
-/// holds the format and the components' order.
+/// holds the format and the components' order. The stride's high 16 bits hold the vertices copied,
+/// which bound the programs' reads (0 leaves them unbounded).
 struct UiAttribute {
     u64 address;
     u32 stride;

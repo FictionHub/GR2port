@@ -852,8 +852,12 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             const u32 constraints_offset = align(particles_offset + source.particle_bytes);
             const u32 map_offset = align(constraints_offset + source.constraint_bytes);
             // The shaders read the map as u32s.
-            const u32 vertex_region =
+            const u32 data_end =
                 valid_cloth ? map_offset + ((source.map_bytes + 3) & ~3u) : skin_end;
+            // An element's read at the last vertex reaches up to its offset (at most 255 bytes)
+            // plus 16 bytes past it; the zeroed tail keeps such reads inside the buffer.
+            constexpr u32 ElementTail = 272;
+            const u32 vertex_region = data_end + ElementTail;
             const u64 bytes = u64{vertex_region} + source.index_bytes;
             if (!g_memory->Reserve(vertex_region)) {
                 FreeIndices(first_index, source.index_bytes / 2);
@@ -879,6 +883,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             }
             std::memcpy(staging.buffer.mapped, reinterpret_cast<const void*>(source.vertices),
                         source.vertex_bytes);
+            std::memset(staging.buffer.mapped + data_end, 0, ElementTail);
             if (source.skin != 0) {
                 std::memcpy(staging.buffer.mapped + skin_offset,
                             reinterpret_cast<const void*>(source.skin), source.skin_bytes);
@@ -945,6 +950,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             std::unique_ptr<ChunkBox[]> chunk_tree = BuildChunks(source, mesh, mesh.chunks);
             mesh.chunk_tree = chunk_tree.get();
             mesh.skin = source.skin != 0 ? vertices.address + skin_offset : 0;
+            mesh.skin_bytes = source.skin != 0 ? source.skin_bytes : 0;
             mesh.particles = valid_cloth ? vertices.address + particles_offset : 0;
             mesh.constraints = valid_cloth ? vertices.address + constraints_offset : 0;
             mesh.particle_map = valid_cloth ? vertices.address + map_offset : 0;

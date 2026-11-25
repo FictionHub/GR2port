@@ -389,7 +389,10 @@ bool Thread::Init() {
              "materials and {} layer materials",
              SceneRing::Slots, SceneRing::SlotBytes() >> 20, Scene::g_room.draws,
              Scene::g_room.casters, Scene::g_room.materials, Scene::g_room.layer_materials);
-    scene_ring = memory->CreateBuffer(SceneRing::Slots * SceneRing::SlotBytes(),
+    // The tail keeps a program's fixed reads past a short copy at the end of the last slot inside
+    // the ring; the furthest of them is the photo program's 2048 constants, 8 KB.
+    constexpr u64 RingTail = 64 * 1024;
+    scene_ring = memory->CreateBuffer(SceneRing::Slots * SceneRing::SlotBytes() + RingTail,
                                       vk::BufferUsageFlagBits::eStorageBuffer |
                                           vk::BufferUsageFlagBits::eIndirectBuffer |
                                           vk::BufferUsageFlagBits::eTransferSrc,

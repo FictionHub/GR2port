@@ -349,6 +349,9 @@ u64 g_copied_frame = 0;
 u64 g_depth_ready_frame = 0;
 bool g_noise_copied = false;
 bool g_pool_ready = false;
+// The records of the pool CreatePool made, which bound each frame's counts.
+u32 g_pool_particles = 0;
+u32 g_pool_objects = 0;
 bool g_curves_ready = false;
 bool g_fog_ready = false;
 struct QueuedCurve {
@@ -690,17 +693,14 @@ Buffer CreateStorage(u64 bytes) {
                                   Placement::Device);
 }
 
-// The records of the pools the game makes. The GPU particle programs read the pools up to these
-// counts and a record past them as 0, so the pools are never smaller.
-constexpr u64 PoolParticles = 163840;
-constexpr u64 PoolObjects = 98304;
-
-// Makes the pool at the sizes the game chose, at least PoolParticles and PoolObjects records,
-// zeroed as the game's are.
+// Makes the pool at the sizes the game chose, at least Scene::ParticlePoolParticles and
+// Scene::ParticlePoolObjects records, zeroed as the game's are.
 bool CreatePool(vk::CommandBuffer cmd, const Scene::ParticleHeader& frame) {
     const auto& dl = g_device->dispatch;
-    const u64 particle_bytes = std::max(frame.particle_bytes, PoolParticles * Scene::ParticleBytes);
-    const u64 object_bytes = std::max(frame.object_bytes, PoolObjects * Scene::ParticleObjectBytes);
+    const u64 particle_bytes =
+        std::max(frame.particle_bytes, u64{Scene::ParticlePoolParticles} * Scene::ParticleBytes);
+    const u64 object_bytes =
+        std::max(frame.object_bytes, u64{Scene::ParticlePoolObjects} * Scene::ParticleObjectBytes);
     for (u32 i = 0; i < 2; i++) {
         g_particles[i] = CreateStorage(particle_bytes);
         g_objects[i] = CreateStorage(object_bytes);
@@ -711,6 +711,8 @@ bool CreatePool(vk::CommandBuffer cmd, const Scene::ParticleHeader& frame) {
         cmd.fillBuffer(g_objects[i].buffer, 0, VK_WHOLE_SIZE, 0, dl);
     }
     const u64 objects = object_bytes / Scene::ParticleObjectBytes;
+    g_pool_particles = static_cast<u32>(particle_bytes / Scene::ParticleBytes);
+    g_pool_objects = static_cast<u32>(objects);
     g_steps = CreateStorage(objects * sizeof(u32));
     g_active = g_memory->CreateBuffer(ActiveListWord * sizeof(u32) + objects * sizeof(u32),
                                       vk::BufferUsageFlagBits::eStorageBuffer |
@@ -770,7 +772,7 @@ void CheckAlive(vk::CommandBuffer cmd, const Scene::ParticleHeader& frame, const
         return;
     }
     g_alive_frame = g_frames;
-    g_alive_pool = frame.particles;
+    g_alive_pool = std::min(frame.particles, g_pool_particles);
     const auto& dl = g_device->dispatch;
     cmd.copyBuffer(pool.buffer, g_alive_copy.buffer,
                    vk::BufferCopy{.size = u64{g_alive_pool} * Scene::ParticleBytes}, dl);
@@ -830,19 +832,27 @@ void CopyLiveDescriptions(vk::CommandBuffer cmd, const Scene::ParticleHeader& fr
     if (frame.live_descriptions == 0) {
         return;
     }
+    const u32 live = std::min(frame.live_descriptions, Scene::MaxParticleLiveDescriptions);
     std::array<u32, Scene::MaxParticleLiveDescriptions> indices;
-    std::memcpy(indices.data(), packet + Scene::ParticleLiveIndicesOffset,
-                frame.live_descriptions * sizeof(u32));
+    std::memcpy(indices.data(), packet + Scene::ParticleLiveIndicesOffset, live * sizeof(u32));
     std::array<vk::BufferCopy, Scene::MaxParticleLiveDescriptions> regions;
-    for (u32 i = 0; i < frame.live_descriptions; i++) {
-        regions[i] = {
+    u32 copies = 0;
+    for (u32 i = 0; i < live; i++) {
+        // A description past the table is left out, as the game's write past its buffer is.
+        if (indices[i] >= DescriptionBytes / Scene::ParticleDescriptionBytes) {
+            continue;
+        }
+        regions[copies++] = {
             .srcOffset = offset + Scene::ParticleLiveOffset + i * Scene::ParticleDescriptionBytes,
             .dstOffset = indices[i] * Scene::ParticleDescriptionBytes,
             .size = Scene::ParticleDescriptionBytes,
         };
     }
+    if (copies == 0) {
+        return;
+    }
     cmd.copyBuffer(buffer, g_description.buffer,
-                   vk::ArrayProxy<const vk::BufferCopy>(frame.live_descriptions, regions.data()),
+                   vk::ArrayProxy<const vk::BufferCopy>(copies, regions.data()),
                    g_device->dispatch);
 }
 
@@ -1687,8 +1697,11 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
     const u32 next = 1 - last;
     const u64 effects = address + Scene::ParticleEffectsOffset;
     const u64 owners = address + Scene::ParticleOwnersOffset;
-    const u32 object_groups = Groups(frame.objects);
-    const u32 particle_groups = Groups(frame.particles);
+    // The frame's counts, within the pool: a count past it would dispatch work for records no
+    // buffer holds.
+    const u32 objects = std::min(frame.objects, g_pool_objects);
+    const u32 object_groups = Groups(objects);
+    const u32 particle_groups = Groups(std::min(frame.particles, g_pool_particles));
 
     if (game_frames > 1) {
         constexpr u32 records = Scene::MaxParticleEffectBytes / Scene::ParticleEffectBytes;
@@ -1714,7 +1727,7 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
         .descriptions = g_description.address,
         .steps = g_steps.address,
         .active = g_active.address,
-        .objects = frame.objects,
+        .objects = objects,
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_active_pipeline.pipeline, dl);
     cmd.pushConstants(g_active_pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(list),
@@ -1872,7 +1885,7 @@ void RecordEmitterColors(vk::CommandBuffer cmd, const Scene::Header& header, u64
                            g_compute_color_set, {}, dl);
     cmd.pushConstants(g_emitter_color.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(colors),
                       &colors, dl);
-    cmd.dispatch(Groups(frame.objects), 1, 1, dl);
+    cmd.dispatch(Groups(std::min(frame.objects, g_pool_objects)), 1, 1, dl);
     FullBarrier(cmd);
 
     constexpr u32 CopyGroupPixels = 8;

@@ -22,22 +22,40 @@ struct GridPush {
 const Device* g_device = nullptr;
 Pipeline g_pipeline;
 Buffer g_grid;
+// Whether the grid's lists are set: until the first frame clears them, the memory is undefined.
+bool g_grid_cleared = false;
 
 } // namespace
 
 bool Start(const Device& device, Memory& memory) {
     g_device = &device;
     g_pipeline = CreateComputePipeline(device, LIGHT_GRID_COMP, sizeof(GridPush));
-    g_grid =
-        memory.CreateBuffer(GridBytes, vk::BufferUsageFlagBits::eStorageBuffer, Placement::Device);
+    g_grid = memory.CreateBuffer(
+        GridBytes, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+        Placement::Device);
     return g_pipeline.pipeline && g_grid.buffer;
 }
 
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
+    const auto& dl = g_device->dispatch;
+    // Every cell's list is empty (~0) until the first build, for the passes that read the grid
+    // before it.
+    if (!g_grid_cleared) {
+        g_grid_cleared = true;
+        cmd.fillBuffer(g_grid.buffer, 0, VK_WHOLE_SIZE, ~0u, dl);
+        const vk::MemoryBarrier2 cleared{
+            .srcStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
+            .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            .dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader |
+                            vk::PipelineStageFlagBits2::eComputeShader,
+            .dstAccessMask =
+                vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite,
+        };
+        cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &cleared}, dl);
+    }
     if (header.point_lights == 0) {
         return;
     }
-    const auto& dl = g_device->dispatch;
     const GridPush push{
         .light = address + Scene::LightOffset,
         .lights = address + Scene::PointLightsOffset,
