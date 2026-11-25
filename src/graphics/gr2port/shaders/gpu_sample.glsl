@@ -71,7 +71,8 @@ const uint ParticleSeed = 52u;
 uint Word(uint64_t records, uint record, uint size, uint byte_offset) {
     const uint count = RecordsOfSize(size);
     const uint at = (min(record, count - 1u) * size + byte_offset) >> 2;
-    return record < count ? Words(records).words[at] : 0u;
+    const uint value = Words(records).words[at];
+    return record < count ? value : 0u;
 }
 
 float Float(uint64_t records, uint record, uint size, uint byte_offset) {

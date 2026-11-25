@@ -31,10 +31,10 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Com
 // programs do.
 float MoveStrength(uint material, uint row, uint column) {
     // A material past the table reads 0, as the game's buffer load past it gives.
-    return material < MaterialCount
-               ? CombinerMaterials(material_address)
-                     .words[((min(material, MaterialCount - 1u) * 560u + 16u * row) >> 2) + column]
-               : 0.0;
+    const float strength =
+        CombinerMaterials(material_address)
+            .words[((min(material, MaterialCount - 1u) * 560u + 16u * row) >> 2) + column];
+    return material < MaterialCount ? strength : 0.0;
 }
 
 // The game's programs clear the lowest bit of a texture coordinate's x before reading a map.
@@ -88,7 +88,8 @@ const vec4 OperandWays[4] = vec4[4](vec4(0.0, 0.0, 1.0, 0.0), vec4(1.0, 0.0, 0.0
 // The way a field of c_gpufxUsed.y names. Fields 4 to 7 fall past the table, where the game's
 // programs read 0.
 vec4 OperandWay(uint field) {
-    return field < 4u ? OperandWays[min(field, 3u)] : vec4(0.0);
+    const vec4 way = OperandWays[min(field, 3u)];
+    return field < 4u ? way : vec4(0.0);
 }
 
 // A layer taken by a stage, in the order of operations of the game's programs.

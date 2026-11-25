@@ -30,17 +30,14 @@ uint GpuMaterial(ParticleDraw draw, uint set, uint within) {
     MaterialWords materials = MaterialWords(material_address);
     // A set past the materials reads 0, as the game's buffer load past them gives.
     const uint first = draw.gpufx_used[3] + set;
-    return (first < MaterialCount
-                ? materials.words[(min(first, MaterialCount - 1u) * 560u + 528u) >> 2]
-                : 0u) +
-           within;
+    const uint set_first = materials.words[(min(first, MaterialCount - 1u) * 560u + 528u) >> 2];
+    return (first < MaterialCount ? set_first : 0u) + within;
 }
 
 uint MaterialWord(uint material, uint word) {
-    return material < MaterialCount
-               ? MaterialWords(material_address)
-                     .words[(min(material, MaterialCount - 1u) * 560u + 4u * word) >> 2]
-               : 0u;
+    const uint at = (min(material, MaterialCount - 1u) * 560u + 4u * word) >> 2;
+    const uint value = MaterialWords(material_address).words[at];
+    return material < MaterialCount ? value : 0u;
 }
 
 vec4 MaterialVector(uint material, uint word) {

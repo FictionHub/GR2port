@@ -67,7 +67,8 @@ float SceneFloat(uint word) {
 
 uint EffectWord(uint effect, uint word) {
     const uint at = (min(effect, EffectCount - 1u) * 192u + word * 4u) >> 2;
-    return effect < EffectCount ? Words(effect_in_address).words[at] : 0u;
+    const uint value = Words(effect_in_address).words[at];
+    return effect < EffectCount ? value : 0u;
 }
 
 float EffectFloat(uint effect, uint word) {
@@ -76,7 +77,8 @@ float EffectFloat(uint effect, uint word) {
 
 uint DescriptionWord(uint description, uint word) {
     const uint at = (min(description, DescriptionCount - 1u) * 256u + word * 4u) >> 2;
-    return description < DescriptionCount ? Words(description_address).words[at] : 0u;
+    const uint value = Words(description_address).words[at];
+    return description < DescriptionCount ? value : 0u;
 }
 
 float DescriptionFloat(uint description, uint word) {
@@ -85,7 +87,8 @@ float DescriptionFloat(uint description, uint word) {
 
 uint EmitterWord(uint emitter, uint word) {
     const uint at = (min(emitter, EmitterCount - 1u) * 128u + word * 4u) >> 2;
-    return emitter < EmitterCount ? Words(emitter_in_address).words[at] : 0u;
+    const uint value = Words(emitter_in_address).words[at];
+    return emitter < EmitterCount ? value : 0u;
 }
 
 float EmitterFloat(uint emitter, uint word) {
@@ -1196,7 +1199,8 @@ void WindEffector(uint effector, uint effect, DepthView view, inout vec3 moved,
 // word of a 16-byte record.
 uint NoisePerm(uint index) {
     // The table holds 512 permutation records; an index past them reads 0.
-    return index < 512u ? Words(noise_address).words[((32u + min(index, 511u)) * 16u) >> 2] : 0u;
+    const uint value = Words(noise_address).words[((32u + min(index, 511u)) * 16u) >> 2];
+    return index < 512u ? value : 0u;
 }
 
 vec4 NoiseGradient(uint index) {

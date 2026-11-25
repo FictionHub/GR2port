@@ -51,7 +51,8 @@ uint RecordWord(uint64_t address, uint index, uint size, uint word) {
 // Word `word` of record `index` of a table of `count`: 0 past the table, as the game's buffer
 // loads past their records give.
 uint TableWord(uint64_t address, uint index, uint count, uint size, uint word) {
-    return index < count ? RecordWord(address, min(index, count - 1u), size, word) : 0u;
+    const uint value = RecordWord(address, min(index, count - 1u), size, word);
+    return index < count ? value : 0u;
 }
 
 vec4 TableVector(uint64_t address, uint index, uint count, uint size, uint word) {

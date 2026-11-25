@@ -113,10 +113,8 @@ void main() {
         cursor = GameRemainder(cursor + 1u, pool);
 
         if (constants.words[SampleMode] == ModeNormals) {
-            const vec3 normal =
-                normal_scale *
-                VertexNormal(inside ? vertices.words[(constants.words[SampleNormal] + offset) >> 2]
-                                    : 0u);
+            const uint packed = vertices.words[(constants.words[SampleNormal] + offset) >> 2];
+            const vec3 normal = normal_scale * VertexNormal(inside ? packed : 0u);
             const vec3 world = vec3(MatrixDirectionRow(constants, 0u, normal),
                                     MatrixDirectionRow(constants, 1u, normal),
                                     MatrixDirectionRow(constants, 2u, normal));
@@ -125,9 +123,9 @@ void main() {
                       fma(Turned(rotation, world), vec3(scale), velocity));
         }
         const uint at = (constants.words[SamplePosition] + offset) >> 2;
-        const vec3 vertex = uintBitsToFloat(
-            inside ? uvec3(vertices.words[at], vertices.words[at + 1u], vertices.words[at + 2u])
-                   : uvec3(0u));
+        const uvec3 words =
+            uvec3(vertices.words[at], vertices.words[at + 1u], vertices.words[at + 2u]);
+        const vec3 vertex = uintBitsToFloat(inside ? words : uvec3(0u));
         const vec3 world = vec3(ScaledPointRow(constants, 0u, position_scale, vertex),
                                 ScaledPointRow(constants, 1u, position_scale, vertex),
                                 ScaledPointRow(constants, 2u, position_scale, vertex));

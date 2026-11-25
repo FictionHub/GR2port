@@ -25,7 +25,8 @@ uint ToInt(float value) {
 // program forms it.
 float Row(UiConstants constants, uint row, uint word) {
     // The constants hold 512 rows; a row past them reads 0, as the game's buffer load gives.
-    return row < 512u ? constants.constants[((min(row, 511u) * 16u) >> 2) + word] : 0.0;
+    const float value = constants.constants[((min(row, 511u) * 16u) >> 2) + word];
+    return row < 512u ? value : 0.0;
 }
 
 float K(uint bits) {

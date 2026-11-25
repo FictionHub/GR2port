@@ -95,12 +95,13 @@ void main() {
                           min(vertex_index, constants.words[SampleVertices] - 1u);
         const uint weights_at = (constants.words[SampleWeights] + skin) >> 2;
         const uint bones_at = (constants.words[SampleBones] + skin) >> 2;
-        const vec4 weights =
-            inside ? vec4(unpackHalf2x16(Words(weights_address).words[weights_at]),
-                          unpackHalf2x16(Words(weights_address).words[weights_at + 1u]))
-                   : vec4(0.0);
-        const uint bones01 = inside ? Words(weights_address).words[bones_at] : 0u;
-        const uint bones23 = inside ? Words(weights_address).words[bones_at + 1u] : 0u;
+        const uvec4 skin_words = uvec4(
+            Words(weights_address).words[weights_at], Words(weights_address).words[weights_at + 1u],
+            Words(weights_address).words[bones_at], Words(weights_address).words[bones_at + 1u]);
+        const uvec4 picked = inside ? skin_words : uvec4(0u);
+        const vec4 weights = vec4(unpackHalf2x16(picked.x), unpackHalf2x16(picked.y));
+        const uint bones01 = picked.z;
+        const uint bones23 = picked.w;
         const uvec4 bones =
             uvec4(bones01 & 0xffffu, bones01 >> 16, bones23 & 0xffffu, bones23 >> 16);
         const vec4 row0 = BlendedRow(palette_address, weights, bones, 0u);
@@ -108,10 +109,8 @@ void main() {
         const vec4 row2 = BlendedRow(palette_address, weights, bones, 2u);
 
         if (constants.words[SampleMode] == ModeNormals) {
-            const vec3 normal =
-                normal_scale *
-                VertexNormal(inside ? vertices.words[(constants.words[SampleNormal] + offset) >> 2]
-                                    : 0u);
+            const uint packed = vertices.words[(constants.words[SampleNormal] + offset) >> 2];
+            const vec3 normal = normal_scale * VertexNormal(inside ? packed : 0u);
             const vec3 world = vec3(SkinnedDirection(row0, normal), SkinnedDirection(row1, normal),
                                     SkinnedDirection(row2, normal));
             const vec3 velocity = Vector(particle_out_address, particle, 64u, ParticleVelocity);
@@ -119,11 +118,9 @@ void main() {
                       fma(Turned(rotation, world), vec3(scale), velocity));
         }
         const uint at = (constants.words[SamplePosition] + offset) >> 2;
-        const vec3 vertex =
-            position_scale *
-            uintBitsToFloat(inside ? uvec3(vertices.words[at], vertices.words[at + 1u],
-                                           vertices.words[at + 2u])
-                                   : uvec3(0u));
+        const uvec3 words =
+            uvec3(vertices.words[at], vertices.words[at + 1u], vertices.words[at + 2u]);
+        const vec3 vertex = position_scale * uintBitsToFloat(inside ? words : uvec3(0u));
         const vec3 world = vec3(SkinnedRow(row0, vertex), SkinnedRow(row1, vertex),
                                 SkinnedRow(row2, vertex));
         const vec3 position = Vector(particle_out_address, particle, 64u, ParticlePosition);

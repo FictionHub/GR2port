@@ -51,7 +51,8 @@ const uint DescriptionBoxMax = 112u;
 uint Word(Words records, uint record, uint size, uint byte_offset) {
     const uint count = RecordsOfSize(size);
     const uint at = (min(record, count - 1u) * size + byte_offset) >> 2;
-    return record < count ? records.words[at] : 0u;
+    const uint value = records.words[at];
+    return record < count ? value : 0u;
 }
 
 float Float(Words records, uint record, uint size, uint byte_offset) {

@@ -35,7 +35,8 @@ const uint FreshMark = 0x27bc86abu;
 
 uint EffectWord(uint effect, uint word) {
     const uint at = (min(effect, EffectCount - 1u) * 192u + word * 4u) >> 2;
-    return effect < EffectCount ? Words(effect_in_address).words[at] : 0u;
+    const uint value = Words(effect_in_address).words[at];
+    return effect < EffectCount ? value : 0u;
 }
 
 float EffectFloat(uint effect, uint word) {
@@ -44,7 +45,8 @@ float EffectFloat(uint effect, uint word) {
 
 uint DescriptionWord(uint description, uint word) {
     const uint at = (min(description, DescriptionCount - 1u) * 256u + word * 4u) >> 2;
-    return description < DescriptionCount ? Words(description_address).words[at] : 0u;
+    const uint value = Words(description_address).words[at];
+    return description < DescriptionCount ? value : 0u;
 }
 
 float DescriptionFloat(uint description, uint word) {
@@ -58,7 +60,8 @@ vec4 DescriptionVector(uint description, uint word) {
 
 uint EmitterWord(uint emitter, uint word) {
     const uint at = (min(emitter, EmitterCount - 1u) * 128u + word * 4u) >> 2;
-    return emitter < EmitterCount ? Words(emitter_out_address).words[at] : 0u;
+    const uint value = Words(emitter_out_address).words[at];
+    return emitter < EmitterCount ? value : 0u;
 }
 
 float EmitterFloat(uint emitter, uint word) {
@@ -78,7 +81,8 @@ void SetEmitterWord(uint emitter, uint word, uint value) {
 
 uint ParticleWord(uint particle, uint word) {
     const uint at = (min(particle, ParticleCount - 1u) * 64u + word * 4u) >> 2;
-    return particle < ParticleCount ? Words(particle_out_address).words[at] : 0u;
+    const uint value = Words(particle_out_address).words[at];
+    return particle < ParticleCount ? value : 0u;
 }
 
 float ParticleFloat(uint particle, uint word) {

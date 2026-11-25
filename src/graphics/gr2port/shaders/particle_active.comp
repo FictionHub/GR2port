@@ -50,8 +50,8 @@ void main() {
     const uint description = emitters.w[32u * emitter + 8u];
     // A description past the table reads 0.
     const uint known = min(description, DescriptionCount - 1u);
-    const uint spawns =
-        description < DescriptionCount && descriptions.w[64u * known + 4u] == 1u ? SpawnBit : 0u;
+    const uint mode = descriptions.w[64u * known + 4u];
+    const uint spawns = description < DescriptionCount && mode == 1u ? SpawnBit : 0u;
     const uint last = steps.w[emitter];
     uint count = 0u;
     if (!owned && (last & SpawnBit) == spawns) {
