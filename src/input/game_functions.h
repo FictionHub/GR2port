@@ -66,4 +66,11 @@ void Evade(GameController* controller, bool pressed, s16 left_x, s16 left_y);
 /// 127, are where they go back to when a stick tilt ends.
 void ChangeStyle(GameController* controller, Style style, bool pressed, s16 left_y, s16 right_y);
 
+/// Input handling, when Open Collection's or Open Picture Roll's key goes down or up: while the
+/// camera is out, a touch pad click at the bottom left corner of the pad, as the photo mode's
+/// Collection prompt shows it. If right is true, the click is at the bottom right corner, as
+/// its Picture Roll prompt shows it. The game opens Collection for a click on the pad's left
+/// and Picture Roll for one on its right.
+void PhotoCorner(GameController* controller, bool right, bool pressed);
+
 } // namespace Input::GameFunctions

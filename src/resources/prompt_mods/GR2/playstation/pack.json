@@ -1,0 +1,20 @@
+{
+  "format": 2,
+  "game": "GR2",
+  "layout": "playstation",
+  "version": "2026.11.25",
+  "motion_controls": true,
+  "members": [
+    {
+      "archive": "Gravite2_Chunk0.psarc",
+      "path": "gcd/photomode_key_19.gnf",
+      "orig_size": 65792,
+      "orig_crc32": "e8c9ad89",
+      "new_size": 65792,
+      "new_crc32": "007818ef",
+      "orig_sha256": "887e1a7990963a95a9e358dd6213dc16ef2f78eec9bd436e1eaac15563ba4e68",
+      "new_sha256": "8cf1f6eac823ab03e9607717123e7e5157f8da8bbd8d30034dfcb35ac33a1bae",
+      "delta": "deltas/0000.gpd"
+    }
+  ]
+}

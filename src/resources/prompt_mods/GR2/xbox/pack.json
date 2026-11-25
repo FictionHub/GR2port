@@ -2,7 +2,7 @@
   "format": 2,
   "game": "GR2",
   "layout": "xbox",
-  "version": "2026.10.24",
+  "version": "2026.11.25",
   "motion_controls": true,
   "members": [
     {
@@ -627,9 +627,9 @@
       "orig_size": 65792,
       "orig_crc32": "e8c9ad89",
       "new_size": 65792,
-      "new_crc32": "f783a17d",
+      "new_crc32": "6c8a009b",
       "orig_sha256": "887e1a7990963a95a9e358dd6213dc16ef2f78eec9bd436e1eaac15563ba4e68",
-      "new_sha256": "195c4ad78c070df99fa0f82ce47494e7349ab37ee629f5907ff563576661aa52",
+      "new_sha256": "30f8737c0aee48edd6764a83d1e3a4cf988d046651231fd56655744b1b585a88",
       "delta": "deltas/0057.gpd"
     },
     {
@@ -649,9 +649,9 @@
       "orig_size": 65792,
       "orig_crc32": "4c937850",
       "new_size": 65792,
-      "new_crc32": "ebb15ee5",
+      "new_crc32": "5beec996",
       "orig_sha256": "83151e05ed78610dbd4fa0a2491afc57912b0bf7f4a29e0c3b210904bda52335",
-      "new_sha256": "efccfa006cb7ae06da72fb9a81a3079f4ca33e8fcd839c6d92052d49f5d69f96",
+      "new_sha256": "45f4c694a42cbd1c9aeb986d63af34396c840c265d35230db86d0026dfd7978b",
       "delta": "deltas/0059.gpd"
     },
     {
@@ -660,9 +660,9 @@
       "orig_size": 16640,
       "orig_crc32": "624de919",
       "new_size": 16640,
-      "new_crc32": "0e641536",
+      "new_crc32": "c1f5fce9",
       "orig_sha256": "a69df1b11009957c5b2496bdec10049f1e1c80503f97505a458c52002f40803e",
-      "new_sha256": "de32a1b8e8a927deeaf1770ba33cc2a69b97c52ebdbcd9acdff297dce2c0654c",
+      "new_sha256": "a35b4fac580f183c1567116f62048416908aa188cdcc0839b8e7ac502953565c",
       "delta": "deltas/0060.gpd"
     },
     {
@@ -671,9 +671,9 @@
       "orig_size": 65792,
       "orig_crc32": "39f2ab0f",
       "new_size": 65792,
-      "new_crc32": "fa063bbb",
+      "new_crc32": "c7caffe4",
       "orig_sha256": "fc3988c2adfe1e8f7b76e5f27fa0a7fb060b634f2dfbffd5fc54e405c1335570",
-      "new_sha256": "905900af622c556751b233edde30b826b19baa3efa6a74f62bba25310fb9b4bc",
+      "new_sha256": "020add2031b18263d201dd1e70db186d3f75beee676c5679d2fc26c14ceae214",
       "delta": "deltas/0061.gpd"
     },
     {
@@ -682,9 +682,9 @@
       "orig_size": 16640,
       "orig_crc32": "624de919",
       "new_size": 16640,
-      "new_crc32": "0e641536",
+      "new_crc32": "907fc71e",
       "orig_sha256": "a69df1b11009957c5b2496bdec10049f1e1c80503f97505a458c52002f40803e",
-      "new_sha256": "de32a1b8e8a927deeaf1770ba33cc2a69b97c52ebdbcd9acdff297dce2c0654c",
+      "new_sha256": "b002d9c231313192ec56734c68fac21191c572ee7dcfc104298fecbaf5101f77",
       "delta": "deltas/0062.gpd"
     },
     {

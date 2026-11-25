@@ -13,10 +13,10 @@ class CodeGenerator;
 }
 
 // Gravity Rush 2's photo mode draws its dark border, the viewfinder's grid and its control lists
-// in the screen drawing over the view through Kat's camera. A press of R3 while the camera is out
-// hides the screen drawing over the picture but for the gesture window, and another press shows it
-// again. Putting the camera away shows it again too. The left control list shows R3 and Hide UI
-// under its Filter Effect row, in a row of the game's own.
+// in the screen drawing over the view through Kat's camera. Hide UI, L3 + R2 on a pad, hides the
+// screen drawing over the picture while the camera is out, but for the gesture window, and shows
+// it again. Putting the camera away shows it again too. The left control list shows Hide UI and
+// its buttons under its Filter Effect row, in a row of the game's own.
 namespace Gr2Port::PhotoUi {
 
 /// The start of the key of the Hide UI row's text.
@@ -31,9 +31,15 @@ bool AddRow(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 /// The record of a key that starts with KeyPrefix, made from a record that find gives, or 0.
 u64 FindText(u64 texts, const char* key, GraphicsMenu::FindTextFunction find);
 
-/// The game's pad reads, with each state's PlayStation buttons in order: takes the presses of R3
-/// on the pad of handle while the camera is out.
-void OnButtons(s32 handle, u32 buttons);
+/// Any thread: whether the camera is out.
+bool CameraOut();
+
+/// Input handling, at a press of Hide UI: while the camera is out, hides the screen drawing over
+/// the picture or shows it again.
+void ToggleHidden();
+
+/// After each of the game's pad reads: shows the screen drawing again once the camera is away.
+void OnPadRead();
 
 /// Any thread: whether the screen drawing over the picture is hidden.
 bool Hidden();

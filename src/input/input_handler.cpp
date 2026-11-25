@@ -30,6 +30,7 @@
 #include "core/emulator_settings.h"
 #include "core/emulator_state.h"
 #include "core/prompt_packs/prompt_packs.h"
+#include "graphics/gr2port/photo_ui.h"
 #include "graphics/gr2port/screenshot.h"
 #include "imgui/trophy_list_layer.h"
 #include "input/controller.h"
@@ -94,6 +95,8 @@ gr2_pause = escape
 
 gr2_zoom_in = unmapped
 gr2_hide_ui = h
+gr2_collection = lbracket
+gr2_picture_roll = rbracket
 gr2_flick_up = unmapped
 gr2_flick_down = unmapped
 gr2_flick_left = z
@@ -1143,6 +1146,15 @@ void ControllerOutput::FinalizeUpdate(u8 gamepad_index) {
                 new_button_state, OutputPosition(gamepad_index, SDL_GAMEPAD_AXIS_LEFTY),
                 OutputPosition(gamepad_index, SDL_GAMEPAD_AXIS_RIGHTY));
             break;
+        case GR2_HIDE_UI:
+            if (new_button_state) {
+                Gr2Port::PhotoUi::ToggleHidden();
+            }
+            break;
+        case GR2_COLLECTION:
+        case GR2_PICTURE_ROLL:
+            GameFunctions::PhotoCorner(controller, button == GR2_PICTURE_ROLL, new_button_state);
+            break;
         default: // is a normal key (hopefully)
             controller->Button(SDLGamepadToOrbisButton(button), new_button_state);
             break;
@@ -1316,6 +1328,25 @@ InputEvent BindingConnection::ProcessBinding() {
     return event; // All keys are active
 }
 
+// The pressed_keys entry of an input, or the list's end.
+static std::list<std::pair<InputEvent, bool>>::iterator FindPressed(const InputID& id) {
+    return std::find_if(
+        pressed_keys.begin(), pressed_keys.end(),
+        [&id](const std::pair<InputEvent, bool>& entry) { return entry.first.input == id; });
+}
+
+// Axis entries persist in the list with a live axis_value, so triggers are gated on the
+// same 0x40 threshold the normal button-from-axis path uses.
+static bool IsHeld(std::list<std::pair<InputEvent, bool>>::iterator it) {
+    if (it == pressed_keys.end()) {
+        return false;
+    }
+    if (it->first.input.type == InputType::Axis) {
+        return std::abs(it->first.axis_value) > 0x40;
+    }
+    return true;
+}
+
 // Pre-pass for the hold-combo swipe layer: while the hold input is held, fresh presses of the
 // combo direction inputs play back touchpad swipes on the first pad and have their normal
 // mappings suppressed until release.
@@ -1323,23 +1354,6 @@ static void ProcessTouchpadSwipeCombo() {
     if (!swipe_combo.enabled || !swipe_combo.hold.IsValid()) {
         return;
     }
-    auto FindPressed = [](const InputID& id) {
-        return std::find_if(
-            pressed_keys.begin(), pressed_keys.end(),
-            [&id](const std::pair<InputEvent, bool>& entry) { return entry.first.input == id; });
-    };
-    // Axis entries persist in the list with a live axis_value, so triggers are gated on the
-    // same 0x40 threshold the normal button-from-axis path uses.
-    auto IsHeld = [](std::list<std::pair<InputEvent, bool>>::iterator it) {
-        if (it == pressed_keys.end()) {
-            return false;
-        }
-        if (it->first.input.type == InputType::Axis) {
-            return std::abs(it->first.axis_value) > 0x40;
-        }
-        return true;
-    };
-
     auto hold_it = FindPressed(swipe_combo.hold);
     const bool hold_down = IsHeld(hold_it);
     // A hotkey combination of the hold input and other held inputs keeps the hold input.
@@ -1379,6 +1393,49 @@ static void ProcessTouchpadSwipeCombo() {
     }
 }
 
+// GR2port: while the camera is out, the hold input of the swipe combos with R2 hides the photo
+// mode's screen drawing, and with L1 or R1 clicks the touch pad's bottom left or bottom right
+// corner, which open Collection and Picture Roll. The button's own mappings stay off from that
+// press until its release.
+static void ProcessPhotoCombos() {
+    struct Combo {
+        InputID input;
+        u32 function;
+        bool down = false;
+        bool owned = false;
+    };
+    static std::array<Combo, 3> combos{{
+        {InputID(InputType::Axis, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER), GR2_HIDE_UI},
+        {InputID(InputType::Controller, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER), GR2_COLLECTION},
+        {InputID(InputType::Controller, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER), GR2_PICTURE_ROLL},
+    }};
+    const bool hold_down = swipe_combo.hold.IsValid() && IsHeld(FindPressed(swipe_combo.hold));
+    const bool camera_out = Gr2Port::PhotoUi::CameraOut();
+    GameController* const controller = ControllerOutput::controllers[0];
+    for (Combo& combo : combos) {
+        const auto it = FindPressed(combo.input);
+        const bool down = IsHeld(it);
+        if (down && !combo.down && hold_down && camera_out) {
+            combo.owned = true;
+            if (combo.function == GR2_HIDE_UI) {
+                Gr2Port::PhotoUi::ToggleHidden();
+            } else {
+                GameFunctions::PhotoCorner(controller, combo.function == GR2_PICTURE_ROLL, true);
+            }
+        }
+        if (!down && combo.owned) {
+            combo.owned = false;
+            if (combo.function != GR2_HIDE_UI) {
+                GameFunctions::PhotoCorner(controller, combo.function == GR2_PICTURE_ROLL, false);
+            }
+        }
+        if (combo.owned && it != pressed_keys.end()) {
+            it->second = true;
+        }
+        combo.down = down;
+    }
+}
+
 void ActivateOutputsFromInputs() {
 
     // todo find a better solution
@@ -1395,6 +1452,7 @@ void ActivateOutputsFromInputs() {
         // Check for input blockers
         ApplyMouseInputBlockers();
         ProcessTouchpadSwipeCombo();
+        ProcessPhotoCombos();
 
         // Iterate over all inputs, and update their respecive outputs accordingly
         for (auto& it : connections) {

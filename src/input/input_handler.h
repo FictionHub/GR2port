@@ -68,6 +68,10 @@
 #define GR2_NORMAL_STYLE 0x08000001
 #define GR2_LUNAR_STYLE 0x08000002
 #define GR2_JUPITER_STYLE 0x08000003
+// GR2port: the photo mode's functions, which act only while the camera is out.
+#define GR2_HIDE_UI 0x08000004
+#define GR2_COLLECTION 0x08000005
+#define GR2_PICTURE_ROLL 0x08000006
 
 #define HOTKEY_FULLSCREEN 0xf0000001
 #define HOTKEY_PAUSE 0xf0000002
@@ -171,6 +175,9 @@ const std::map<std::string, u32> string_to_cbutton_map = {
     {"gr2_normal_style", GR2_NORMAL_STYLE},
     {"gr2_lunar_style", GR2_LUNAR_STYLE},
     {"gr2_jupiter_style", GR2_JUPITER_STYLE},
+    {"gr2_hide_ui", GR2_HIDE_UI},
+    {"gr2_collection", GR2_COLLECTION},
+    {"gr2_picture_roll", GR2_PICTURE_ROLL},
 
     // this is only for input
     {"back", SDL_GAMEPAD_BUTTON_BACK},
@@ -574,7 +581,7 @@ public:
 
 class ControllerAllOutputs {
 public:
-    static constexpr u64 output_count = 52;
+    static constexpr u64 output_count = 55;
     std::array<ControllerOutput, output_count> data = {
         // Important: these have to be the first, or else they will update in the wrong order
         ControllerOutput(LEFTJOYSTICK_HALFMODE),
@@ -617,6 +624,9 @@ public:
         ControllerOutput(GR2_NORMAL_STYLE),
         ControllerOutput(GR2_LUNAR_STYLE),
         ControllerOutput(GR2_JUPITER_STYLE),
+        ControllerOutput(GR2_HIDE_UI),
+        ControllerOutput(GR2_COLLECTION),
+        ControllerOutput(GR2_PICTURE_ROLL),
 
         // Axis mappings
         // ControllerOutput(SDL_GAMEPAD_BUTTON_INVALID, SDL_GAMEPAD_AXIS_LEFTX, false),

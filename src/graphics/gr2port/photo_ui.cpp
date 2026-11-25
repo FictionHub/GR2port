@@ -6,7 +6,6 @@
 #include <atomic>
 #include <cstring>
 #include <mutex>
-#include <unordered_map>
 #include <vector>
 
 #include <xbyak/xbyak.h>
@@ -25,10 +24,7 @@ using namespace Xbyak::util;
 
 // A byte that is set while the camera is out, from the press that takes it out to the press that
 // puts it away (HUD.isPhotoMode, FUN_011b0f90, reads it).
-constexpr VAddr CameraOut = 0x1ee3105;
-
-// R3 in the pad's button bits.
-constexpr u32 Button = 0x4;
+constexpr VAddr CameraOutByte = 0x1ee3105;
 
 // void FUN_011ba250(list): the control list's frame, which hands each of its slots the row the
 // slot asks for.
@@ -55,16 +51,16 @@ struct ListRow {
 };
 static_assert(sizeof(ListRow) == 0x28);
 
-// The game's number of R3, and its R3 icon, which no small icon of its own comes with.
-constexpr s32 R3Number = 9;
-constexpr char R3Icon[] = "photomode_key_20";
+// The game's L3 icon, which no small icon of its own comes with. None of the game's texts and rows
+// shows it, so the button prompts draw Hide UI's buttons, L3 + R2, or its key in it.
+constexpr char HideIcon[] = "photomode_key_19";
 constexpr char RowKey[] = "gr2port_photo_hide";
 // The game's text whose record gives the row's text its style: Put Away Camera's, in the same
 // column.
 constexpr char ModelKey[] = "ui_camera_guide_06";
 constexpr char English[] = "Hide UI";
 
-constexpr ListRow HideRow{R3Number, -1, -1, -1, RowKey, R3Icon, R3Icon};
+constexpr ListRow HideRow{-1, -1, -1, -1, RowKey, HideIcon, HideIcon};
 
 // void FUN_0171aa10(window): the gesture window's frame on the game's main thread, each frame,
 // which adds the window's draw items for the draw thread to run.
@@ -85,9 +81,6 @@ using ItemFunctionPointer = void PS4_SYSV_ABI (*)(VAddr item);
 
 std::atomic<VAddr> g_base{0};
 std::atomic<bool> g_hidden{false};
-// The last buttons read from each pad's handle.
-std::mutex g_mutex;
-std::unordered_map<s32, u32> g_last;
 std::mutex g_record_mutex;
 std::vector<u8> g_record;
 GestureDrawFunction g_gesture_draw = nullptr;
@@ -146,19 +139,20 @@ void Install(VAddr module_base) {
     g_base.store(module_base, std::memory_order_relaxed);
 }
 
-void OnButtons(s32 handle, u32 buttons) {
+bool CameraOut() {
     const VAddr base = g_base.load(std::memory_order_relaxed);
-    if (base == 0) {
-        return;
-    }
-    std::scoped_lock lock{g_mutex};
-    u32& last = g_last[handle];
-    const bool pressed = (buttons & ~last & Button) != 0;
-    last = buttons;
-    if (*Hooks::Code(base, CameraOut) == 0) {
-        g_hidden.store(false, std::memory_order_relaxed);
-    } else if (pressed) {
+    return base != 0 && *Hooks::Code(base, CameraOutByte) != 0;
+}
+
+void ToggleHidden() {
+    if (CameraOut()) {
         g_hidden.store(!g_hidden.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    }
+}
+
+void OnPadRead() {
+    if (!CameraOut()) {
+        g_hidden.store(false, std::memory_order_relaxed);
     }
 }
 

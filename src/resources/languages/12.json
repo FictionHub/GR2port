@@ -321,6 +321,8 @@
     "Screen Shake": "Näytön tärinä",
     "Hide UI": "Piilota käyttöliittymä",
     "Hide UI (Photo Mode)": "Piilota käyttöliittymä (valokuvatila)",
+    "Open Collection (Photo Mode)": "Avaa kokoelma (valokuvatila)",
+    "Open Picture Roll (Photo Mode)": "Avaa kuvarulla (valokuvatila)",
     "GPU Crash Catcher": "GPU-kaatumisten sieppaus",
     "Audio Device": "Äänilaite",
     "DS4 Speaker Device": "DS4-kaiutin",

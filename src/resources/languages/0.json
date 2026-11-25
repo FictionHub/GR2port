@@ -321,6 +321,8 @@
     "Screen Shake": "画面の揺れ",
     "Hide UI": "UIを隠す",
     "Hide UI (Photo Mode)": "UIを隠す(フォトモード)",
+    "Open Collection (Photo Mode)": "コレクションへ(フォトモード)",
+    "Open Picture Roll (Photo Mode)": "フィルム画面へ(フォトモード)",
     "GPU Crash Catcher": "GPUクラッシュ検出",
     "Audio Device": "音声出力デバイス",
     "DS4 Speaker Device": "DS4スピーカー出力デバイス",

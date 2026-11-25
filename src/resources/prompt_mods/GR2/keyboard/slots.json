@@ -345,7 +345,7 @@
    "archive": "Gravite2_Chunk0.psarc",
    "member": "gcd/photomode_key_19.gnf",
    "index": null,
-   "button": "L3",
+   "button": "hide_ui",
    "center": [
     66.0,
     64.0
@@ -405,7 +405,7 @@
    "archive": "Gravite2_Chunk0.psarc",
    "member": "gcd/photomode_key_21.gnf",
    "index": null,
-   "button": "touchpad",
+   "button": "collection",
    "center": [
     64.98606147248034,
     66.0
@@ -425,7 +425,7 @@
    "archive": "Gravite2_Chunk0.psarc",
    "member": "gcd/photomode_key_22.gnf",
    "index": null,
-   "button": "touchpad",
+   "button": "picture_roll",
    "center": [
     64.98606147248034,
     66.0
@@ -465,7 +465,7 @@
    "archive": "Gravite2_Chunk0.psarc",
    "member": "gcd/photomode_key_21_b.gnf",
    "index": null,
-   "button": "touchpad",
+   "button": "collection",
    "center": [
     32.5,
     33.5
@@ -485,7 +485,7 @@
    "archive": "Gravite2_Chunk0.psarc",
    "member": "gcd/photomode_key_22_b.gnf",
    "index": null,
-   "button": "touchpad",
+   "button": "picture_roll",
    "center": [
     32.5,
     33.5

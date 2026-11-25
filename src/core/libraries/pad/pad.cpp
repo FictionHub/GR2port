@@ -449,10 +449,8 @@ int PS4_SYSV_ABI scePadRead(s32 handle, OrbisPadData* pData, s32 num) {
     std::array<Input::State, ORBIS_PAD_MAX_DATA_NUM> states;
     const int ret_num = controller.ReadStates(states.data(), num);
     const int read = ProcessStates(pData, states.data(), ret_num);
-    // GR2port: R3 hides the photo mode's screen drawing.
-    for (int i = 0; i < read; i++) {
-        Gr2Port::PhotoUi::OnButtons(handle, static_cast<u32>(pData[i].buttons));
-    }
+    // GR2port: putting the camera away shows the photo mode's screen drawing again.
+    Gr2Port::PhotoUi::OnPadRead();
     // GR2port: the game's sound call runs on the thread that reads the pad.
     Gr2Port::Screenshot::PlayShutter();
     return read;

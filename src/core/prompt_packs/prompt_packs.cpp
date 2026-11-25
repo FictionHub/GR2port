@@ -602,8 +602,11 @@ PackSet LoadPacks() {
     const std::string game = is_gr2 ? "GR2" : "GRR";
     // GR2 shows the buttons of the pad that plays it.
     const std::string layout = is_gr2 ? StartLayout() : ReadLayout("grrPromptLayout");
-    if (std::find(Layouts.begin(), Layouts.end(), layout) != Layouts.end()) {
-        if (auto pack = LoadPack(game, layout, "layout")) {
+    // GR2's own PlayStation prompts take the playstation pack: the icons of GR2port's own
+    // functions, in the game's art.
+    if (std::find(Layouts.begin(), Layouts.end(), layout) != Layouts.end() ||
+        (is_gr2 && layout == "off")) {
+        if (auto pack = LoadPack(game, layout == "off" ? "playstation" : layout, "layout")) {
             set.layout = set.packs.size();
             set.packs.push_back(std::move(*pack));
         }

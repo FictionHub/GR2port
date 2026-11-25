@@ -321,6 +321,8 @@
     "Screen Shake": "การสั่นของหน้าจอ",
     "Hide UI": "ซ่อนอินเทอร์เฟซ",
     "Hide UI (Photo Mode)": "ซ่อนอินเทอร์เฟซ (โหมดถ่ายภาพ)",
+    "Open Collection (Photo Mode)": "เปิดคอลเลกชัน (โหมดถ่ายภาพ)",
+    "Open Picture Roll (Photo Mode)": "เปิดม้วนฟิล์ม (โหมดถ่ายภาพ)",
     "GPU Crash Catcher": "ตัวจับข้อผิดพลาด GPU",
     "Audio Device": "อุปกรณ์เสียง",
     "DS4 Speaker Device": "ลำโพง DS4",

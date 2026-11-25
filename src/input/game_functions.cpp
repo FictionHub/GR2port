@@ -9,6 +9,7 @@
 
 #include "common/logging/log.h"
 #include "core/libraries/pad/pad.h"
+#include "graphics/gr2port/photo_ui.h"
 #include "input/controller.h"
 #include "input/game_functions.h"
 #include "input/input_mouse.h"
@@ -76,7 +77,9 @@ constexpr Function Table[]{
     {"gr2_first_person", "First-person View", Same("D-pad left"), "pad_left", "4"},
     {"gr2_pause", "Pause", Same("OPTIONS"), "options", "escape"},
     {"gr2_zoom_in", "Zoom In (Photo Mode)", Same("R2"), "r2", ""},
-    {"gr2_hide_ui", "Hide UI (Photo Mode)", Same("R3"), "r3", "h"},
+    {"gr2_hide_ui", "Hide UI (Photo Mode)", Same("L3 + R2"), "", "h"},
+    {"gr2_collection", "Open Collection (Photo Mode)", Same("L3 + L1"), "", "lbracket"},
+    {"gr2_picture_roll", "Open Picture Roll (Photo Mode)", Same("L3 + R1"), "", "rbracket"},
     {"gr2_flick_up", "Flick Up (Touch Pad)", Same("Flick the touch pad up"), "touchpad_swipe_up",
      ""},
     {"gr2_flick_down", "Flick Down (Touch Pad)", Same("Flick the touch pad down"),
@@ -266,6 +269,18 @@ void ChangeStyle(GameController* controller, Style style, bool pressed, s16 left
         PressStyleInput(controller, type, style, false, left_y, right_y);
     }
     PressR2(controller, false);
+}
+
+void PhotoCorner(GameController* controller, bool right, bool pressed) {
+    // Whether each corner's click is down, so that a release ends only a click it started.
+    static std::array<std::atomic<bool>, 2> down{};
+    if (pressed == down[right].load(std::memory_order_relaxed) ||
+        (pressed && !Gr2Port::PhotoUi::CameraOut())) {
+        return;
+    }
+    down[right].store(pressed, std::memory_order_relaxed);
+    controller->SetTouchpadState(0, pressed, right ? 0.875f : 0.125f, 0.875f);
+    controller->Button(OrbisPadButtonDataOffset::TouchPad, pressed);
 }
 
 } // namespace Input::GameFunctions
