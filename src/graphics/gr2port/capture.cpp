@@ -28,6 +28,7 @@
 #include "graphics/gr2port/particle_capture.h"
 #include "graphics/gr2port/scene.h"
 #include "graphics/gr2port/scene_ring.h"
+#include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/ui_capture.h"
 #include "graphics/gr2port/upscaler.h"
@@ -770,6 +771,13 @@ std::chrono::steady_clock::time_point g_rate_last;
 std::chrono::steady_clock::duration g_rate_longest{};
 // When the last frame's capture began.
 std::chrono::steady_clock::time_point g_last_frame_start;
+// Above the game's own 30 fps a frame waits for the renderer to take the one before it and to
+// free room for the next, so the game makes no more frames than the renderer draws and none is
+// skipped. The wait ends one 30 fps frame after the last frame went out: the game's step is never
+// longer, so a longer wait would slow the game.
+constexpr auto LongestFrame = std::chrono::nanoseconds{1'000'000'000 / 30};
+// When the last frame went to the renderer.
+std::chrono::steady_clock::time_point g_last_publish;
 
 // The low word of the frame being captured, which tells what the capture copied this frame from
 // what it copied in an earlier one.
@@ -3752,6 +3760,9 @@ Scene::BranchTiming ReadBranchTiming() {
 // The frame rate patches' length of this frame in 30 fps frames. It stays 0 without a patch, when
 // each frame is one 30 fps frame.
 constexpr u64 FrameShare = 0x1f7c600 - Hooks::CodeBase;
+// The frame rate patches' count of frames in a row near their frame rate: from the eighth, a step
+// near the frame rate's is made exactly the frame rate's.
+constexpr u64 NearFrames = 0x1f7c6d8 - Hooks::CodeBase;
 
 double AdvanceGameTime() {
     const float share = Load<float>(MemoryPatcher::g_eboot_address + FrameShare);
@@ -3793,10 +3804,19 @@ u32 FrameGap(std::chrono::steady_clock::time_point start) {
 void PublishPending() {
     if (g_pending.packet != nullptr) {
         std::memcpy(g_pending.packet, &g_pending.header, sizeof(g_pending.header));
+        static const bool follow_renderer = Settings::Get().game.frame_rate > 30;
+        if (follow_renderer && SceneRing::WaitRenderer(g_last_publish + LongestFrame)) {
+            // The renderer, not the frame rate, sets this frame's length: the step follows the
+            // frames' lengths instead of holding the frame rate's.
+            std::atomic_ref<u32>{
+                *reinterpret_cast<u32*>(MemoryPatcher::g_eboot_address + NearFrames)}
+                .store(0, std::memory_order_relaxed);
+        }
         // Later frames read a world drawn into a target of the view's own and fresh writes into
         // the screen drawing's targets: these frames are always drawn.
         SceneRing::Publish(g_pending.frame,
                            g_pending.world_target != 0 || g_pending.header.ui.fresh_targets != 0);
+        g_last_publish = std::chrono::steady_clock::now();
         g_pending.packet = nullptr;
     }
 }

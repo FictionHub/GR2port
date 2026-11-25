@@ -3,6 +3,8 @@
 
 #include <array>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 #include "graphics/gr2port/scene_ring.h"
 
@@ -28,8 +30,21 @@ std::atomic<u8*> g_cpu{nullptr};
 u64 g_address = 0;
 std::atomic<u64> g_published{0};
 std::atomic<u64> g_skipped{0};
+// The draw thread's wait for the render thread to take a frame or free a slot, and the newest
+// frame the render thread took.
+std::mutex g_renderer_mutex;
+std::condition_variable g_renderer_moved;
+u64 g_taken = 0;
 // The slot the draw thread is writing; only the draw thread touches it.
 u32 g_writing = Slots;
+
+u32 FreeSlots() {
+    u32 free = 0;
+    for (const Slot& slot : g_slots) {
+        free += slot.state.load(std::memory_order_relaxed) == Free ? 1 : 0;
+    }
+    return free;
+}
 
 } // namespace
 
@@ -44,11 +59,7 @@ u8* Begin(bool keep) {
         return nullptr;
     }
     // Other frames leave the last free slot to kept ones.
-    u32 free = 0;
-    for (const Slot& slot : g_slots) {
-        free += slot.state.load(std::memory_order_relaxed) == Free ? 1 : 0;
-    }
-    if (free < (keep ? 1u : 2u)) {
+    if (FreeSlots() < (keep ? 1u : 2u)) {
         g_skipped.fetch_add(1, std::memory_order_relaxed);
         return nullptr;
     }
@@ -125,11 +136,31 @@ bool Take(u64 seen, Packet& packet) {
         .data = g_cpu.load(std::memory_order_relaxed) + newest * SlotBytes(),
         .address = g_address + newest * SlotBytes(),
     };
+    {
+        std::scoped_lock lock{g_renderer_mutex};
+        g_taken = newest_frame;
+    }
+    g_renderer_moved.notify_one();
     return true;
 }
 
 void Release(u32 slot) {
-    g_slots[slot].state.store(Free, std::memory_order_release);
+    {
+        std::scoped_lock lock{g_renderer_mutex};
+        g_slots[slot].state.store(Free, std::memory_order_release);
+    }
+    g_renderer_moved.notify_one();
+}
+
+bool WaitRenderer(std::chrono::steady_clock::time_point until) {
+    const u64 published = g_published.load(std::memory_order_relaxed);
+    const auto caught_up = [published] { return g_taken >= published && FreeSlots() >= 2; };
+    std::unique_lock lock{g_renderer_mutex};
+    if (caught_up()) {
+        return false;
+    }
+    g_renderer_moved.wait_until(lock, until, caught_up);
+    return true;
 }
 
 u64 Skipped() {

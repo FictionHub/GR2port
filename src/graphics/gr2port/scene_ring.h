@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <chrono>
+
 #include "common/types.h"
 #include "graphics/gr2port/scene.h"
 
@@ -47,6 +49,10 @@ bool Take(u64 seen, Packet& packet);
 
 /// Render thread: the GPU no longer reads slot.
 void Release(u32 slot);
+
+/// Draw thread: waits until the render thread took the newest frame published and Begin has room
+/// for any frame, or until until. True when it waited.
+bool WaitRenderer(std::chrono::steady_clock::time_point until);
 
 /// Frames the draw thread skipped because no slot was free.
 u64 Skipped();
