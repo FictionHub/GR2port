@@ -16,6 +16,37 @@ namespace {
 // and write GNM commands, which nothing reads.
 constexpr Hooks::Entry DrawLoop{0x14214e0, 6, Hooks::FramePrologue};
 
+// The engine's drawing above the binders, which builds only commands once they return: the draw
+// calls FUN_016173f0 (indexed) and FUN_01617340, and with them their state commit FUN_01614150;
+// the target setter FUN_016137a0; the program configuration FUN_01616440 and the pixel program
+// FUN_0042f150; the constant builders of the 2D shader objects (their virtual function at +0x38),
+// the strokes' geometry program FUN_017b6430, and the bind item's function FUN_013ecc20, whose
+// buffers UiItems reads from the item. UiItems reads the screen drawing from its items, and the
+// frame graph's draw loop already returns.
+constexpr std::array Drawing{
+    Hooks::Entry{0x16173f0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x1617340, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x16137a0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x1616440, 6, Hooks::FramePrologueR14},
+    // push rbx; test rsi, rsi; setne [rdi + 0xc1d1].
+    Hooks::Entry{0x42f150, 11, {0x53, 0x48, 0x85, 0xf6, 0x0f, 0x95, 0x87, 0xd1, 0xc1, 0x00, 0x00}},
+    Hooks::Entry{0x17b59b0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b5c50, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x17b5d60, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x17b5fc0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b6a40, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b6e00, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b71b0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b7740, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b7a10, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b7b20, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b7c20, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b7d50, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b7f00, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x17b6430, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x13ecc20, 6, Hooks::FramePrologue},
+};
+
 // What the game calls for each draw and dispatch on a graphics context, which write only command
 // buffer data and packets, so they return at once: FUN_0042dc50 binds a draw's shaders and writes
 // their constants, and FUN_0042da70 does the same for a dispatch.
@@ -179,7 +210,8 @@ void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         LOG_ERROR(Render_Vulkan, "GR2port: the draw loop is not the expected code");
     }
     for (const std::span<const Hooks::Entry> entries :
-         {std::span<const Hooks::Entry>{Binders}, std::span<const Hooks::Entry>{Returning}}) {
+         {std::span<const Hooks::Entry>{Drawing}, std::span<const Hooks::Entry>{Binders},
+          std::span<const Hooks::Entry>{Returning}}) {
         for (const Hooks::Entry& entry : entries) {
             if (Hooks::Return(module_base, entry) != Hooks::Result::Hooked) {
                 LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
