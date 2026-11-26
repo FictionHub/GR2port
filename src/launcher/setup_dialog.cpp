@@ -388,22 +388,22 @@ struct Stick {
 };
 
 // The input config's "analog_deadzone = leftjoystick, min, max" lines, with GR2Launcher's labels
-// and defaults.
+// and the defaults of the input config the game writes.
 constexpr std::array Sticks{
-    Stick{
-        IdLeftStickGroup,
-        L"Left Stick Deadzone",
-        "leftjoystick",
-        {18, 288, 290, 396},
-        {Slider{IdLeftMinLabel, IdLeftMin, IdLeftMinValue, L"Min Deadzone (def:2 max:127)", 2, 306},
-         Slider{IdLeftMaxLabel, IdLeftMax, IdLeftMaxValue, L"Max Deadzone (def:127 max:127)", 127,
-                348}}},
+    Stick{IdLeftStickGroup,
+          L"Left Stick Deadzone",
+          "leftjoystick",
+          {18, 288, 290, 396},
+          {Slider{IdLeftMinLabel, IdLeftMin, IdLeftMinValue, L"Min Deadzone (def:25 max:127)", 25,
+                  306},
+           Slider{IdLeftMaxLabel, IdLeftMax, IdLeftMaxValue, L"Max Deadzone (def:127 max:127)", 127,
+                  348}}},
     Stick{IdRightStickGroup,
           L"Right Stick Deadzone",
           "rightjoystick",
           {300, 288, 577, 396},
-          {Slider{IdRightMinLabel, IdRightMin, IdRightMinValue, L"Min Deadzone (def:2 max:127)", 2,
-                  306},
+          {Slider{IdRightMinLabel, IdRightMin, IdRightMinValue, L"Min Deadzone (def:15 max:127)",
+                  15, 306},
            Slider{IdRightMaxLabel, IdRightMax, IdRightMaxValue, L"Max Deadzone (def:127 max:127)",
                   127, 348}}},
 };

@@ -201,15 +201,15 @@ struct Stick {
 };
 
 // The sticks of the input config's deadzone lines, in the order of AxisNames, with GR2Launcher's
-// labels and defaults.
+// labels and the defaults of the input config the game writes.
 constexpr std::array Sticks{
     Stick{"Left Stick Deadzone",
           {18, 288, 290, 396},
-          {Slider{"Min Deadzone (def:2 max:127)", 2, 306},
+          {Slider{"Min Deadzone (def:25 max:127)", 25, 306},
            Slider{"Max Deadzone (def:127 max:127)", 127, 348}}},
     Stick{"Right Stick Deadzone",
           {300, 288, 577, 396},
-          {Slider{"Min Deadzone (def:2 max:127)", 2, 306},
+          {Slider{"Min Deadzone (def:15 max:127)", 15, 306},
            Slider{"Max Deadzone (def:127 max:127)", 127, 348}}},
 };
 
