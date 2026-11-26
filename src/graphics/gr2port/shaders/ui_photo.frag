@@ -133,8 +133,10 @@ void main() {
     const float green = Row(constants, ToInt(255.0 * blurred.g), 1u);
     const float blue = Row(constants, ToInt(255.0 * blurred.b), 2u);
 
-    // The grain: a hash of the frame's place.
-    const vec4 overlay = Sample(SecondTexture(draw), frame);
+    // The grain: a hash of the frame's place. The viewfinder's view leaves the filter's frame out:
+    // only the photo gets it.
+    const vec4 overlay =
+        (draw.flags & DrawPreview) != 0u ? vec4(0.0) : Sample(SecondTexture(draw), frame);
     const float seed = 256.0 * (frame.y * K(0x402a91b9u) + K(0x41b92023u) * frame.x) +
                        K(0x33d6bf95u);
     const float grain = fract(fract(abs(K(0x4ceb79a3u) * (1.0 / seed))) * abs(seed));
