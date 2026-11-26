@@ -12,9 +12,14 @@ namespace Input::PadBindings {
 
 namespace {
 
-constexpr std::array<std::string_view, 16> Buttons{
+// The virtual output of photo mode's Hide UI, which is not a PlayStation button: it lets the
+// Button Bindings dialog give Hide UI a pad button of its own, independent of Reset Camera's R3.
+constexpr std::string_view HideUiButton = "gr2_hide_ui_pad";
+
+constexpr std::array<std::string_view, 17> Buttons{
     "cross", "circle", "square",  "triangle",        "l1",     "r1",       "l2",       "r2",
     "l3",    "r3",     "options", "touchpad_center", "pad_up", "pad_down", "pad_left", "pad_right",
+    HideUiButton,
 };
 
 // The pad buttons, triggers included, that a controller line can name as its input.
@@ -46,6 +51,10 @@ bool IsPadInput(std::string_view name) {
     return std::ranges::find(PadInputs, name) != PadInputs.end();
 }
 
+bool IsVirtualOutput(std::string_view name) {
+    return name == HideUiButton;
+}
+
 std::span<const std::string_view> Paddles() {
     return PaddleInputs;
 }
@@ -60,6 +69,8 @@ Map Defaults() {
         buttons.emplace(button, button);
     }
     buttons["touchpad_center"] = "back";
+    // Hide UI keeps its L3 + R2 combination until the player gives it a pad button.
+    buttons[HideUiButton].clear();
     return buttons;
 }
 

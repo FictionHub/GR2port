@@ -116,6 +116,10 @@ r1 = r1
 r2 = r2
 r3 = r3
 
+# A pad button of its own for photo mode's Hide UI. Unset by default, when L3 + R2 hides it;
+# set this to a button the Button Bindings dialog can rebind without touching Reset Camera.
+# gr2_hide_ui_pad = unmapped
+
 options = options
 touchpad_center = back
 

@@ -176,6 +176,10 @@ const std::map<std::string, u32> string_to_cbutton_map = {
     {"gr2_lunar_style", GR2_LUNAR_STYLE},
     {"gr2_jupiter_style", GR2_JUPITER_STYLE},
     {"gr2_hide_ui", GR2_HIDE_UI},
+    // The Button Bindings dialog's dedicated pad button for Hide UI. It shares the GR2_HIDE_UI
+    // output with the function's key, but has its own config line, so rebinding it leaves Reset
+    // Camera's R3 alone.
+    {"gr2_hide_ui_pad", GR2_HIDE_UI},
     {"gr2_collection", GR2_COLLECTION},
     {"gr2_picture_roll", GR2_PICTURE_ROLL},
 

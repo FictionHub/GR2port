@@ -21,11 +21,16 @@ namespace Input::PadBindings {
 /// Game button -> pad button, by the input config's names; empty for none.
 using Map = std::map<std::string, std::string, std::less<>>;
 
-/// The PlayStation buttons the game's functions use, by the input config's output names.
+/// The PlayStation buttons the game's functions use, by the input config's output names, plus
+/// gr2_hide_ui_pad, a virtual output that gives Hide UI its own pad button.
 std::span<const std::string_view> GameButtons();
 
 /// Whether the input config can bind name as a pad button.
 bool IsPadInput(std::string_view name);
+
+/// Whether name is a virtual output shown in the dialog that a pad button does not press as a game
+/// button. Binding one does not take the physical button away from the function already on it.
+bool IsVirtualOutput(std::string_view name);
 
 /// The back paddles by the input config's names: upper left, upper right, lower left, lower right.
 std::span<const std::string_view> Paddles();

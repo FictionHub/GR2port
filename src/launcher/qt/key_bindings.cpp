@@ -330,9 +330,13 @@ QString PadText(std::string_view layout, std::string_view name) {
 }
 
 // The PlayStation button a function is on in a control type, or empty when the type uses a
-// stick, a touch pad flick or a button held with another.
+// stick, a touch pad flick or a button held with another. Hide UI has no PlayStation button of
+// its own: its virtual output gives the dialog a button to bind that is independent of R3.
 std::string_view GameButton(const Game::Function& function, u32 type) {
     const auto buttons = Input::PadBindings::GameButtons();
+    if (function.name == "gr2_hide_ui") {
+        return "gr2_hide_ui_pad";
+    }
     if (std::ranges::find(buttons, function.output) != buttons.end()) {
         return function.output;
     }
@@ -714,8 +718,12 @@ void ChangeButton(Editor& editor, int row) {
     }
     QString status =
         Tr("{0} now does {1}.", {PadText(editor.layout, input).toStdString(), label.toStdString()});
+    // A virtual output shares the physical button with the function already on it: binding
+    // Hide UI to Square must not unbind Normal Attack, nor must the reverse unbind Hide UI.
+    const bool virtual_output = Input::PadBindings::IsVirtualOutput(button);
     for (auto& [other, bound] : editor.buttons) {
-        if (other != button && bound == input) {
+        if (other != button && !virtual_output && !Input::PadBindings::IsVirtualOutput(other) &&
+            bound == input) {
             bound.clear();
             status += QLatin1Char(' ') +
                       Tr("{0} has no button now.", {FunctionsOn(editor, other).toStdString()});
