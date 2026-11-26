@@ -57,8 +57,8 @@ struct CommandBuffer {
 // push rbp; mov rbp, rsp.
 constexpr std::array<u8, 11> PushFrame{0x55, 0x48, 0x89, 0xe5};
 
-// UiCapture keeps the programs, registers and draws of the screen drawing in place of their
-// writers. The functions below set none of them, so they return at once: a compute queue's
+// Functions that write packets which nothing reads, so they return at once, as UiCapture makes the
+// writers of the screen drawing's programs, registers and draws return: a compute queue's
 // dispatch, FUN_0042cfb0 and FUN_00413560, the functions that reserve room for one packet, call
 // the driver and advance, and the thunks of two driver functions whose results the game leaves
 // unused.
@@ -95,13 +95,11 @@ constexpr std::array Returning{
     Hooks::Entry{0x416730, 4, PushFrame},
     Hooks::Entry{0x416b40, 4, PushFrame},
     Hooks::Entry{0x4170d0, 4, PushFrame},
-    // The writers of the registers UiCapture does not keep, which the frame graph's passes and
-    // the screen drawing send: the registers of the draw wrappers' state flush FUN_01614150, the
-    // targets and viewports of FUN_016137a0, FUN_01616ee0, FUN_0161b3e0 and FUN_0161b760, the
-    // index buffer's size of FUN_01616e10, the pipeline events, the shader stages of
-    // FUN_00414b70, and the pixel inputs and the DMA of constants of FUN_0042dc50. Each writes
-    // its packet and nothing else; the callers keep the engine's copy of the state, which
-    // UiCapture reads when the frame graph returns.
+    // The writers of other registers, which the frame graph's passes and the screen drawing
+    // send: the registers of the draw wrappers' state flush FUN_01614150, the targets and
+    // viewports of FUN_016137a0, FUN_01616ee0, FUN_0161b3e0 and FUN_0161b760, the index buffer's
+    // size of FUN_01616e10, the pipeline events, the shader stages of FUN_00414b70, and the pixel
+    // inputs and the DMA of constants of FUN_0042dc50. Each writes its packet and nothing else.
     Hooks::Entry{0x411550, 4, PushFrame},
     Hooks::Entry{0x411680, 4, PushFrame},
     Hooks::Entry{0x411710, 4, PushFrame},

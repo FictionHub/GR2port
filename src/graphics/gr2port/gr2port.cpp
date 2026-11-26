@@ -59,6 +59,7 @@
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/timeline.h"
 #include "graphics/gr2port/ui_capture.h"
+#include "graphics/gr2port/ui_items.h"
 #include "graphics/gr2port/water_splashes.h"
 
 namespace Gr2Port {
@@ -146,7 +147,9 @@ void Install(VAddr module_base) {
         LOG_ERROR(Render_Vulkan, "GR2port: the frame graph's entry is not the expected code");
         return;
     }
-    UiCapture::Install(module_base, c, StubAreaSize);
+    UiCapture::Install(module_base);
+    UiItems::Install(module_base, c, StubAreaSize);
+    PhotoUi::RouteItems(module_base, c, StubAreaSize);
     PhotoUi::Install(module_base);
     PhotoUi::WatchCamera(module_base, c, StubAreaSize);
     HudParts::Install(module_base);

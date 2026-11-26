@@ -14,7 +14,7 @@
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/menu_kit.h"
 #include "graphics/gr2port/photo_ui.h"
-#include "graphics/gr2port/ui_capture.h"
+#include "graphics/gr2port/ui_items.h"
 
 namespace Gr2Port::PhotoUi {
 
@@ -84,8 +84,6 @@ constexpr size_t ItemPoolCount = 3;
 // item's virtual table.
 constexpr Hooks::Entry ItemCall{0x84d1fc, 6, {0x48, 0x89, 0xdf, 0xff, 0x50, 0x10}};
 constexpr VAddr ItemCallNext = 0x84d202;
-constexpr u32 ItemFunction = 0x10;
-using ItemFunctionPointer = void PS4_SYSV_ABI (*)(VAddr item);
 
 std::atomic<VAddr> g_base{0};
 std::atomic<VAddr> g_camera{0};
@@ -129,21 +127,15 @@ void PS4_SYSV_ABI DrawGesture(void* window) {
     g_gesture_items[pool].end.store(memory + MenuKit::Read<u32>(taken), std::memory_order_relaxed);
 }
 
-// While the screen drawing is hidden, in place of the draw thread's call of a draw item: the
-// commands of the gesture window's items stay.
+// In place of the draw thread's call of a draw item: while the screen drawing is hidden, the
+// gesture window's items keep their draws.
 void PS4_SYSV_ABI RunItem(VAddr item) {
-    const bool gesture = std::ranges::any_of(g_gesture_items, [item](const ItemRange& range) {
-        return item >= range.first.load(std::memory_order_relaxed) &&
-               item < range.end.load(std::memory_order_relaxed);
-    });
-    const auto run = MenuKit::Read<ItemFunctionPointer>(MenuKit::Read<VAddr>(item) + ItemFunction);
-    if (gesture) {
-        UiCapture::BeginKept();
-    }
-    run(item);
-    if (gesture) {
-        UiCapture::EndKept();
-    }
+    const bool kept = g_hidden.load(std::memory_order_relaxed) &&
+                      std::ranges::any_of(g_gesture_items, [item](const ItemRange& range) {
+                          return item >= range.first.load(std::memory_order_relaxed) &&
+                                 item < range.end.load(std::memory_order_relaxed);
+                      });
+    UiItems::RunItem(item, kept);
 }
 
 } // namespace
@@ -199,18 +191,12 @@ bool AddRow(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         return false;
     }
     g_gesture_draw = reinterpret_cast<GestureDrawFunction>(const_cast<void*>(gesture_draw));
+    return true;
+}
 
-    // Outside Hide UI the call stays the game's own.
+bool RouteItems(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     const void* const item_call = c.getCurr();
-    Xbyak::Label hidden;
     c.mov(rdi, rbx);
-    c.mov(rcx, reinterpret_cast<u64>(&g_hidden));
-    c.cmp(byte[rcx], 0);
-    c.jne(hidden);
-    c.mov(rax, qword[rax + ItemFunction]);
-    c.call(rax);
-    c.jmp(Hooks::Code(module_base, ItemCallNext), Xbyak::CodeGenerator::T_NEAR);
-    c.L(hidden);
     c.mov(rax, reinterpret_cast<u64>(&RunItem));
     c.call(rax);
     c.jmp(Hooks::Code(module_base, ItemCallNext), Xbyak::CodeGenerator::T_NEAR);

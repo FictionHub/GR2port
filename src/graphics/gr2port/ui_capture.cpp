@@ -7,7 +7,6 @@
 #include <cmath>
 #include <cstring>
 #include <iterator>
-#include <limits>
 #include <mutex>
 #include <numbers>
 #include <span>
@@ -17,13 +16,13 @@
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/capture_math.h"
-#include "graphics/gr2port/frame_graph_draws.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/marker_fit.h"
 #include "graphics/gr2port/photo_ui.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/ui.h"
 #include "graphics/gr2port/ui_capture.h"
+#include "graphics/gr2port/ui_items.h"
 
 namespace Gr2Port::UiCapture {
 
@@ -31,21 +30,8 @@ namespace {
 
 using Capture::Load;
 
-// The draw thread's contexts and the indices of the frame's and the last frame's.
-constexpr VAddr Contexts = 0x1f315d8;
-constexpr u64 ContextBytes = 0xcff8;
-constexpr VAddr ContextIndex = 0x1f585f0;
+// The index of the draw thread's context of the last frame, which is its back buffer's.
 constexpr VAddr PreviousContextIndex = 0x1f585f4;
-// A context's cached state, which it sends only when it changes: the viewport's x, y, width and
-// height, whether colour blends, the blend's two operations and four factors, the primitive type,
-// and the index buffer's type and address.
-constexpr u64 ContextViewport = 0xcb90;
-constexpr u64 ContextBlendOn = 0xcc08;
-constexpr u64 ContextBlendOps = 0xcc0c;
-constexpr u64 ContextBlendFactors = 0xcc14;
-constexpr u64 ContextPrimitive = 0xcc7c;
-constexpr u64 ContextIndexType = 0xceb8;
-constexpr u64 ContextIndexBase = 0xcec0;
 // The frame's back buffer, of three. A target object holds its size at +0x14 and its T# at +0x30.
 constexpr VAddr BackBuffers = 0x1f31260;
 constexpr u64 BackBufferBytes = 0x118;
@@ -101,123 +87,74 @@ constexpr std::array FinderTextures{
     FinderTexture{1280, 256, 41},
 };
 
-// The game's writers of the screen drawing's state and draws. Each writes only its packet, which
-// nothing reads, so UiCapture keeps what each sets in its place. FUN_00413c90 and
-// FUN_00413d50(commands, registers) set and update the pixel shader, FUN_00413db0 and FUN_00413e90
-// (commands, registers, modifier) the vertex shader, and FUN_00413f00 the export shader, through
-// the driver, whose packet sets the low word of the program's address to the registers' first
-// word.
-constexpr Hooks::Entry PsProgramWriter{0x413c90, 6, Hooks::FramePrologueR14};
-constexpr Hooks::Entry PsProgramUpdater{0x413d50, 6, Hooks::FramePrologueR14};
-constexpr Hooks::Entry VsProgramWriter{0x413db0, 6, Hooks::FramePrologue};
-constexpr Hooks::Entry VsProgramUpdater{0x413e90, 6, Hooks::FramePrologue};
-constexpr Hooks::Entry EsProgramWriter{0x413f00, 6, Hooks::FramePrologue};
-// FUN_00414ec0(commands, stage, slot, value) sets two user data registers of a stage to a 64-bit
-// value, and FUN_00414fe0(commands, stage, slot, values, count) count of them. A stage's user data
-// begin at its entry of the table at 0x17f9e50, an offset from 0x2c00.
-constexpr Hooks::Entry UserDataPairWriter{0x414ec0, 6, Hooks::FramePrologue};
-constexpr Hooks::Entry UserDataWriter{0x414fe0, 6, Hooks::FramePrologue};
-constexpr VAddr StageUserData = 0x17f9e50;
-constexpr u32 ShFirst = 0x2c00;
-// FUN_00411610(commands, slot, value) sets a target's blend, FUN_00411d60(commands, slot, target)
-// a colour target, when FUN_00425d50(target) finds it valid, FUN_00415120(commands, viewport,
-// scale, offset) a viewport's x, y and z scales and offsets, and FUN_004152c0(commands, left, top,
-// right, bottom) the screen scissor. The engine sets the screen scissor to the viewport, and to
-// the target's whole size right after it sets a target.
-constexpr Hooks::Entry BlendWriter{0x411610, 6, Hooks::FramePrologue};
-constexpr Hooks::Entry TargetWriter{0x411d60, 6, Hooks::FramePrologue};
-constexpr VAddr TargetCheck = 0x425d50;
-constexpr Hooks::Entry ViewportWriter{0x415120, 6, Hooks::FramePrologue};
-constexpr Hooks::Entry ScissorWriter{0x4152c0, 6, Hooks::FramePrologue};
-// FUN_00412520(commands, type) sets the primitive type, FUN_00413b90(commands, address) the index
-// buffer, and FUN_00413b10(commands, size, policy) the index size, 32 bits for a size other than 0.
-constexpr Hooks::Entry PrimitiveWriter{0x412520, 6, Hooks::FramePrologueR14};
-constexpr Hooks::Entry IndexBaseWriter{0x413b90, 6, Hooks::FramePrologueR14};
-constexpr Hooks::Entry IndexTypeWriter{0x413b10, 6, Hooks::FramePrologue};
-// FUN_00412820(commands, count, flags) draws count vertices, FUN_00412c50(commands, first, count,
-// flags) count indices from first on.
-constexpr Hooks::Entry DrawWriter{0x412820, 6, Hooks::FramePrologue};
-constexpr Hooks::Entry IndexedDrawWriter{0x412c50, 6, Hooks::FramePrologue};
-
-// Shader registers, as offsets from the first.
-constexpr u32 Registers = 0x400;
-constexpr u32 ShPgmLoPs = 0x08;
-constexpr u32 ShPgmHiPs = 0x09;
-constexpr u32 ShUserDataPs = 0x0c;
-constexpr u32 ShPgmLoVs = 0x48;
-constexpr u32 ShPgmHiVs = 0x49;
-constexpr u32 ShUserDataVs = 0x4c;
-constexpr u32 ShUserDataGs = 0x8c;
-constexpr u32 ShPgmLoEs = 0xc8;
-constexpr u32 ShPgmHiEs = 0xc9;
-constexpr u32 ShUserDataEs = 0xcc;
-// The user data a draw reads of the vertex, export and pixel stages, and of the geometry stage.
-constexpr u32 UserData = 16;
-constexpr u32 GsUserData = 4;
-
-// A vertex program's user data: the fetch program, the table of its inputs' buffers, its constants
-// and its palette. A pixel program's: a T#, an S#, and its constants, or with a second texture a
-// table of T#, S# and constants.
-constexpr u32 VsUserTable = 2;
-constexpr u32 VsUserConstants = 4;
-constexpr u32 VsUserPalette = 8;
-constexpr u32 PsUserSampler = 8;
-constexpr u32 PsUserConstants = 12;
-constexpr u32 TableSampler = 8;
-constexpr u32 TableConstants = 12;
-
-// Where a program's hash lies in its code, after its first instructions, which load two literals.
-constexpr u64 ProgramHash = 0xc;
+// The game's writers of the screen drawing's state and draws, which write only their packets.
+// UiItems reads the screen drawing from its draw items, so they return at once: FUN_00413c90 and
+// FUN_00413d50 set and update the pixel shader, FUN_00413db0 and FUN_00413e90 the vertex shader,
+// FUN_00413f00 the export shader, FUN_00414ec0 and FUN_00414fe0 a stage's user data, FUN_00411610 a
+// target's blend, FUN_00411d60 a colour target, FUN_00415120 a viewport, FUN_004152c0 the screen
+// scissor, FUN_00412520 the primitive type, FUN_00413b90 the index buffer, FUN_00413b10 the index
+// size, and FUN_00412820 and FUN_00412c50 draw.
+constexpr std::array Writers{
+    Hooks::Entry{0x413c90, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x413d50, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x413db0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x413e90, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x413f00, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x414ec0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x414fe0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x411610, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x411d60, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x415120, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x4152c0, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x412520, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x413b90, 6, Hooks::FramePrologueR14},
+    Hooks::Entry{0x413b10, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x412820, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x412c50, 6, Hooks::FramePrologue},
+};
 
 struct VertexProgram {
-    u32 hash;
-    // The entries of the inputs' table the fetch reads, one bit each: an input's semantic.
+    // The inputs the program reads, one bit per input slot.
     u32 inputs;
     bool constants;
     bool palette;
 };
-// In Scene::UiVertexProgram's order. The stroke's hash is its copy program's, which runs in the
-// vertex stage after the export and geometry programs.
+// In Scene::UiVertexProgram's order. The stroke's constants are its export program's, and the
+// geometry program's constants take the palette's place.
 constexpr std::array<VertexProgram, static_cast<u32>(Scene::UiVertexProgram::Count)> VertexPrograms{
     {
-        {0xd77886dc, 0x7, false, false},
-        {0xac069417, 0x0, false, false},
-        {0x5a43fff7, 0x7, true, false},
-        {0x591e6b63, 0xf, true, false},
-        {0x7ff3ec61, 0x7, true, false},
-        {0x239eaa3a, 0x1f, true, true},
-        {0x13c2ea85, 0x3f, true, true},
-        {0xc1dfc610, 0xf, true, false},
-        {0x8f10f663, 0x5, true, true},
+        {0x7, false, false},
+        {0x0, false, false},
+        {0x7, true, false},
+        {0xf, true, false},
+        {0x7, true, false},
+        {0x1f, true, true},
+        {0x3f, true, true},
+        {0xf, true, false},
+        {0x5, true, true},
     }};
-// The stroke's export program, which ui_stroke.vert is generated from. The export program takes
-// the vertex user data; the geometry program's constants are the first of its user data.
-constexpr u32 StrokeExportHash = 0xc0858fae;
 
 struct PixelProgram {
-    u32 hash;
     u32 textures;
     bool constants;
-    // The user data the constants start at, without a second texture.
-    u32 constants_at;
 };
 // In Scene::UiPixelProgram's order.
 constexpr std::array<PixelProgram, static_cast<u32>(Scene::UiPixelProgram::Count)> PixelPrograms{{
-    {0x0c97af79, 0, false, 12},
-    {0xdc63f6b2, 1, false, 12},
-    {0x15305830, 0, false, 12},
-    {0x7c7ac89f, 1, true, 12},
-    {0x3e062520, 1, true, 12},
-    {0xbf81268f, 1, true, 12},
-    {0x915e83e6, 1, true, 12},
-    {0x6b493faa, 2, true, 12},
-    {0xb11cba5e, 1, true, 12},
-    {0xe2f10454, 2, true, 12},
-    {0x69770dd9, 1, true, 12},
-    {0xf64d728c, 2, true, 12},
-    {0x20a4b7dc, 0, true, 0},
-    {0xdd06831e, 2, true, 12},
-    {0x794c452f, 0, true, 0},
+    {0, false},
+    {1, false},
+    {0, false},
+    {1, true},
+    {1, true},
+    {1, true},
+    {1, true},
+    {2, true},
+    {1, true},
+    {2, true},
+    {1, true},
+    {2, true},
+    {0, true},
+    {2, true},
+    {0, true},
 }};
 
 // The engine's blend of the menus' own draws: the colour comes multiplied by its alpha.
@@ -258,47 +195,9 @@ u32 g_shared_generation = 0;
 // TextureHandle's answer for a texture the renderer does not have yet.
 constexpr u32 NotReady = ~0u;
 
-// The state a draw of the screen drawing reads besides its programs and user data: the viewport's
-// x scale and offset, then its y scale and offset, the first target's blend and its address in
-// units of 256 bytes, the primitive type, the size of an index and the index buffer's address.
-struct DrawContext {
-    std::array<float, 4> viewport{};
-    u32 blend = 0;
-    u32 color0_base = 0;
-    u32 primitive = 0;
-    u32 index_bits = 16;
-    u64 index_base = 0;
-    // The size the engine gave the current target, 0 until it sets the scissor after the target.
-    u32 target_width = 0;
-    u32 target_height = 0;
-};
-
-// A draw of the screen drawing, with the state the game had set for it. An indexed draw reads
-// count indices from first on. A kept draw stays while the screen drawing is hidden.
-struct RecordedDraw {
-    DrawContext context;
-    u64 vs_program;
-    u64 ps_program;
-    u64 es_program;
-    std::array<u32, UserData> vs_user;
-    std::array<u32, UserData> es_user;
-    std::array<u32, UserData> ps_user;
-    std::array<u32, GsUserData> gs_user;
-    bool indexed;
-    u32 first;
-    u32 count;
-    bool kept;
-};
-
-// The draw thread alone uses what follows: the shader registers and the rest of the state as the
-// game last set them, the draws since the last Write or Skip, whether the frame graph ran in the
-// frame, and whether the draws made now stay while the screen drawing is hidden.
+// The draw thread alone uses what follows: whether the frame graph ran in the frame.
 VAddr g_base = 0;
-std::array<u32, Registers> g_sh{};
-DrawContext g_state;
-std::vector<RecordedDraw> g_recorded;
 bool g_frame_graph = false;
-bool g_keeping = false;
 
 // Kept through the run, as the renderer keeps an image per target.
 std::array<Scene::UiTarget, Scene::MaxUiTargets> g_targets{};
@@ -348,15 +247,6 @@ struct Buffer {
     u32 word3;
 };
 
-Buffer ReadBuffer(const u32* words) {
-    return {
-        .base = u64{words[0]} | u64{words[1] & 0xfff} << 32,
-        .stride = words[1] >> 16 & 0x3fff,
-        .elements = words[2],
-        .word3 = words[3],
-    };
-}
-
 // The bytes a buffer's elements span: the last element ends at its format's size.
 u64 BufferBytes(const Buffer& buffer) {
     u64 element = 4;
@@ -383,141 +273,14 @@ u64 InputBytes(Buffer buffer, u32 vertices) {
     return BufferBytes(buffer);
 }
 
-u64 ProgramAddress(u32 low, u32 high) {
-    return u64{high} << 40 | u64{low} << 8;
-}
-
 u64 SharpAddress(const u32* sharp) {
     return (u64{sharp[1] & 0xff} << 32 | sharp[0]) << 8;
 }
 
-// The writers below keep nothing while the frame graph runs: its state and draws are for the
-// world's picture, which nothing reads.
-bool Recording() {
-    return !FrameGraphDraws::FrameGraphRunning();
-}
-
-void SetUserData(u32 stage, u32 slot, const u32* values, u32 count) {
-    if (!Recording()) {
-        return;
-    }
-    const u32 stage_first =
-        Load<u16>(g_base + StageUserData - Hooks::CodeBase + u64{stage} * sizeof(u16));
-    const u32 first = (stage_first - ShFirst + slot) & 0xffff;
-    if (first < Registers && first + count <= Registers) {
-        std::memcpy(&g_sh[first], values, count * sizeof(u32));
-    }
-}
-
-template <size_t Count>
-std::array<u32, Count> UserDataAt(u32 first) {
-    std::array<u32, Count> values;
-    std::memcpy(values.data(), &g_sh[first], sizeof(values));
-    return values;
-}
-
-void Record(bool indexed, u32 first, u32 count) {
-    if (!Recording()) {
-        return;
-    }
-    g_recorded.push_back({
-        .context = g_state,
-        .vs_program = ProgramAddress(g_sh[ShPgmLoVs], g_sh[ShPgmHiVs]),
-        .ps_program = ProgramAddress(g_sh[ShPgmLoPs], g_sh[ShPgmHiPs]),
-        .es_program = ProgramAddress(g_sh[ShPgmLoEs], g_sh[ShPgmHiEs]),
-        .vs_user = UserDataAt<UserData>(ShUserDataVs),
-        .es_user = UserDataAt<UserData>(ShUserDataEs),
-        .ps_user = UserDataAt<UserData>(ShUserDataPs),
-        .gs_user = UserDataAt<GsUserData>(ShUserDataGs),
-        .indexed = indexed,
-        .first = first,
-        .count = count,
-        .kept = g_keeping,
-    });
-}
-
-// In place of the writers above.
-void PS4_SYSV_ABI OnPsProgram(VAddr, const u32* registers) {
-    if (Recording()) {
-        g_sh[ShPgmLoPs] = registers != nullptr ? registers[0] : 0;
-    }
-}
-
-void PS4_SYSV_ABI OnVsProgram(VAddr, const u32* registers) {
-    if (Recording()) {
-        g_sh[ShPgmLoVs] = registers[0];
-    }
-}
-
-void PS4_SYSV_ABI OnEsProgram(VAddr, const u32* registers) {
-    if (Recording()) {
-        g_sh[ShPgmLoEs] = registers[0];
-    }
-}
-
-void PS4_SYSV_ABI OnUserDataPair(VAddr, u32 stage, u32 slot, u64 value) {
-    const std::array<u32, 2> values{static_cast<u32>(value), static_cast<u32>(value >> 32)};
-    SetUserData(stage, slot, values.data(), static_cast<u32>(values.size()));
-}
-
-void PS4_SYSV_ABI OnUserData(VAddr, u32 stage, u32 slot, const u32* values, u32 count) {
-    SetUserData(stage, slot, values, count);
-}
-
-void PS4_SYSV_ABI OnBlend(VAddr, u32 slot, u32 value) {
-    if (Recording() && slot == 0) {
-        g_state.blend = value & 0xffff1fff;
-    }
-}
-
-void PS4_SYSV_ABI OnTarget(VAddr, u32 slot, const u32* target) {
-    using Check = u32 PS4_SYSV_ABI (*)(const u32*);
-    if (!Recording() || slot != 0 || target == nullptr ||
-        reinterpret_cast<Check>(g_base + TargetCheck - Hooks::CodeBase)(target) == 0) {
-        return;
-    }
-    g_state.color0_base = target[0];
-    g_state.target_width = 0;
-    g_state.target_height = 0;
-}
-
-void PS4_SYSV_ABI OnViewport(VAddr, u32 viewport, const float* scale, const float* offset) {
-    if (Recording() && viewport == 0) {
-        g_state.viewport = {scale[0], offset[0], scale[1], offset[1]};
-    }
-}
-
-void PS4_SYSV_ABI OnScissor(VAddr, u32, u32, u32 right, u32 bottom) {
-    if (Recording() && g_state.target_width == 0) {
-        g_state.target_width = right & 0xffff;
-        g_state.target_height = bottom & 0xffff;
-    }
-}
-
-void PS4_SYSV_ABI OnPrimitive(VAddr, u32 type) {
-    if (Recording()) {
-        g_state.primitive = type & 0x3f;
-    }
-}
-
-void PS4_SYSV_ABI OnIndexBase(VAddr, u64 address) {
-    if (Recording()) {
-        g_state.index_base = address & 0xff'ffff'fffe;
-    }
-}
-
-void PS4_SYSV_ABI OnIndexType(VAddr, u32 size) {
-    if (Recording()) {
-        g_state.index_bits = (size & 3) != 0 ? 32 : 16;
-    }
-}
-
-void PS4_SYSV_ABI OnDraw(VAddr, u32 count) {
-    Record(false, 0, count);
-}
-
-void PS4_SYSV_ABI OnIndexedDraw(VAddr, u32 first, u32 count) {
-    Record(true, first, count);
+// The GoldHEN address of an address in the executable, for the logs.
+u64 GameAddress(VAddr address) {
+    return address >= g_base && address < g_base + 0x2000000 ? address - g_base + Hooks::CodeBase
+                                                             : address;
 }
 
 u32 FindTarget(u64 base, u32 width, u32 height) {
@@ -573,7 +336,7 @@ public:
         g_shared_generation++;
     }
 
-    void Draw(const RecordedDraw& recorded);
+    void Draw(const UiItems::Draw& item);
     void Filter(u32 target);
     void Shape(std::span<const float> vertices, u32 target);
     void Finish();
@@ -586,7 +349,8 @@ private:
     u64 Copy(VAddr from, u64 bytes);
     u64 CopyShared(VAddr from, u64 bytes);
     u64 CopyIndices(VAddr from, u32 first, u32 count, u32 bits, u32& lowest, u32& highest);
-    bool CopyInputs(VAddr table, u32 inputs, u32 first_vertex, u32 vertices, Scene::UiDraw& draw);
+    bool CopyInputs(std::array<Buffer, Scene::UiAttributes> buffers, u32 inputs, u32 first_vertex,
+                    u32 vertices, Scene::UiDraw& draw);
     u32 TextureHandle(const u32* sharp, bool* linear = nullptr);
     void AddRun(const Scene::UiRun& state);
 
@@ -662,9 +426,8 @@ u64 Writer::CopyIndices(VAddr from, u32 first, u32 count, u32 bits, u32& lowest,
 
 // The inputs of one vertex usually lie in one buffer, so their range is copied once. Only the
 // vertices the draw reads, from first_vertex on, are copied.
-bool Writer::CopyInputs(VAddr table, u32 inputs, u32 first_vertex, u32 vertices,
-                        Scene::UiDraw& draw) {
-    std::array<Buffer, Scene::UiAttributes> buffers;
+bool Writer::CopyInputs(std::array<Buffer, Scene::UiAttributes> buffers, u32 inputs,
+                        u32 first_vertex, u32 vertices, Scene::UiDraw& draw) {
     u64 low = ~u64{0};
     u64 high = 0;
     u64 total = 0;
@@ -672,8 +435,6 @@ bool Writer::CopyInputs(VAddr table, u32 inputs, u32 first_vertex, u32 vertices,
         if ((inputs >> i & 1) == 0) {
             continue;
         }
-        const auto words = Load<std::array<u32, 4>>(table + u64{i} * 16);
-        buffers[i] = ReadBuffer(words.data());
         if (first_vertex >= std::max(buffers[i].elements, 1u)) {
             return false;
         }
@@ -755,80 +516,62 @@ void Writer::AddRun(const Scene::UiRun& state) {
     g_runs[ui.runs++] = state;
 }
 
-void Writer::Draw(const RecordedDraw& recorded) {
-    const DrawContext& context = recorded.context;
-    const u64 vs = recorded.vs_program;
-    const u64 ps = recorded.ps_program;
-    if (vs == 0 || ps == 0) {
-        ui.dropped++;
-        if (g_logged_drops < LoggedUnknowns) {
-            g_logged_drops++;
-            LOG_INFO(Render_Vulkan, "GR2port UI: draw not drawn, no program: vs {:#x} ps {:#x}", vs,
-                     ps);
-        }
-        return;
-    }
-    const u32 vs_hash = Load<u32>(vs + ProgramHash);
-    const u32 ps_hash = Load<u32>(ps + ProgramHash);
-    const auto vertex_program = std::ranges::find(VertexPrograms, vs_hash, &VertexProgram::hash);
-    const auto pixel_program = std::ranges::find(PixelPrograms, ps_hash, &PixelProgram::hash);
-    const auto vertex_index = static_cast<u32>(vertex_program - VertexPrograms.begin());
-    const bool stroke = vertex_index == static_cast<u32>(Scene::UiVertexProgram::Stroke);
-    const u64 es = recorded.es_program;
-    const u32 es_hash = stroke && es != 0 ? Load<u32>(es + ProgramHash) : 0;
-    if (vertex_program == VertexPrograms.end() || pixel_program == PixelPrograms.end() ||
-        (stroke && es_hash != StrokeExportHash)) {
+// A draw of the screen drawing, as UiItems read it from the game's draw items.
+void Writer::Draw(const UiItems::Draw& item) {
+    const u32 vertex_index = static_cast<u32>(item.vertex);
+    const u32 pixel_index = static_cast<u32>(item.pixel);
+    if (item.vertex >= Scene::UiVertexProgram::Count ||
+        item.pixel >= Scene::UiPixelProgram::Count) {
         ui.unported++;
         if (g_logged_programs < LoggedUnknowns) {
             g_logged_programs++;
-            LOG_INFO(Render_Vulkan, "GR2port UI: programs not ported: vs {:#x} ps {:#x} es {:#x}",
-                     vs_hash, ps_hash, es_hash);
+            LOG_INFO(Render_Vulkan, "GR2port UI: programs not ported: vs {} ps {} of item {:#x}",
+                     vertex_index, pixel_index, GameAddress(item.item));
         }
         return;
     }
+    const VertexProgram& vertex_program = VertexPrograms[vertex_index];
+    const PixelProgram& pixel_program = PixelPrograms[pixel_index];
     const auto drop = [&](const char* why) {
         ui.dropped++;
         if (g_logged_drops < LoggedUnknowns) {
             g_logged_drops++;
-            LOG_INFO(Render_Vulkan, "GR2port UI: draw not drawn, {}: vs {:#x} ps {:#x}", why,
-                     vs_hash, ps_hash);
+            LOG_INFO(Render_Vulkan, "GR2port UI: draw not drawn, {}: vs {} ps {} of item {:#x}",
+                     why, vertex_index, pixel_index, GameAddress(item.item));
         }
     };
-    const u32 primitive = context.primitive;
+    const u32 primitive = item.topology;
     if (ui.draws == Scene::MaxUiDraws || ui.runs == Scene::MaxUiRuns ||
         (primitive != Scene::UiPrimitiveList && primitive != Scene::UiPrimitiveStrip)) {
         ui.dropped++;
         if (g_logged_primitives < LoggedUnknowns && ui.runs != Scene::MaxUiRuns &&
             ui.draws != Scene::MaxUiDraws) {
             g_logged_primitives++;
-            LOG_INFO(Render_Vulkan, "GR2port UI: primitive {} not drawn: vs {:#x} ps {:#x}",
-                     primitive, vs_hash, ps_hash);
+            LOG_INFO(Render_Vulkan, "GR2port UI: primitive {} not drawn: vs {} ps {}", primitive,
+                     vertex_index, pixel_index);
         }
         return;
     }
-    const auto [scale_x, offset_x, scale_y, offset_y] = context.viewport;
-    const bool sized = context.target_width != 0;
-    const u32 target = FindTarget(
-        u64{context.color0_base} << 8,
-        sized ? context.target_width : static_cast<u32>(2.0f * std::abs(scale_x) + 0.5f),
-        sized ? context.target_height : static_cast<u32>(2.0f * std::abs(scale_y) + 0.5f));
+    const auto [scale_x, offset_x, scale_y, offset_y] = item.viewport;
+    const u32 target = item.target != 0 ? ObjectTarget(item.target) : Scene::MaxUiTargets;
     if (target == Scene::MaxUiTargets) {
         drop("no target");
         return;
     }
 
-    const u32 count = recorded.count;
+    const u32 count = item.count;
     // The vertices the draw reads: from first_vertex on, vertices of them.
     u32 first_vertex = 0;
     u32 vertices = 0;
     Scene::UiDraw draw{};
-    if (!recorded.indexed) {
+    draw.flags = item.flags;
+    if (item.indices == 0) {
         vertices = count;
     } else {
-        draw.index_bits = context.index_bits;
+        draw.index_bits = item.index_bits;
         u32 highest = 0;
-        draw.indices = CopyIndices(context.index_base, recorded.first, count, context.index_bits,
-                                   first_vertex, highest);
+        draw.indices =
+            CopyIndices(item.indices, item.first, count, item.index_bits, first_vertex, highest);
         if (draw.indices == 0) {
             drop("no indices");
             return;
@@ -836,35 +579,33 @@ void Writer::Draw(const RecordedDraw& recorded) {
         vertices = highest - first_vertex + 1;
     }
 
-    const u32* const vs_user = stroke ? recorded.es_user.data() : recorded.vs_user.data();
-    const u32* const ps_user = recorded.ps_user.data();
-    if (vertex_program->inputs != 0 &&
-        !CopyInputs(u64{vs_user[VsUserTable]} | u64{vs_user[VsUserTable + 1]} << 32,
-                    vertex_program->inputs, first_vertex, vertices, draw)) {
-        drop("no inputs");
-        return;
+    if (vertex_program.inputs != 0) {
+        std::array<Buffer, Scene::UiAttributes> buffers{};
+        for (u32 i = 0; i < Scene::UiAttributes; i++) {
+            const UiItems::Input& input = item.inputs[i];
+            buffers[i] = {.base = input.address,
+                          .stride = input.stride,
+                          .elements = input.elements,
+                          .word3 = input.format};
+        }
+        if (!CopyInputs(buffers, vertex_program.inputs, first_vertex, vertices, draw)) {
+            drop("no inputs");
+            return;
+        }
     }
-    const auto constants_of = [&](const u32* words) {
-        const Buffer buffer = ReadBuffer(words);
-        return Copy(buffer.base, u64{buffer.stride} * buffer.elements);
-    };
-    // A buffer the game has not set, or one past the packet's room, would leave the program
-    // reading address 0.
-    if (vertex_program->constants) {
-        draw.vs_constants = constants_of(vs_user + VsUserConstants);
+    if (vertex_program.constants) {
+        draw.vs_constants = Copy(item.vs_constants, item.vs_bytes);
         if (draw.vs_constants == 0) {
             drop("no vertex constants");
             return;
         }
         // The Transform and Skinned programs place a vertex by the 4x4 matrix at the start of their
         // constants, column by column, and never read its third row.
-        const bool transform =
-            vertex_index == static_cast<u32>(Scene::UiVertexProgram::Transform) ||
-            vertex_index == static_cast<u32>(Scene::UiVertexProgram::TransformB);
-        if (transform || vertex_index == static_cast<u32>(Scene::UiVertexProgram::Skinned) ||
-            vertex_index == static_cast<u32>(Scene::UiVertexProgram::SkinnedB)) {
-            const auto matrix =
-                Load<std::array<float, 16>>(ReadBuffer(vs_user + VsUserConstants).base);
+        const bool transform = item.vertex == Scene::UiVertexProgram::Transform ||
+                               item.vertex == Scene::UiVertexProgram::TransformB;
+        if (transform || item.vertex == Scene::UiVertexProgram::Skinned ||
+            item.vertex == Scene::UiVertexProgram::SkinnedB) {
+            const auto matrix = Load<std::array<float, 16>>(item.vs_constants);
             if (transform && matrix[2] == 0.0f && matrix[6] == 0.0f && matrix[10] == 0.0f &&
                 matrix[14] == 0.0f) {
                 draw.flags |= Scene::UiDrawNoDepth;
@@ -874,48 +615,48 @@ void Writer::Draw(const RecordedDraw& recorded) {
             }
         }
     }
-    if (vertex_program->palette) {
-        const u32* palette_words = stroke ? recorded.gs_user.data() : vs_user + VsUserPalette;
-        draw.vs_palette = constants_of(palette_words);
+    if (vertex_program.palette) {
+        draw.vs_palette = Copy(item.vs_palette, item.palette_bytes);
         if (draw.vs_palette == 0) {
             drop("no palette");
             return;
         }
-        const Buffer palette = ReadBuffer(palette_words);
-        draw.palette_rows = static_cast<u32>(std::min<u64>(
-            u64{palette.stride} * palette.elements / 16, std::numeric_limits<u32>::max()));
+        draw.palette_rows = item.palette_bytes / 16;
     }
-    const auto pixel_index = static_cast<u32>(pixel_program - PixelPrograms.begin());
-    if (pixel_program->textures != 0) {
+    std::array<u32, 8> sharp{};
+    if (pixel_program.textures != 0) {
+        if (item.textures[0].sharp == 0) {
+            drop("no texture");
+            return;
+        }
+        sharp = Load<std::array<u32, 8>>(item.textures[0].sharp);
         bool linear = false;
-        draw.textures[0] = TextureHandle(ps_user, &linear);
-        draw.samplers[0] = SamplerOf(ps_user + PsUserSampler);
+        draw.textures[0] = TextureHandle(sharp.data(), &linear);
+        draw.samplers[0] = SamplerOf(Load<std::array<u32, 4>>(item.textures[0].sampler).data());
         // The game writes text into linear images; movies and photos are linear too.
-        if (linear && pixel_index != static_cast<u32>(Scene::UiPixelProgram::Movie) &&
-            pixel_index != static_cast<u32>(Scene::UiPixelProgram::Photo)) {
+        if (linear && item.pixel != Scene::UiPixelProgram::Movie &&
+            item.pixel != Scene::UiPixelProgram::Photo) {
             draw.flags |= Scene::UiDrawText;
-            if (vertex_index == static_cast<u32>(Scene::UiVertexProgram::Transform) ||
-                vertex_index == static_cast<u32>(Scene::UiVertexProgram::TransformB)) {
+            if (item.vertex == Scene::UiVertexProgram::Transform ||
+                item.vertex == Scene::UiVertexProgram::TransformB) {
                 draw.flags |= Scene::UiDrawAnchored;
             }
         }
-        if (pixel_index == static_cast<u32>(Scene::UiPixelProgram::Movie) &&
-            target < Scene::MaxUiTargets) {
+        if (item.pixel == Scene::UiPixelProgram::Movie) {
             g_movie_targets |= 1u << target;
         }
         // Menus draw movies as sprites; a movie played on the screen is copied over the picture.
         const u32 source = draw.textures[0] - Scene::UiTargetHandles;
-        if (vertex_index == static_cast<u32>(Scene::UiVertexProgram::Master) &&
-            pixel_index == static_cast<u32>(Scene::UiPixelProgram::Copy) && target == ui.picture &&
+        if (item.vertex == Scene::UiVertexProgram::Master &&
+            item.pixel == Scene::UiPixelProgram::Copy && target == ui.picture &&
             draw.textures[0] >= Scene::UiTargetHandles && source < Scene::MaxUiTargets &&
             (g_movie_targets >> source & 1) != 0) {
             draw.flags |= Scene::UiDrawMovie;
         }
-        if (vertex_index == static_cast<u32>(Scene::UiVertexProgram::Transform) &&
-            pixel_index == static_cast<u32>(Scene::UiPixelProgram::Sprite) &&
-            target == ui.picture) {
-            const FinderTexture shape{(ps_user[2] & 0x3fff) + 1, (ps_user[2] >> 14 & 0x3fff) + 1,
-                                      ps_user[1] >> 20 & 0x3f};
+        if (item.vertex == Scene::UiVertexProgram::Transform &&
+            item.pixel == Scene::UiPixelProgram::Sprite && target == ui.picture) {
+            const FinderTexture shape{(sharp[2] & 0x3fff) + 1, (sharp[2] >> 14 & 0x3fff) + 1,
+                                      sharp[1] >> 20 & 0x3f};
             g_finder_frame = g_finder_frame || shape == FinderGuide;
             if ((g_finder_frame || g_finder_last) &&
                 std::ranges::any_of(FinderTextures,
@@ -924,34 +665,27 @@ void Writer::Draw(const RecordedDraw& recorded) {
             }
         }
     }
-    std::array<u32, 16> table_words{};
-    if (pixel_program->textures == 2) {
-        const VAddr table = u64{ps_user[PsUserConstants]} | u64{ps_user[PsUserConstants + 1]} << 32;
-        if (table == 0) {
-            drop("no texture table");
+    if (pixel_program.textures == 2) {
+        if (item.textures[1].sharp == 0) {
+            drop("no second texture");
             return;
         }
-        table_words = Load<std::array<u32, 16>>(table);
-        draw.textures[1] = TextureHandle(table_words.data());
-        draw.samplers[1] = SamplerOf(table_words.data() + TableSampler);
-        draw.ps_constants = constants_of(table_words.data() + TableConstants);
-    } else if (pixel_program->constants) {
-        draw.ps_constants = constants_of(ps_user + pixel_program->constants_at);
+        draw.textures[1] = TextureHandle(Load<std::array<u32, 8>>(item.textures[1].sharp).data());
+        draw.samplers[1] = SamplerOf(Load<std::array<u32, 4>>(item.textures[1].sampler).data());
     }
-    if ((pixel_program->textures == 2 || pixel_program->constants) && draw.ps_constants == 0) {
-        drop("no pixel constants");
-        return;
+    if (pixel_program.textures == 2 || pixel_program.constants) {
+        draw.ps_constants = Copy(item.ps_constants, item.ps_bytes);
+        if (draw.ps_constants == 0) {
+            drop("no pixel constants");
+            return;
+        }
     }
-    if (static_cast<u32>(pixel_program - PixelPrograms.begin()) ==
-        static_cast<u32>(Scene::UiPixelProgram::Photo)) {
+    if (item.pixel == Scene::UiPixelProgram::Photo) {
         LOG_INFO(Render_Vulkan,
                  "GR2port photo: drawn into target {}, the frame from {:#x} as {:#x}, the filter's "
-                 "frame from {:#x} as {:#x}, curves of {} bytes at {:#x}; world target {}",
-                 target, SharpAddress(ps_user), draw.textures[0], SharpAddress(table_words.data()),
-                 draw.textures[1],
-                 u64{ReadBuffer(table_words.data() + TableConstants).stride} *
-                     ReadBuffer(table_words.data() + TableConstants).elements,
-                 draw.ps_constants, ui.world);
+                 "frame as {:#x}, curves of {} bytes at {:#x}; world target {}",
+                 target, SharpAddress(sharp.data()), draw.textures[0], draw.textures[1],
+                 item.ps_bytes, draw.ps_constants, ui.world);
     }
     // A texture the renderer does not have yet reads white, which a movie's colour conversion
     // turns pink, so the draw is left out until the renderer has it.
@@ -964,19 +698,17 @@ void Writer::Draw(const RecordedDraw& recorded) {
         Filter(target);
     }
 
-    if (target < Scene::MaxUiTargets) {
-        g_frame_writes |= 1u << target;
-    }
+    g_frame_writes |= 1u << target;
     AddRun({
         .target = target,
-        .vertex = static_cast<u32>(vertex_program - VertexPrograms.begin()),
-        .pixel = static_cast<u32>(pixel_program - PixelPrograms.begin()),
-        .blend = context.blend,
+        .vertex = vertex_index,
+        .pixel = pixel_index,
+        .blend = item.blend,
         .topology = primitive,
         .viewport = {offset_x - scale_x, offset_y - scale_y, 2.0f * scale_x, 2.0f * scale_y},
         .first = ui.draws,
         .count = 1,
-        .kept = recorded.kept ? 1u : 0u,
+        .kept = item.kept ? 1u : 0u,
     });
     g_commands[ui.draws] = {
         .vertex_count = count,
@@ -1118,31 +850,14 @@ void Writer::Finish() {
 
 } // namespace
 
-void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
+void Install(VAddr module_base) {
     g_base = module_base;
-    const auto replace = [&](const Hooks::Entry& entry, auto* recorder) {
-        if (!Hooks::Hooked(Hooks::Replace(module_base, entry, c, capacity,
-                                          reinterpret_cast<const void*>(recorder)))) {
+    for (const Hooks::Entry& entry : Writers) {
+        if (!Hooks::Hooked(Hooks::Return(module_base, entry))) {
             LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
                       entry.address);
         }
-    };
-    replace(PsProgramWriter, &OnPsProgram);
-    replace(PsProgramUpdater, &OnPsProgram);
-    replace(VsProgramWriter, &OnVsProgram);
-    replace(VsProgramUpdater, &OnVsProgram);
-    replace(EsProgramWriter, &OnEsProgram);
-    replace(UserDataPairWriter, &OnUserDataPair);
-    replace(UserDataWriter, &OnUserData);
-    replace(BlendWriter, &OnBlend);
-    replace(TargetWriter, &OnTarget);
-    replace(ViewportWriter, &OnViewport);
-    replace(ScissorWriter, &OnScissor);
-    replace(PrimitiveWriter, &OnPrimitive);
-    replace(IndexBaseWriter, &OnIndexBase);
-    replace(IndexTypeWriter, &OnIndexType);
-    replace(DrawWriter, &OnDraw);
-    replace(IndexedDrawWriter, &OnIndexedDraw);
+    }
 }
 
 void SetScrollBar(const ScrollBar& bar) {
@@ -1152,42 +867,13 @@ void SetScrollBar(const ScrollBar& bar) {
 }
 
 void OnFrameGraphEnd() {
-    const u32 index = Load<u32>(g_base + ContextIndex - Hooks::CodeBase);
-    const VAddr context = g_base + Contexts - Hooks::CodeBase + u64{index} * ContextBytes;
     g_frame_graph = true;
-    // The state the screen drawing does not set again.
-    const auto viewport = Load<std::array<s32, 4>>(context + ContextViewport);
-    const float half_width = 0.5f * static_cast<float>(viewport[2]);
-    const float half_height = 0.5f * static_cast<float>(viewport[3]);
-    g_state.viewport = {half_width, static_cast<float>(viewport[0]) + half_width, -half_height,
-                        static_cast<float>(viewport[1]) + half_height};
-    u32 blend = 0;
-    if (Load<u8>(context + ContextBlendOn) != 0) {
-        const auto ops = Load<std::array<u32, 2>>(context + ContextBlendOps);
-        const auto factors = Load<std::array<u32, 4>>(context + ContextBlendFactors);
-        constexpr u32 SeparateAlpha = 1u << 29;
-        constexpr u32 Enable = 1u << 30;
-        blend = factors[0] | ops[0] << 5 | factors[1] << 8 | factors[2] << 16 | ops[1] << 21 |
-                factors[3] << 24 | SeparateAlpha | Enable;
-    }
-    g_state.blend = blend;
-    g_state.primitive = Load<u32>(context + ContextPrimitive);
-    g_state.index_bits = Load<u32>(context + ContextIndexType) != 0 ? 32 : 16;
-    g_state.index_base = Load<VAddr>(context + ContextIndexBase);
 }
 
 void Skip() {
     g_frame_graph = false;
-    g_recorded.clear();
+    UiItems::Clear();
     PhotoUi::ForgetItems(Load<u32>(g_base + PreviousContextIndex - Hooks::CodeBase));
-}
-
-void BeginKept() {
-    g_keeping = true;
-}
-
-void EndKept() {
-    g_keeping = false;
 }
 
 namespace {
@@ -1291,10 +977,10 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     g_finder_frame = false;
     g_back_buffers |= picture != Scene::MaxUiTargets ? 1u << picture : 0;
     Writer writer{packet, address, ui};
-    for (const RecordedDraw& recorded : g_recorded) {
-        writer.Draw(recorded);
+    for (const UiItems::Draw& item : UiItems::Draws()) {
+        writer.Draw(item);
     }
-    g_recorded.clear();
+    UiItems::Clear();
     if (picture != Scene::MaxUiTargets) {
         AddScrollBar(writer, picture);
     }

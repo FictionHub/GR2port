@@ -13,7 +13,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 <b>
   
 To reiterate, the game's render passes are **NOT EMULATED OR STATICALLY RECOMPILED IN ANY SHAPE OR FORM** - they were completely rewritten.
-Each frame, GR2port takes the game's scene at the start of its frame graph and draws it on its own render thread, so it never builds or translates per-draw PS4 GPU commands. **The CPU overhead of the native renderer was measured as only 0.8ms in frame time**. 
+Each frame, GR2port takes the game's scene at the start of its frame graph and draws it on its own render thread, so it never builds or translates per-draw PS4 GPU commands. The 2D screen drawing (menus, HUD, text, movies and photos) is read the same way, from the game's own 2D draw items, and drawn by the same renderer. **The CPU overhead of the native renderer was measured as only 0.8ms in frame time**. 
 
 <b>
 

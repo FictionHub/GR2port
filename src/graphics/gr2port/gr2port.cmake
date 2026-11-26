@@ -169,6 +169,12 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/ui.h
     ${CMAKE_CURRENT_LIST_DIR}/ui_capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ui_capture.h
+    ${CMAKE_CURRENT_LIST_DIR}/ui_items.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ui_items.h
+    ${CMAKE_CURRENT_LIST_DIR}/ui_items_elements.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ui_items_internal.h
+    ${CMAKE_CURRENT_LIST_DIR}/ui_items_passes.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ui_items_text.cpp
     ${CMAKE_CURRENT_LIST_DIR}/upscaler.cpp
     ${CMAKE_CURRENT_LIST_DIR}/upscaler.h
     ${CMAKE_CURRENT_LIST_DIR}/vblank.cpp

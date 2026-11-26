@@ -28,6 +28,11 @@ void Install(VAddr module_base);
 /// Adds the Hide UI row to the control list. ExitRows' text hook calls FindText.
 bool AddRow(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
+/// Sends every draw item of the draw thread's walk through UiItems::RunItem, which reads it for the
+/// screen drawing and runs it; while the screen drawing is hidden, the gesture window's items keep
+/// their draws.
+bool RouteItems(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
+
 /// The record of a key that starts with KeyPrefix, made from a record that find gives, or 0.
 u64 FindText(u64 texts, const char* key, GraphicsMenu::FindTextFunction find);
 
