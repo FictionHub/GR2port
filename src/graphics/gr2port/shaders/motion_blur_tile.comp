@@ -5,7 +5,7 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
-layout(local_size_x = 16, local_size_y = 16) in;
+layout(local_size_x = 8, local_size_y = 8) in;
 
 layout(set = 0, binding = 0) uniform sampler2D velocity;
 layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D tile_max;
@@ -23,27 +23,37 @@ layout(push_constant) uniform Constants {
 
 shared uint fastest;
 
-// The game's MotionBlur tile maxima (CS 1c31720): a group per tile, whose 16 by 16 threads read
-// the velocity spread over the tile. The fastest, in pixels with y down, is the tile's; its key is
-// ten times its squared length above the thread's index.
+// The game's MotionBlur tile maxima (CS 1c31720): a group per tile reads the velocity at the
+// game's 16 by 16 points spread over the tile, four points a thread. The fastest, in pixels with
+// y down, is the tile's; its key is ten times its squared length above the point's index in the
+// game's 16 by 16 threads, so the pick is the game's.
 void main() {
-    const uint thread = gl_LocalInvocationID.y * 16u + gl_LocalInvocationID.x;
-    if (thread == 0u) {
+    if (gl_LocalInvocationIndex == 0u) {
         fastest = 0u;
     }
     const uvec2 size = uvec2(constants.tile_width, constants.tile_height);
     const uvec2 tile = gl_WorkGroupID.xy;
-    const ivec2 pixel = ivec2(size * tile + ((size * gl_LocalInvocationID.xy) >> 4u));
-    const vec2 moved = texelFetch(velocity, pixel, 0).xy;
     const float scale = constants.velocity_scale;
-    const vec2 pixels = vec2((constants.target_size.x * scale) * moved.x * 0.5,
-                             -0.5 * ((scale * constants.target_size.y) * moved.y));
-    const float length2 = pixels.x * pixels.x + pixels.y * pixels.y;
-    const uint key = (uint(clamp(10.0 * length2, 0.0, 4294967040.0)) << 16u) + thread;
+    uint best = 0u;
+    vec2 best_pixels = vec2(0.0);
+    for (uint i = 0u; i < 4u; i++) {
+        const uvec2 point = gl_LocalInvocationID.xy + 8u * uvec2(i & 1u, i >> 1u);
+        const ivec2 pixel = ivec2(size * tile + ((size * point) >> 4u));
+        const vec2 moved = texelFetch(velocity, pixel, 0).xy;
+        const vec2 pixels = vec2((constants.target_size.x * scale) * moved.x * 0.5,
+                                 -0.5 * ((scale * constants.target_size.y) * moved.y));
+        const float length2 = pixels.x * pixels.x + pixels.y * pixels.y;
+        const uint key = (uint(clamp(10.0 * length2, 0.0, 4294967040.0)) << 16u) +
+                         (point.y * 16u + point.x);
+        if (key > best) {
+            best = key;
+            best_pixels = pixels;
+        }
+    }
     barrier();
-    atomicMax(fastest, key);
+    atomicMax(fastest, best);
     barrier();
-    if (fastest == key) {
-        imageStore(tile_max, ivec2(tile), vec4(pixels, 0.0, 0.0));
+    if (fastest == best) {
+        imageStore(tile_max, ivec2(tile), vec4(best_pixels, 0.0, 0.0));
     }
 }
