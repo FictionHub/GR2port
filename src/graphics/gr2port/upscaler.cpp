@@ -854,9 +854,10 @@ void RecordInputs(vk::CommandBuffer cmd) {
     const auto& dl = g_device->dispatch;
     constexpr auto Compute = vk::PipelineStageFlagBits2::eComputeShader;
     for (const Image* image : {&g_input_color, &g_input_motion, &g_input_depth}) {
-        // The last frame's upscaler read the image.
+        // The last frame's upscaler read the image; DLSS may have cleared it.
         ImageBarrier(*g_device, cmd, image->image, vk::ImageLayout::eUndefined,
-                     vk::ImageLayout::eGeneral, Compute, vk::AccessFlagBits2::eNone, Compute,
+                     vk::ImageLayout::eGeneral, Compute | vk::PipelineStageFlagBits2::eClear,
+                     vk::AccessFlagBits2::eTransferWrite, Compute,
                      vk::AccessFlagBits2::eShaderStorageWrite);
     }
     const InputsPush push{
@@ -1486,10 +1487,14 @@ bool Record(vk::CommandBuffer cmd, vk::Image picture, vk::ImageView picture_view
                      vk::PipelineStageFlagBits2::eFragmentShader,
                  vk::AccessFlagBits2::eNone, Compute, vk::AccessFlagBits2::eShaderSampledRead,
                  Depth);
-    // The last frame's picture read the output.
+    // The last frame's picture read the output, which DLSS may have cleared, and clears again on a
+    // reset.
+    constexpr auto Clear = vk::PipelineStageFlagBits2::eClear;
+    constexpr auto Cleared = vk::AccessFlagBits2::eTransferWrite;
     ImageBarrier(*g_device, cmd, g_output.image, vk::ImageLayout::eUndefined,
-                 vk::ImageLayout::eGeneral, Compute, vk::AccessFlagBits2::eShaderSampledRead,
-                 Compute, vk::AccessFlagBits2::eShaderStorageWrite);
+                 vk::ImageLayout::eGeneral, Compute | Clear,
+                 vk::AccessFlagBits2::eShaderSampledRead | Cleared, Compute | Clear,
+                 vk::AccessFlagBits2::eShaderStorageWrite | Cleared);
     switch (g_upscaler) {
     case Settings::Upscaler::Fsr3:
         RecordFsr3(cmd);
