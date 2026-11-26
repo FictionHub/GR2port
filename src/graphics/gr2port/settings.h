@@ -140,7 +140,8 @@ inline constexpr std::array<u32, 8> HdrPaperWhiteLevels{80, 100, 120, 150, 200, 
 struct Graphics {
     std::string preset{"ps4"};
     /// The sun's shadow maps: Original 2048, 2048 and 4096 texels a side, Medium 2048 for each,
-    /// Low 1024, 1024 and 2048; Off draws no shadows.
+    /// Low 1024, 1024 and 2048; Off draws no shadows. Medium keeps three quarters of the game's
+    /// casting distances and Low half, so smaller and farther objects cast no shadow.
     Quality shadows{Quality::Original};
     /// The fog's grid of cells: Original 160 x 90 x 128, Medium 120 x 68 x 96, Low 80 x 45 x 64.
     Quality fog{Quality::Original};

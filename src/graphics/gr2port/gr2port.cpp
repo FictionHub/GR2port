@@ -51,6 +51,7 @@
 #include "graphics/gr2port/script_timers.h"
 #include "graphics/gr2port/scripted_moves.h"
 #include "graphics/gr2port/settings.h"
+#include "graphics/gr2port/shadow_distance.h"
 #include "graphics/gr2port/smoke_and_dust.h"
 #include "graphics/gr2port/sound_delay.h"
 #include "graphics/gr2port/special_cameras.h"
@@ -169,6 +170,7 @@ void Install(VAddr module_base) {
     Catcher::Outside::Set(Catcher::Outside::Crumb::GameBase, module_base);
     WaterSplashes::Install(module_base, c, StubAreaSize);
     SmokeAndDust::Install(module_base, c, StubAreaSize);
+    ShadowDistance::Install(module_base, c, StubAreaSize);
     FloatSpin::Install(module_base, c, StubAreaSize);
     // At the game's own 30 fps the motions, the hits and the comics keep the stock code.
     if (Settings::Get().game.frame_rate > 30) {

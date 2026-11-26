@@ -65,6 +65,7 @@
 #include "graphics/gr2port/shaders/lambert_frag.h"
 #include "graphics/gr2port/shaders/lambert_vert.h"
 #include "graphics/gr2port/shaders/vision_frag.h"
+#include "graphics/gr2port/shadow_distance.h"
 #include "graphics/gr2port/shadow_trace.h"
 #include "graphics/gr2port/shadows.h"
 #include "graphics/gr2port/splash.h"
@@ -574,6 +575,7 @@ void Thread::TakeSettings() {
         LOG_ERROR(Render_Vulkan, "GR2port: no memory for the shadow maps of the chosen quality");
         now.shadows = graphics.shadows;
     }
+    ShadowDistance::SetQuality(now.shadows);
     if (now.anisotropic_filtering != graphics.anisotropic_filtering &&
         !Textures::SetAnisotropy(now.anisotropic_filtering)) {
         now.anisotropic_filtering = graphics.anisotropic_filtering;
