@@ -22,6 +22,7 @@
 #include "common/path_util.h"
 #include "common/stb.h"
 #include "common/thread.h"
+#include "core/game_check/game_patches.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/catcher.h"
@@ -115,7 +116,7 @@ constexpr u32 BloomInterval = SurfacesInterval + 7;
 constexpr u32 PictureInterval = SurfacesInterval + 8;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
-// The scene's size until a world frame names the game's target for its picture: the game's own.
+// The game's own picture: the scene's size when the chosen one finds no room.
 constexpr vk::Extent2D DefaultSceneExtent{1920, 1080};
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
 u64 MaxFrameIndices() {
@@ -285,6 +286,9 @@ private:
     // they did not fit at. The scene draws at render_extent, which the upscaler makes smaller.
     vk::Extent2D scene_extent;
     vk::Extent2D refused_extent;
+    // The scene's size until a world frame names the game's target for its picture: the one the
+    // chosen resolution patch makes, which the upscaler is made for before the game starts.
+    vk::Extent2D first_extent = DefaultSceneExtent;
     // Whether a setting needs the scene's images made again at their size.
     bool scene_stale = false;
     vk::Extent2D render_extent;
@@ -401,7 +405,9 @@ bool Thread::Init() {
                                           vk::BufferUsageFlagBits::eIndirectBuffer |
                                           vk::BufferUsageFlagBits::eTransferSrc,
                                       Placement::Upload);
-    if (scene_ring.mapped == nullptr || !Upscaler::Start(d, *memory) ||
+    const GamePatches::Picture picture = GamePatches::ChosenPicture();
+    first_extent = vk::Extent2D{picture.width, picture.height};
+    if (scene_ring.mapped == nullptr || !Upscaler::Start(d, *memory, first_extent) ||
         !Meshes::Start(d, *memory) || !Textures::Start(d, *memory) || !Ui::Start(d, *memory) ||
         !ImGuiRelay::Start(d, *memory) || !Shadows::Start(d, *memory) ||
         !Deformers::Start(d, *memory) || !Velocity::Start(d, *memory) ||
@@ -654,7 +660,7 @@ bool Thread::ResizeScene(vk::Extent2D output) {
 // Gives the scene the size of the game's target for the world's picture, which the game's render
 // resolution sets, or keeps its size on frames that name none. False when the scene has no images.
 bool Thread::SizeScene(const Scene::Header& header, const u8* packet) {
-    vk::Extent2D extent = scene_extent.width != 0 ? scene_extent : DefaultSceneExtent;
+    vk::Extent2D extent = scene_extent.width != 0 ? scene_extent : first_extent;
     if (header.ui.only == 0 && header.ui.world < std::min(header.ui.targets, Scene::MaxUiTargets)) {
         Scene::UiTarget target;
         std::memcpy(&target, packet + Scene::UiTargetsOffset + header.ui.world * sizeof(target),

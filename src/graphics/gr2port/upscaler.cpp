@@ -195,9 +195,16 @@ bool g_fsr4_encodes = false;
 // Whether the picture is sharpened after the upscale, which reads the output image.
 bool g_sharpened = false;
 
-// DLSS: whether the options are set for the sizes, which the first evaluation makes NGX's feature
-// with.
+// DLSS: whether NGX's feature is made for the sizes.
 bool g_dlss_ready = false;
+// DLSS: the commands NGX recorded when it made the feature, which run before its first evaluation,
+// and whether they still wait for the queue (the splash has it before the game starts).
+vk::CommandPool g_start_pool;
+vk::CommandBuffer g_start_commands;
+vk::Fence g_start_fence;
+bool g_start_pending = false;
+// Whether a setting needs the context made again at its sizes.
+bool g_remake = false;
 
 // XeSS: whether the context is initialized for the sizes.
 bool g_xess_ready = false;
@@ -336,6 +343,8 @@ void FreeContexts() {
         Gr2Fsr3::DlssFree();
         g_dlss_ready = false;
     }
+    // Commands never run that name the freed feature's images.
+    g_start_pending = false;
     g_xess_ready = false;
     for (Image* image : {&g_output, &g_input_color, &g_input_motion, &g_input_depth}) {
         g_memory->Destroy(*image);
@@ -356,7 +365,7 @@ bool CreateFsr3(vk::Extent2D render, vk::Extent2D output) {
         .instance = static_cast<VkInstance>(g_device->instance),
         .physicalDevice = static_cast<VkPhysicalDevice>(g_device->gpu),
         .device = static_cast<VkDevice>(g_device->device),
-        .getDeviceProcAddr = g_device->dispatch.vkGetDeviceProcAddr,
+        .getDeviceProcAddr = Gr2Fsr3::DeviceProcAddr(),
         .queue = static_cast<VkQueue>(g_device->queue),
         .queueFamilyIndex = g_device->queue_family,
         .synchronization2Enabled = VK_TRUE,
@@ -702,6 +711,28 @@ bool CreateDlss(vk::Extent2D render, vk::Extent2D output) {
         return false;
     }
     Gr2Fsr3::DlssSetOptions(mode, DlssModel);
+    const auto& dl = g_device->dispatch;
+    if (g_device->device.resetCommandPool(g_start_pool, {}, dl) != vk::Result::eSuccess ||
+        g_start_commands.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit}, dl) !=
+            vk::Result::eSuccess) {
+        TurnOff("DLSS has no command buffer for its start-up commands");
+        return false;
+    }
+    const std::string failed = Gr2Fsr3::DlssCreate(g_start_commands, render, output);
+    // Everything after them on the queue sees what NGX's start-up commands wrote.
+    const vk::MemoryBarrier2 written{
+        .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+        .srcAccessMask = vk::AccessFlagBits2::eMemoryWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+        .dstAccessMask = vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite,
+    };
+    g_start_commands.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &written}, dl);
+    if (g_start_commands.end(dl) != vk::Result::eSuccess || !failed.empty()) {
+        Gr2Fsr3::DlssFree();
+        TurnOff(failed.empty() ? "DLSS's start-up commands were not recorded" : failed);
+        return false;
+    }
+    g_start_pending = true;
     g_dlss_ready = true;
     LOG_INFO(Render_Vulkan, "GR2port upscaler: DLSS runs preset E, the convolutional model");
     return true;
@@ -716,6 +747,105 @@ bool CreateXess(vk::Extent2D render, vk::Extent2D output) {
         return false;
     }
     g_xess_ready = true;
+    return true;
+}
+
+bool Holds() {
+    return g_fsr3 != nullptr || g_fsr4 != nullptr || g_dlss_ready || g_xess_ready;
+}
+
+// With the GPU idle: makes the context and the images for the sizes, freeing the old ones. False
+// when an image finds no room.
+bool Make(vk::Extent2D render, vk::Extent2D output) {
+    FreeContexts();
+    if (!Active()) {
+        return true;
+    }
+    // The transfer usage is for the clear of DLSS, as on its inputs.
+    g_output =
+        g_memory->CreateImage(OutputFormat, output,
+                              vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
+                                  vk::ImageUsageFlagBits::eTransferDst,
+                              vk::ImageAspectFlagBits::eColor);
+    if (!g_output.image) {
+        return false;
+    }
+    const auto start = Clock::now();
+    bool created = false;
+    switch (g_upscaler) {
+    case Settings::Upscaler::Fsr3:
+        created = CreateFsr3(render, output);
+        break;
+    case Settings::Upscaler::Fsr4:
+        created = CreateFsr4(render, output);
+        break;
+    case Settings::Upscaler::Dlss:
+        created = CreateDlss(render, output);
+        break;
+    case Settings::Upscaler::Xess:
+        created = CreateXess(render, output);
+        break;
+    default:
+        break;
+    }
+    if (!created) {
+        return true;
+    }
+    // After the context, which tells whether FSR 4 reads the copies.
+    if (UsesInputs() && !CreateInputs(render)) {
+        return false;
+    }
+    g_render = render;
+    g_output_extent = output;
+    g_phase_count = PhaseCount(render, output);
+    g_phase = 0;
+    g_reset = true;
+    g_failed_logged = false;
+    LOG_INFO(Render_Vulkan, "GR2port upscaler: {} {}x{} -> {}x{}, {} jitter phases, made in {} ms",
+             Name(g_upscaler), render.width, render.height, output.width, output.height,
+             g_phase_count,
+             std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - start).count());
+    return true;
+}
+
+// With the GPU idle and the queue the renderer's: runs DLSS's start-up commands, if they wait.
+void SubmitStart() {
+    if (!g_start_pending) {
+        return;
+    }
+    g_start_pending = false;
+    const auto& dl = g_device->dispatch;
+    const vk::CommandBufferSubmitInfo commands{.commandBuffer = g_start_commands};
+    const vk::SubmitInfo2 submit{.commandBufferInfoCount = 1, .pCommandBufferInfos = &commands};
+    if (g_device->device.resetFences(g_start_fence, dl) != vk::Result::eSuccess ||
+        g_device->queue.submit2(submit, g_start_fence, dl) != vk::Result::eSuccess ||
+        g_device->device.waitForFences(g_start_fence, true, UINT64_MAX, dl) !=
+            vk::Result::eSuccess) {
+        TurnOff("DLSS's start-up commands did not run");
+    }
+}
+
+// The commands DLSS's feature records when NGX makes it, and their fence.
+bool CreateStartCommands(const Device& device) {
+    const auto& dl = device.dispatch;
+    g_start_pool = device.device
+                       .createCommandPool({.flags = vk::CommandPoolCreateFlagBits::eTransient,
+                                           .queueFamilyIndex = device.queue_family},
+                                          nullptr, dl)
+                       .value;
+    g_start_fence = device.device.createFence({}, nullptr, dl).value;
+    if (!g_start_pool || !g_start_fence) {
+        return false;
+    }
+    const auto [result, buffers] =
+        device.device.allocateCommandBuffers({.commandPool = g_start_pool,
+                                              .level = vk::CommandBufferLevel::ePrimary,
+                                              .commandBufferCount = 1},
+                                             dl);
+    if (result != vk::Result::eSuccess) {
+        return false;
+    }
+    g_start_commands = buffers[0];
     return true;
 }
 
@@ -1115,7 +1245,7 @@ void OnDeviceCreated(Device& device) {
     }
 }
 
-bool Start(const Device& device, Memory& memory) {
+bool Start(const Device& device, Memory& memory, vk::Extent2D picture) {
     g_device = &device;
     g_memory = &memory;
     const Settings::Graphics graphics = Settings::Get().graphics;
@@ -1127,6 +1257,7 @@ bool Start(const Device& device, Memory& memory) {
         return true;
     }
     Gr2Fsr3::SetDispatcher(device.dispatch);
+    Gr2Fsr3::SetPipelineCache(static_cast<VkPipelineCache>(device.pipeline_cache));
     const vk::PhysicalDeviceFeatures features = device.gpu.getFeatures(device.dispatch);
     switch (graphics.upscaler) {
     case Settings::Upscaler::Fsr3: {
@@ -1159,10 +1290,15 @@ bool Start(const Device& device, Memory& memory) {
                         Gr2Fsr3::DlssBootNotice());
             return true;
         }
+        if (!CreateStartCommands(device)) {
+            LOG_WARNING(Render_Vulkan, "GR2port upscaler: DLSS is off: no command buffer for its "
+                                       "start-up commands; the game's antialiasing runs");
+            return true;
+        }
         break;
     case Settings::Upscaler::Xess:
-        if (const std::string notice =
-                Gr2Fsr3::XessCreate(device.instance, device.gpu, device.device);
+        if (const std::string notice = Gr2Fsr3::XessCreate(device.instance, device.gpu,
+                                                           device.device, device.pipeline_cache);
             !notice.empty()) {
             LOG_WARNING(Render_Vulkan,
                         "GR2port upscaler: XeSS is off: {}; the game's antialiasing runs", notice);
@@ -1216,12 +1352,21 @@ bool Start(const Device& device, Memory& memory) {
     g_round_up = g_upscaler == Settings::Upscaler::Xess;
     g_ratio = Settings::UpscaleRatio(graphics.upscale_quality);
     LOG_INFO(Render_Vulkan, "GR2port upscaler: {} at {:.2f}x", Name(g_upscaler), g_ratio.load());
+    // Made before the game starts for the picture the game will name, so the pipelines go into the
+    // pipeline cache and DLSS makes its feature here; the scene's first resize keeps the context.
+    Make(RenderExtent(picture), picture);
     return true;
 }
 
 void Stop() {
     if (g_memory != nullptr) {
         FreeContexts();
+    }
+    if (g_start_pool) {
+        g_device->device.destroyCommandPool(g_start_pool, nullptr, g_device->dispatch);
+        g_device->device.destroyFence(g_start_fence, nullptr, g_device->dispatch);
+        g_start_pool = nullptr;
+        g_start_fence = nullptr;
     }
     Gr2Fsr3::XessDestroy();
 }
@@ -1249,54 +1394,16 @@ float LodBias() {
 }
 
 bool Resize(vk::Extent2D render, vk::Extent2D output) {
-    FreeContexts();
-    if (!Active()) {
-        return true;
-    }
-    // The transfer usage is for the clear of DLSS, as on its inputs.
-    g_output =
-        g_memory->CreateImage(OutputFormat, output,
-                              vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
-                                  vk::ImageUsageFlagBits::eTransferDst,
-                              vk::ImageAspectFlagBits::eColor);
-    if (!g_output.image) {
+    // The context made before the game started, or at the last resize, serves the same sizes.
+    if (Holds() && render == g_render && output == g_output_extent && !g_remake) {
+        g_phase = 0;
+        g_reset = true;
+        g_failed_logged = false;
+    } else if (!Make(render, output)) {
         return false;
     }
-    const auto start = Clock::now();
-    bool created = false;
-    switch (g_upscaler) {
-    case Settings::Upscaler::Fsr3:
-        created = CreateFsr3(render, output);
-        break;
-    case Settings::Upscaler::Fsr4:
-        created = CreateFsr4(render, output);
-        break;
-    case Settings::Upscaler::Dlss:
-        created = CreateDlss(render, output);
-        break;
-    case Settings::Upscaler::Xess:
-        created = CreateXess(render, output);
-        break;
-    default:
-        break;
-    }
-    if (!created) {
-        return true;
-    }
-    // After the context, which tells whether FSR 4 reads the copies.
-    if (UsesInputs() && !CreateInputs(render)) {
-        return false;
-    }
-    g_render = render;
-    g_output_extent = output;
-    g_phase_count = PhaseCount(render, output);
-    g_phase = 0;
-    g_reset = true;
-    g_failed_logged = false;
-    LOG_INFO(Render_Vulkan, "GR2port upscaler: {} {}x{} -> {}x{}, {} jitter phases, made in {} ms",
-             Name(g_upscaler), render.width, render.height, output.width, output.height,
-             g_phase_count,
-             std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - start).count());
+    g_remake = false;
+    SubmitStart();
     return true;
 }
 
@@ -1421,6 +1528,7 @@ bool Record(vk::CommandBuffer cmd, vk::Image picture, vk::ImageView picture_view
 bool SetSharpened(bool sharpened) {
     const bool remake = g_fsr4 != nullptr && g_fsr4_can_encode && g_fsr4_encodes == sharpened;
     g_sharpened = sharpened;
+    g_remake = g_remake || remake;
     return remake;
 }
 

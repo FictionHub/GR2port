@@ -41,8 +41,9 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
 void OnDeviceCreated(Device& device);
 
 /// After the device is made, before the textures start: checks that the device runs the chosen
-/// upscaler, else the game's antialiasing runs.
-bool Start(const Device& device, Memory& memory);
+/// upscaler, else the game's antialiasing runs, and makes its context for picture, the size the
+/// game will name, so every pipeline and DLSS's feature are made before the game starts.
+bool Start(const Device& device, Memory& memory, vk::Extent2D picture);
 
 /// With the GPU idle: frees the context and the images.
 void Stop();
@@ -57,9 +58,10 @@ vk::Extent2D RenderExtent(vk::Extent2D output);
 /// width minus one, or 0 without an upscaler.
 float LodBias();
 
-/// With the GPU idle: makes the context and the output image for the sizes. When the context
-/// cannot be made, the game's antialiasing runs and RenderExtent gives output. False when the
-/// output image is not made.
+/// With the GPU idle and the queue the renderer's: keeps the context for the same sizes, else makes
+/// it and the output image; then runs DLSS's start-up commands. When the context cannot be made,
+/// the game's antialiasing runs and RenderExtent gives output. False when the output image is not
+/// made.
 bool Resize(vk::Extent2D render, vk::Extent2D output);
 
 /// With the GPU idle, after Resize: the scene's depth and velocity at the render size.

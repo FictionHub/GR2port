@@ -41,10 +41,10 @@ void ExtendInstanceForXess(std::vector<const char*>& extensions, u32 api_version
 void ExtendDeviceForXess(vk::Instance instance, vk::PhysicalDevice physical_device,
                          vk::DeviceCreateInfo& create_info);
 
-/// Makes the XeSS context and starts building its pipelines. Returns why XeSS does not run, or an
-/// empty string.
-std::string XessCreate(vk::Instance instance, vk::PhysicalDevice physical_device,
-                       vk::Device device);
+/// Makes the XeSS context and builds its pipelines into pipeline_cache. Returns why XeSS does not
+/// run, or an empty string.
+std::string XessCreate(vk::Instance instance, vk::PhysicalDevice physical_device, vk::Device device,
+                       vk::PipelineCache pipeline_cache);
 
 /// Initializes XeSS for the sizes and scales the velocity by velocity_scale_x and
 /// velocity_scale_y. Returns why it failed, or an empty string.
@@ -61,7 +61,7 @@ void XessDestroy();
 
 inline void ExtendInstanceForXess(std::vector<const char*>&, u32) {}
 inline void ExtendDeviceForXess(vk::Instance, vk::PhysicalDevice, vk::DeviceCreateInfo&) {}
-inline std::string XessCreate(vk::Instance, vk::PhysicalDevice, vk::Device) {
+inline std::string XessCreate(vk::Instance, vk::PhysicalDevice, vk::Device, vk::PipelineCache) {
     return "XeSS needs Windows";
 }
 inline std::string XessInit(XessQuality, vk::Extent2D, vk::Extent2D, float, float) {

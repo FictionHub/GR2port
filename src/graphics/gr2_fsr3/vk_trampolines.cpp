@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstring>
 #include <type_traits>
 
 #include "graphics/gr2_fsr3/vk_trampolines.h"
@@ -13,6 +14,7 @@ namespace {
 
 // The default dispatcher until GR2port's upscaler sets its own.
 const vk::detail::DispatchLoaderDynamic* g_dispatcher = &VULKAN_HPP_DEFAULT_DISPATCHER;
+VkPipelineCache g_cache = VK_NULL_HANDLE;
 
 const vk::detail::DispatchLoaderDynamic& Dispatcher() {
     return *g_dispatcher;
@@ -22,6 +24,10 @@ const vk::detail::DispatchLoaderDynamic& Dispatcher() {
 
 void Gr2Fsr3::SetDispatcher(const vk::detail::DispatchLoaderDynamic& dispatcher) {
     g_dispatcher = &dispatcher;
+}
+
+void Gr2Fsr3::SetPipelineCache(VkPipelineCache cache) {
+    g_cache = cache;
 }
 
 // Hidden visibility keeps the names out of the dynamic symbol table, so the loader always binds
@@ -135,8 +141,9 @@ GR2_FSR3_TRAMPOLINE VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
     VkDevice device, VkPipelineCache pipeline_cache, uint32_t create_info_count,
     const VkComputePipelineCreateInfo* create_infos, const VkAllocationCallbacks* allocator,
     VkPipeline* pipelines) {
-    return Dispatcher().vkCreateComputePipelines(device, pipeline_cache, create_info_count,
-                                                 create_infos, allocator, pipelines);
+    return Dispatcher().vkCreateComputePipelines(
+        device, pipeline_cache != VK_NULL_HANDLE ? pipeline_cache : g_cache, create_info_count,
+        create_infos, allocator, pipelines);
 }
 static_assert(std::is_same_v<decltype(&vkCreateComputePipelines), PFN_vkCreateComputePipelines>);
 
@@ -270,9 +277,16 @@ static_assert(
 
 GR2_FSR3_TRAMPOLINE VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device,
                                                                                  const char* name) {
+    if (std::strcmp(name, "vkCreateComputePipelines") == 0) {
+        return reinterpret_cast<PFN_vkVoidFunction>(&vkCreateComputePipelines);
+    }
     return Dispatcher().vkGetDeviceProcAddr(device, name);
 }
 static_assert(std::is_same_v<decltype(&vkGetDeviceProcAddr), PFN_vkGetDeviceProcAddr>);
+
+PFN_vkGetDeviceProcAddr Gr2Fsr3::DeviceProcAddr() {
+    return &vkGetDeviceProcAddr;
+}
 
 GR2_FSR3_TRAMPOLINE VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements(
     VkDevice device, VkImage image, VkMemoryRequirements* memory_requirements) {

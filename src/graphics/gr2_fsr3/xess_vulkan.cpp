@@ -217,8 +217,8 @@ void ExtendDeviceForXess(vk::Instance instance, vk::PhysicalDevice physical_devi
     g_stage = Stage::DeviceExtended;
 }
 
-std::string XessCreate(vk::Instance instance, vk::PhysicalDevice physical_device,
-                       vk::Device device) {
+std::string XessCreate(vk::Instance instance, vk::PhysicalDevice physical_device, vk::Device device,
+                       vk::PipelineCache pipeline_cache) {
     if (g_stage != Stage::DeviceExtended) {
         return g_notice;
     }
@@ -230,8 +230,8 @@ std::string XessCreate(vk::Instance instance, vk::PhysicalDevice physical_device
         return fmt::format("the XeSS context was not made: {}", ResultText(result));
     }
     g_api.xessSetLoggingCallback(context, XESS_LOGGING_LEVEL_WARNING, ForwardLog);
-    if (const xess_result_t result =
-            g_api.xessVKBuildPipelines(context, VK_NULL_HANDLE, false, Flags);
+    if (const xess_result_t result = g_api.xessVKBuildPipelines(
+            context, static_cast<VkPipelineCache>(pipeline_cache), true, Flags);
         result != XESS_RESULT_SUCCESS) {
         g_api.xessDestroyContext(context);
         return fmt::format("XeSS did not build its pipelines: {}", ResultText(result));

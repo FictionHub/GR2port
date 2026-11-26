@@ -512,27 +512,33 @@ void DlssSetOptions(DlssMode mode, DlssPreset preset) {
     g_preset = preset;
 }
 
+std::string DlssCreate(vk::CommandBuffer cmdbuf, vk::Extent2D render_size,
+                       vk::Extent2D output_size) {
+    SetPresets(g_preset);
+    NVSDK_NGX_Parameter_SetUI(g_params, NVSDK_NGX_Parameter_FreeMemOnReleaseFeature, 1);
+    NVSDK_NGX_DLSS_Create_Params create{};
+    create.Feature.InWidth = render_size.width;
+    create.Feature.InHeight = render_size.height;
+    create.Feature.InTargetWidth = output_size.width;
+    create.Feature.InTargetHeight = output_size.height;
+    create.Feature.InPerfQualityValue = static_cast<NVSDK_NGX_PerfQuality_Value>(g_mode);
+    create.InFeatureCreateFlags = FeatureFlags;
+    if (const NVSDK_NGX_Result result = NGX_VULKAN_CREATE_DLSS_EXT1(
+            static_cast<VkDevice>(g_device), static_cast<VkCommandBuffer>(cmdbuf), 1, 1, &g_feature,
+            g_params, &create);
+        NVSDK_NGX_FAILED(result)) {
+        g_feature = nullptr;
+        return fmt::format("DLSS: NGX did not make the feature: {}", ResultText(result));
+    }
+    LOG_INFO(Render_Vulkan, "GR2 DLSS: feature made: {} {}x{} -> {}x{}", DlssModeName(g_mode),
+             render_size.width, render_size.height, output_size.width, output_size.height);
+    return {};
+}
+
 std::string DlssEvaluate(vk::CommandBuffer cmdbuf, const DlssEvaluateInfo& info) {
     const VkCommandBuffer cmd = static_cast<VkCommandBuffer>(cmdbuf);
     if (g_feature == nullptr) {
-        SetPresets(g_preset);
-        NVSDK_NGX_Parameter_SetUI(g_params, NVSDK_NGX_Parameter_FreeMemOnReleaseFeature, 1);
-        NVSDK_NGX_DLSS_Create_Params create{};
-        create.Feature.InWidth = info.render_size.width;
-        create.Feature.InHeight = info.render_size.height;
-        create.Feature.InTargetWidth = info.output_size.width;
-        create.Feature.InTargetHeight = info.output_size.height;
-        create.Feature.InPerfQualityValue = static_cast<NVSDK_NGX_PerfQuality_Value>(g_mode);
-        create.InFeatureCreateFlags = FeatureFlags;
-        if (const NVSDK_NGX_Result result = NGX_VULKAN_CREATE_DLSS_EXT1(
-                static_cast<VkDevice>(g_device), cmd, 1, 1, &g_feature, g_params, &create);
-            NVSDK_NGX_FAILED(result)) {
-            g_feature = nullptr;
-            return fmt::format("DLSS: NGX did not make the feature: {}", ResultText(result));
-        }
-        LOG_INFO(Render_Vulkan, "GR2 DLSS: feature made: {} {}x{} -> {}x{}", DlssModeName(g_mode),
-                 info.render_size.width, info.render_size.height, info.output_size.width,
-                 info.output_size.height);
+        return "DLSS: no feature is made";
     }
     const Fsr4Images& images = info.images;
     NVSDK_NGX_Resource_VK color =

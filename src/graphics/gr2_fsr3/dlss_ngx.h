@@ -88,11 +88,17 @@ std::optional<DlssRange> DlssOptimalRange(DlssMode mode, DlssPreset preset,
                                           vk::Extent2D output_size, std::string& notice);
 
 /// GPU command thread, while no other DLSS call runs: sets the mode and the preset that the next
-/// DlssEvaluate makes the NGX feature with.
+/// DlssCreate makes the NGX feature with.
 void DlssSetOptions(DlssMode mode, DlssPreset preset);
 
-/// Record thread. Evaluates DLSS into info.images.output, first making the NGX feature in cmdbuf
-/// if none is made; returns why it failed, or an empty string. The inputs are written and in
+/// Record thread, with no feature made: makes the NGX feature for the sizes, recording its start-up
+/// commands in cmdbuf, which must run before the first evaluation. Returns why it failed, or an
+/// empty string.
+std::string DlssCreate(vk::CommandBuffer cmdbuf, vk::Extent2D render_size,
+                       vk::Extent2D output_size);
+
+/// Record thread, with the feature made: evaluates DLSS into info.images.output; returns why it
+/// failed, or an empty string. The inputs are written and in
 /// VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, and the output is in VK_IMAGE_LAYOUT_GENERAL.
 std::string DlssEvaluate(vk::CommandBuffer cmdbuf, const DlssEvaluateInfo& info);
 
@@ -117,6 +123,9 @@ inline std::optional<DlssRange> DlssOptimalRange(DlssMode, DlssPreset, vk::Exten
     return std::nullopt;
 }
 inline void DlssSetOptions(DlssMode, DlssPreset) {}
+inline std::string DlssCreate(vk::CommandBuffer, vk::Extent2D, vk::Extent2D) {
+    return "DLSS is not in this build";
+}
 inline std::string DlssEvaluate(vk::CommandBuffer, const DlssEvaluateInfo&) {
     return "DLSS is not in this build";
 }

@@ -115,4 +115,13 @@ bool FitsUi();
 /// Whether the Halloween photo items mod pack is on.
 bool HalloweenItems();
 
+struct Picture {
+    u32 width;
+    u32 height;
+};
+
+/// The picture the game draws at the chosen settings: the size the chosen resolution patch names
+/// ("Resolution 2560x1440 ..."), or the game's own 1920 x 1080 when none applies.
+Picture ChosenPicture();
+
 } // namespace Gr2Port::GamePatches

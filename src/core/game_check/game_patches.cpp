@@ -7,6 +7,7 @@
 #include <limits>
 #include <span>
 #include <string>
+#include <system_error>
 #include <fmt/format.h>
 #include <pugixml.hpp>
 
@@ -479,6 +480,40 @@ bool FitsUi() {
 
 bool HalloweenItems() {
     return Settings::Get().game.halloween_items;
+}
+
+Picture ChosenPicture() {
+    pugi::xml_document doc;
+    const std::string_view xml = GameCheck::PatchXml();
+    if (doc.load_buffer(xml.data(), xml.size())) {
+        for (const pugi::xml_node patch : doc.child("Patch").children("Metadata")) {
+            const std::string_view category = patch.attribute("Category").value();
+            const std::string_view name = patch.attribute("Name").value();
+            if (!IsResolutionPatch(category) || !IsEnabled(name, category, false)) {
+                continue;
+            }
+            // The first "<width>x<height>" of the name: "4:3 1920x1440", "Ultrawide 21:9 (7:3)
+            // 1680x720", "Resolution 2560x1440 (1440p, 16:9)".
+            const char* const last = name.data() + name.size();
+            for (size_t at = 0; at < name.size(); at++) {
+                const auto digit = [&name](size_t i) { return name[i] >= '0' && name[i] <= '9'; };
+                if (!digit(at) || (at > 0 && digit(at - 1))) {
+                    continue;
+                }
+                Picture picture{};
+                const auto [x, width_error] =
+                    std::from_chars(name.data() + at, last, picture.width);
+                if (width_error != std::errc{} || x == last || *x != 'x') {
+                    continue;
+                }
+                const auto [rest, height_error] = std::from_chars(x + 1, last, picture.height);
+                if (height_error == std::errc{} && picture.width != 0 && picture.height != 0) {
+                    return picture;
+                }
+            }
+        }
+    }
+    return Picture{1920, 1080};
 }
 
 } // namespace Gr2Port::GamePatches
