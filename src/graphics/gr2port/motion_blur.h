@@ -13,10 +13,12 @@ class Memory;
 namespace Gr2Port::MotionBlur {
 
 /// Creates the sets and the pipelines; scene_format is the scene's colour. With motion blur Low,
-/// one reconstruction from a copy of the scene, its taps twice as far apart, replaces the two.
+/// one reconstruction, its taps twice as far apart, over the tiles that move only, replaces the
+/// two.
 bool Start(const Device& device, Memory& memory, vk::Format scene_format);
 
-/// Render thread, between frames: whether the blur is motion blur Low's.
+/// Render thread, between frames: whether the blur is motion blur Low's. With an upscaler on, it
+/// always is.
 void Choose(bool low);
 
 /// With the GPU idle: creates the images at extent. velocity is read in the general layout, the

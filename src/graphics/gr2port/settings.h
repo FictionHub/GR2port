@@ -154,7 +154,8 @@ struct Graphics {
     Quality fog{Quality::Original};
     /// Ambient occlusion: Original at the scene's size, Medium at half its size, or Off.
     Quality ambient_occlusion{Quality::Original};
-    /// Motion blur: Original with the game's samples, Low with fewer, or Off.
+    /// Motion blur: Original with the game's samples, Low with fewer, or Off. With an upscaler on,
+    /// Original blurs as Low.
     Quality motion_blur{Quality::Original};
     bool antialiasing{true};
     bool bloom{true};

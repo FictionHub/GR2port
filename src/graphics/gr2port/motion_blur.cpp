@@ -11,10 +11,13 @@
 #include "graphics/gr2port/scene.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/shaders/motion_blur_compress_comp.h"
+#include "graphics/gr2port/shaders/motion_blur_copy_frag.h"
 #include "graphics/gr2port/shaders/motion_blur_frag.h"
 #include "graphics/gr2port/shaders/motion_blur_neighbor_comp.h"
 #include "graphics/gr2port/shaders/motion_blur_tile_comp.h"
+#include "graphics/gr2port/shaders/motion_blur_tiles_vert.h"
 #include "graphics/gr2port/shaders/motion_blur_vert.h"
+#include "graphics/gr2port/upscaler.h"
 
 namespace Gr2Port::MotionBlur {
 
@@ -25,7 +28,6 @@ constexpr vk::Format WorkFormat = vk::Format::eR16G16B16A16Sfloat;
 constexpr vk::Extent2D Tiles{64, 60};
 constexpr u32 GroupPixels = 16;
 constexpr u64 TileConstantsOffset = 32;
-constexpr u64 BlurConstantsOffset = 64;
 
 constexpr auto Sampled = vk::DescriptorType::eSampledImage;
 constexpr auto Combined = vk::DescriptorType::eCombinedImageSampler;
@@ -46,20 +48,23 @@ vk::DescriptorSet g_tile_set;
 vk::DescriptorSet g_neighbor_set;
 // The reconstruction from the scene into the second image, and back.
 std::array<vk::DescriptorSet, 2> g_blur_sets;
+// Motion blur Low's reconstruction, which reads the motion in place of the compressed image.
+vk::DescriptorSet g_low_set;
 Pipeline g_compress;
 Pipeline g_tile;
 Pipeline g_neighbor;
-// The reconstruction, and the one of motion blur Low.
+// The reconstruction, and motion blur Low's with its copy back into the scene.
 Pipeline g_blur;
 Pipeline g_blur_low;
+Pipeline g_copy;
 Image g_compressed;
 Image g_tile_max;
 Image g_neighbor_max;
 Image g_second;
 vk::Image g_scene;
 vk::ImageView g_scene_view;
-// Motion blur Low: the scene's copy in the second image, then one reconstruction back into the
-// scene, its taps twice as far apart.
+// Motion blur Low: one reconstruction, its taps twice as far apart, over the tiles that move
+// only, into the second image; those tiles then go back into the scene. An upscaler picks it too.
 bool g_low = false;
 
 // The SPIR-V code with its boolean specialization constant id made true by default, or none when
@@ -91,13 +96,15 @@ std::vector<u32> WithConstantTrue(std::span<const u32> code, u32 id) {
     return {};
 }
 
-// Draws the reconstruction from the image of set into target.
-void Reconstruct(vk::CommandBuffer cmd, vk::DescriptorSet set, vk::ImageView target, u64 address) {
+// Draws pipeline with set into target, with the constants of the packet at address: over all of
+// it, or with motion blur Low over the tiles that move, keeping the rest.
+void Draw(vk::CommandBuffer cmd, const Pipeline& pipeline, vk::DescriptorSet set,
+          vk::ImageView target, u64 address, bool low) {
     const auto& dl = g_device->dispatch;
     const vk::RenderingAttachmentInfo color{
         .imageView = target,
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-        .loadOp = vk::AttachmentLoadOp::eDontCare,
+        .loadOp = low ? vk::AttachmentLoadOp::eLoad : vk::AttachmentLoadOp::eDontCare,
         .storeOp = vk::AttachmentStoreOp::eStore,
     };
     const vk::Extent2D extent = g_second.extent;
@@ -112,13 +119,16 @@ void Reconstruct(vk::CommandBuffer cmd, vk::DescriptorSet set, vk::ImageView tar
                                  .maxDepth = 1.0f},
                     dl);
     cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
-    const u64 constants = address + Scene::MotionBlurOffset + BlurConstantsOffset;
-    const Pipeline& blur = g_low ? g_blur_low : g_blur;
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, blur.pipeline, dl);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, blur.layout, 0, set, {}, dl);
-    cmd.pushConstants(blur.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(constants),
+    const u64 constants = address + Scene::MotionBlurOffset;
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, set, {}, dl);
+    cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(constants),
                       &constants, dl);
-    cmd.draw(3, 1, 0, 0, dl);
+    if (low) {
+        cmd.draw(6, Tiles.width * Tiles.height, 0, 0, dl);
+    } else {
+        cmd.draw(3, 1, 0, 0, dl);
+    }
     cmd.endRendering(dl);
 }
 
@@ -143,6 +153,8 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     g_linear = device.device.createSampler(sampler_info, nullptr, dl).value;
     constexpr auto Compute = vk::ShaderStageFlagBits::eCompute;
     constexpr auto Fragment = vk::ShaderStageFlagBits::eFragment;
+    // Motion blur Low's tiles read the neighbour maxima.
+    constexpr auto Tiled = vk::ShaderStageFlagBits::eVertex | Fragment;
     const std::array<vk::DescriptorSetLayoutBinding, 4> compress_bindings{{
         {0, Sampled, 1, Compute},
         {1, Sampled, 1, Compute},
@@ -155,10 +167,10 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     }};
     const std::array<vk::DescriptorSetLayoutBinding, 7> blur_bindings{{
         {0, Sampled, 1, Fragment},
-        {1, Sampled, 1, Fragment},
+        {1, Sampled, 1, Tiled},
         {2, Sampled, 1, Fragment},
         {3, SamplerType, 1, Fragment, &g_linear},
-        {4, SamplerType, 1, Fragment, &g_point},
+        {4, SamplerType, 1, Tiled, &g_point},
         {5, Sampled, 1, Fragment},
         {6, Sampled, 1, Fragment},
     }};
@@ -166,13 +178,13 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     g_max_layout = CreateSetLayout(*g_device, max_bindings);
     g_blur_layout = CreateSetLayout(*g_device, blur_bindings);
     const std::array<vk::DescriptorPoolSize, 4> sizes{{
-        {Sampled, 2 + 2 * 5},
-        {SamplerType, 1 + 2 * 2},
+        {Sampled, 2 + 3 * 5},
+        {SamplerType, 1 + 3 * 2},
         {Combined, 2},
         {Storage, 3},
     }};
     g_pool = device.device
-                 .createDescriptorPool({.maxSets = 5,
+                 .createDescriptorPool({.maxSets = 6,
                                         .poolSizeCount = static_cast<u32>(sizes.size()),
                                         .pPoolSizes = sizes.data()},
                                        nullptr, dl)
@@ -180,8 +192,8 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     if (!g_point || !g_linear || !g_compress_layout || !g_max_layout || !g_blur_layout || !g_pool) {
         return false;
     }
-    const std::array layouts{g_compress_layout, g_max_layout, g_max_layout, g_blur_layout,
-                             g_blur_layout};
+    const std::array layouts{g_compress_layout, g_max_layout,  g_max_layout,
+                             g_blur_layout,     g_blur_layout, g_blur_layout};
     const auto [result, sets] = device.device.allocateDescriptorSets(
         {.descriptorPool = g_pool,
          .descriptorSetCount = static_cast<u32>(layouts.size()),
@@ -194,6 +206,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     g_tile_set = sets[1];
     g_neighbor_set = sets[2];
     g_blur_sets = {sets[3], sets[4]};
+    g_low_set = sets[5];
     const std::array compress_sets{g_compress_layout};
     const std::array max_sets{g_max_layout};
     const std::array blur_sets{g_blur_layout};
@@ -202,7 +215,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     g_tile = CreateComputePipeline(device, MOTION_BLUR_TILE_COMP, sizeof(u64), max_sets);
     g_neighbor = CreateComputePipeline(device, MOTION_BLUR_NEIGHBOR_COMP, 0, max_sets);
     g_low = Settings::Get().graphics.motion_blur == Settings::Quality::Low;
-    // The reconstruction's constant id 0, DoubleStep.
+    // The reconstruction's constant id 0, Low.
     const std::vector<u32> low_code = WithConstantTrue(MOTION_BLUR_FRAG, 0);
     if (low_code.empty()) {
         return false;
@@ -215,10 +228,13 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
         .set_layouts = blur_sets,
     };
     g_blur = CreateGraphicsPipeline(device, info);
+    info.vertex = MOTION_BLUR_TILES_VERT;
     info.fragment = low_code;
     g_blur_low = CreateGraphicsPipeline(device, info);
+    info.fragment = MOTION_BLUR_COPY_FRAG;
+    g_copy = CreateGraphicsPipeline(device, info);
     return g_compress.pipeline && g_tile.pipeline && g_neighbor.pipeline && g_blur.pipeline &&
-           g_blur_low.pipeline;
+           g_blur_low.pipeline && g_copy.pipeline;
 }
 
 void Choose(bool low) {
@@ -235,12 +251,10 @@ bool Resize(vk::Extent2D extent, vk::ImageView velocity, vk::ImageView depth,
     g_compressed = g_memory->CreateImage(WorkFormat, extent, Work, Color);
     g_tile_max = g_memory->CreateImage(WorkFormat, Tiles, Work, Color);
     g_neighbor_max = g_memory->CreateImage(WorkFormat, Tiles, Work, Color);
-    // The reconstruction draws into the second image; motion blur Low copies the scene into it.
-    g_second = g_memory->CreateImage(g_scene_format, extent,
-                                     vk::ImageUsageFlagBits::eColorAttachment |
-                                         vk::ImageUsageFlagBits::eSampled |
-                                         vk::ImageUsageFlagBits::eTransferDst,
-                                     Color);
+    // The reconstruction draws into the second image.
+    g_second = g_memory->CreateImage(
+        g_scene_format, extent,
+        vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, Color);
     if (!g_compressed.image || !g_tile_max.image || !g_neighbor_max.image || !g_second.image) {
         return false;
     }
@@ -286,6 +300,11 @@ bool Resize(vk::Extent2D extent, vk::ImageView velocity, vk::ImageView depth,
         writes.push_back(write(set, 5, Sampled, infos[1]));
         writes.push_back(write(set, 6, Sampled, infos[7]));
     }
+    writes.push_back(write(g_low_set, 0, Sampled, infos[5]));
+    writes.push_back(write(g_low_set, 1, Sampled, infos[4]));
+    writes.push_back(write(g_low_set, 2, Sampled, infos[0]));
+    writes.push_back(write(g_low_set, 5, Sampled, infos[1]));
+    writes.push_back(write(g_low_set, 6, Sampled, infos[7]));
     g_device->device.updateDescriptorSets(writes, {}, g_device->dispatch);
     return true;
 }
@@ -294,27 +313,35 @@ void Record(vk::CommandBuffer cmd, u64 address) {
     const auto& dl = g_device->dispatch;
     constexpr auto Compute = vk::PipelineStageFlagBits2::eComputeShader;
     constexpr auto Fragment = vk::PipelineStageFlagBits2::eFragmentShader;
+    // Motion blur Low's tiles read the neighbour maxima.
+    constexpr auto Reads = vk::PipelineStageFlagBits2::eVertexShader | Fragment;
     constexpr auto Output = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
     constexpr auto Write = vk::AccessFlagBits2::eShaderStorageWrite;
     constexpr auto Read = vk::AccessFlagBits2::eShaderSampledRead;
     constexpr auto AttachmentWrite = vk::AccessFlagBits2::eColorAttachmentWrite;
+    // Low's draws load the targets, keeping the tiles they leave.
+    constexpr auto Drawn = AttachmentWrite | vk::AccessFlagBits2::eColorAttachmentRead;
     constexpr auto General = vk::ImageLayout::eGeneral;
     constexpr auto ShaderRead = vk::ImageLayout::eShaderReadOnlyOptimal;
     constexpr auto Attachment = vk::ImageLayout::eColorAttachmentOptimal;
     // The last frame's reconstruction read the images.
     for (const Image* image : {&g_compressed, &g_tile_max, &g_neighbor_max}) {
         ImageBarrier(*g_device, cmd, image->image, vk::ImageLayout::eUndefined, General,
-                     Fragment | Compute, vk::AccessFlagBits2::eNone, Compute, Write);
+                     Reads | Compute, vk::AccessFlagBits2::eNone, Compute, Write);
     }
     const u64 compress_constants = address + Scene::MotionBlurOffset;
-    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_compress.pipeline, dl);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_compress.layout, 0, g_compress_set,
-                           {}, dl);
-    cmd.pushConstants(g_compress.layout, vk::ShaderStageFlagBits::eCompute, 0,
-                      sizeof(compress_constants), &compress_constants, dl);
-    const vk::Extent2D extent = g_compressed.extent;
-    cmd.dispatch((extent.width + GroupPixels - 1) / GroupPixels,
-                 (extent.height + GroupPixels - 1) / GroupPixels, 1, dl);
+    // An upscaler, which can turn itself off, lowers the blur too. Low compresses at its taps.
+    const bool low = g_low || Upscaler::Active();
+    if (!low) {
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_compress.pipeline, dl);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_compress.layout, 0,
+                               g_compress_set, {}, dl);
+        cmd.pushConstants(g_compress.layout, vk::ShaderStageFlagBits::eCompute, 0,
+                          sizeof(compress_constants), &compress_constants, dl);
+        const vk::Extent2D extent = g_compressed.extent;
+        cmd.dispatch((extent.width + GroupPixels - 1) / GroupPixels,
+                     (extent.height + GroupPixels - 1) / GroupPixels, 1, dl);
+    }
     const u64 tile_constants = compress_constants + TileConstantsOffset;
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_tile.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_tile.layout, 0, g_tile_set, {}, dl);
@@ -327,42 +354,30 @@ void Record(vk::CommandBuffer cmd, u64 address) {
                            {}, dl);
     cmd.dispatch(Tiles.width, Tiles.height, 1, dl);
     for (const Image* image : {&g_compressed, &g_neighbor_max}) {
-        ImageBarrier(*g_device, cmd, image->image, General, General, Compute, Write, Fragment,
-                     Read);
+        ImageBarrier(*g_device, cmd, image->image, General, General, Compute, Write, Reads, Read);
     }
-    if (g_low) {
-        // The scene's copy into the second image.
-        constexpr auto Copy = vk::PipelineStageFlagBits2::eCopy;
-        constexpr auto Source = vk::ImageLayout::eTransferSrcOptimal;
-        constexpr auto Target = vk::ImageLayout::eTransferDstOptimal;
-        constexpr auto CopyWrite = vk::AccessFlagBits2::eTransferWrite;
-        ImageBarrier(*g_device, cmd, g_scene, ShaderRead, Source, Fragment | Compute,
-                     vk::AccessFlagBits2::eNone, Copy, vk::AccessFlagBits2::eTransferRead);
-        ImageBarrier(*g_device, cmd, g_second.image, vk::ImageLayout::eUndefined, Target, Fragment,
-                     vk::AccessFlagBits2::eNone, Copy, CopyWrite);
-        const vk::Extent2D second = g_second.extent;
-        const vk::ImageCopy region{
-            .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-            .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-            .extent = vk::Extent3D{second.width, second.height, 1},
+    if (low) {
+        // Low's reconstruction reads the motion, which Velocity left for compute reads.
+        const vk::MemoryBarrier2 motion{
+            .srcStageMask = Compute,
+            .srcAccessMask = Write,
+            .dstStageMask = Fragment,
+            .dstAccessMask = Read,
         };
-        cmd.copyImage(g_scene, Source, g_second.image, Target, region, dl);
-        ImageBarrier(*g_device, cmd, g_second.image, Target, ShaderRead, Copy, CopyWrite, Fragment,
-                     Read);
-        ImageBarrier(*g_device, cmd, g_scene, Source, Attachment, Copy, vk::AccessFlagBits2::eNone,
-                     Output, AttachmentWrite);
-    } else {
-        // The reconstruction into the second image.
-        ImageBarrier(*g_device, cmd, g_second.image, vk::ImageLayout::eUndefined, Attachment,
-                     Fragment, vk::AccessFlagBits2::eNone, Output, AttachmentWrite);
-        Reconstruct(cmd, g_blur_sets[0], g_second.view, address);
-        ImageBarrier(*g_device, cmd, g_second.image, Attachment, ShaderRead, Output,
-                     AttachmentWrite, Fragment, Read);
-        ImageBarrier(*g_device, cmd, g_scene, ShaderRead, Attachment, Fragment | Compute, Read,
-                     Output, AttachmentWrite);
+        cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &motion}, dl);
     }
-    // From the second image back into the scene.
-    Reconstruct(cmd, g_blur_sets[1], g_scene_view, address);
+    // The reconstruction into the second image.
+    ImageBarrier(*g_device, cmd, g_second.image, vk::ImageLayout::eUndefined, Attachment, Fragment,
+                 vk::AccessFlagBits2::eNone, Output, Drawn);
+    Draw(cmd, low ? g_blur_low : g_blur, low ? g_low_set : g_blur_sets[0], g_second.view, address,
+         low);
+    ImageBarrier(*g_device, cmd, g_second.image, Attachment, ShaderRead, Output, AttachmentWrite,
+                 Fragment, Read);
+    ImageBarrier(*g_device, cmd, g_scene, ShaderRead, Attachment, Fragment | Compute, Read, Output,
+                 Drawn);
+    // From the second image back into the scene: the game's second reconstruction, or motion blur
+    // Low's copy.
+    Draw(cmd, low ? g_copy : g_blur, g_blur_sets[1], g_scene_view, address, low);
     ImageBarrier(*g_device, cmd, g_scene, Attachment, ShaderRead, Output, AttachmentWrite,
                  Fragment | Compute, Read);
 }
