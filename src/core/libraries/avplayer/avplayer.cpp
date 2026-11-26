@@ -101,6 +101,10 @@ bool PS4_SYSV_ABI sceAvPlayerGetVideoDataEx(AvPlayerHandle handle,
     return handle->GetVideoData(*video_info);
 }
 
+bool LastVideoData(AvPlayerHandle handle, AvPlayerFrameInfoEx& video_info) {
+    return handle != nullptr && handle->LastVideoData(video_info);
+}
+
 AvPlayerHandle PS4_SYSV_ABI sceAvPlayerInit(AvPlayerInitData* data) {
     LOG_TRACE(Lib_AvPlayer, "called");
     if (data == nullptr) {

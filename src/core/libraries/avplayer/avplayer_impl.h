@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string_view>
 
 namespace Libraries::AvPlayer {
@@ -29,6 +30,9 @@ public:
     bool GetAudioData(AvPlayerFrameInfo& audio_info);
     bool GetVideoData(AvPlayerFrameInfo& video_info);
     bool GetVideoData(AvPlayerFrameInfoEx& video_info);
+    /// The frame GetVideoData(AvPlayerFrameInfoEx&) last gave out, which the game holds until its
+    /// next call; false before the first.
+    bool LastVideoData(AvPlayerFrameInfoEx& video_info) const;
     bool IsActive();
     u64 CurrentTime();
     s32 Stop();
@@ -54,6 +58,7 @@ private:
     std::mutex m_file_io_mutex{};
 
     std::unique_ptr<AvPlayerState> m_state{};
+    std::optional<AvPlayerFrameInfoEx> m_last_video{};
 };
 
 } // namespace Libraries::AvPlayer

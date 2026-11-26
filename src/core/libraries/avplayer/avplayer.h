@@ -292,4 +292,8 @@ using AvPlayerLogCallback = int PS4_SYSV_ABI (*)(void* p, const char* format, va
 
 void RegisterLib(Core::Loader::SymbolsResolver* sym);
 
+/// GR2port: the frame sceAvPlayerGetVideoDataEx last gave out for handle, which the game holds
+/// until its next call; false before the first.
+bool LastVideoData(AvPlayerHandle handle, AvPlayerFrameInfoEx& video_info);
+
 } // namespace Libraries::AvPlayer

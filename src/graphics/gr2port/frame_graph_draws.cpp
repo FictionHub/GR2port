@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
-#include <utility>
+#include <span>
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/frame_graph_draws.h"
@@ -16,9 +16,10 @@ namespace {
 // and write GNM commands, which nothing reads.
 constexpr Hooks::Entry DrawLoop{0x14214e0, 6, Hooks::FramePrologue};
 
-// What the game calls for each draw and dispatch on a graphics context. FUN_0042dc50 binds a
-// draw's shaders and writes their constants, and FUN_0042da70 does the same for a dispatch.
-constexpr std::array Writers{
+// What the game calls for each draw and dispatch on a graphics context, which write only command
+// buffer data and packets, so they return at once: FUN_0042dc50 binds a draw's shaders and writes
+// their constants, and FUN_0042da70 does the same for a dispatch.
+constexpr std::array Binders{
     Hooks::Entry{0x42dc50, 6, Hooks::FramePrologue},
     Hooks::Entry{0x42da70, 6, Hooks::FramePrologue},
     // The binders copy a stage's constant buffers, buffers, read-write buffers, textures,
@@ -145,29 +146,11 @@ constexpr std::array Returning{
     // the graphics context waits for. ParticleCapture reads the simulation's input.
     Hooks::Entry{0x14a4a10, 4, PushFrame},
     Hooks::Entry{0x14a7350, 4, PushFrame},
+    // The movie job's compute user data and its keep's DMA copy: Movies reads the job and the keep
+    // from the player's objects.
+    Hooks::Entry{0x429820, 6, Hooks::FramePrologue},
+    Hooks::Entry{0x42bf10, 6, Hooks::FramePrologue},
 };
-
-using WriterFunction = void PS4_SYSV_ABI (*)(u64, u64, u64, u64, u64, u64, u64, double, double,
-                                             double, double);
-std::array<WriterFunction, Writers.size()> g_writers{};
-
-// On the game's draw thread: whether the frame graph runs.
-thread_local bool t_frame_graph = false;
-
-// In place of writer Index, which writes nothing while the frame graph runs. A writer takes at
-// most seven integer arguments and four float arguments, which OnWriter passes on.
-template <size_t Index>
-void PS4_SYSV_ABI OnWriter(u64 a, u64 b, u64 c, u64 d, u64 e, u64 f, u64 g, double x0, double x1,
-                           double x2, double x3) {
-    if (!t_frame_graph) {
-        g_writers[Index](a, b, c, d, e, f, g, x0, x1, x2, x3);
-    }
-}
-
-template <size_t... Indices>
-std::array<const void*, sizeof...(Indices)> WriterTargets(std::index_sequence<Indices...>) {
-    return {reinterpret_cast<const void*>(&OnWriter<Indices>)...};
-}
 
 // In place of FUN_00414c00: the room from the buffer's next free word, or null if the buffer has
 // none.
@@ -195,21 +178,13 @@ void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     if (Hooks::SetReturning(module_base, DrawLoop, true) != Hooks::Result::Hooked) {
         LOG_ERROR(Render_Vulkan, "GR2port: the draw loop is not the expected code");
     }
-    const auto targets = WriterTargets(std::make_index_sequence<Writers.size()>{});
-    for (size_t i = 0; i < Writers.size(); i++) {
-        const void* original = nullptr;
-        if (Hooks::Replace(module_base, Writers[i], c, capacity, targets[i], &original) !=
-            Hooks::Result::Hooked) {
-            LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
-                      Writers[i].address);
-            continue;
-        }
-        g_writers[i] = reinterpret_cast<WriterFunction>(const_cast<void*>(original));
-    }
-    for (const Hooks::Entry& entry : Returning) {
-        if (Hooks::Return(module_base, entry) != Hooks::Result::Hooked) {
-            LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
-                      entry.address);
+    for (const std::span<const Hooks::Entry> entries :
+         {std::span<const Hooks::Entry>{Binders}, std::span<const Hooks::Entry>{Returning}}) {
+        for (const Hooks::Entry& entry : entries) {
+            if (Hooks::Return(module_base, entry) != Hooks::Result::Hooked) {
+                LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
+                          entry.address);
+            }
         }
     }
     if (Hooks::Replace(module_base, Allocator, c, capacity,
@@ -217,14 +192,6 @@ void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
                   Allocator.address);
     }
-}
-
-void SetFrameGraphRunning(bool running) {
-    t_frame_graph = running;
-}
-
-bool FrameGraphRunning() {
-    return t_frame_graph;
 }
 
 } // namespace Gr2Port::FrameGraphDraws

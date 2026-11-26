@@ -106,12 +106,10 @@ void PS4_SYSV_ABI OnParticleTables(u32, const Hooks::Arguments* arguments, u64) 
 void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers* registers, u64) {
     Capture::OnFrame(registers->rdi, registers->rsi);
     GameCheck::ArrivalHang::OnWorldFrame();
-    FrameGraphDraws::SetFrameGraphRunning(true);
     ScriptTimers::OnFrame();
 }
 
 void PS4_SYSV_ABI OnFrameGraphEnd(u32, const Hooks::Arguments*, u64) {
-    FrameGraphDraws::SetFrameGraphRunning(false);
     UiCapture::OnFrameGraphEnd();
 }
 

@@ -16,16 +16,16 @@ class CodeGenerator;
 // job on its own queue that copies the frame, NV12 in AvPlayer's padded layout, into a surface of
 // its own, 1080 rows of luma and then the chroma. The job writes GPU memory only, so the hook
 // copies AvPlayer's frame, which is in guest memory, when the job runs, and the renderer uploads
-// that copy. FUN_01519d40 keeps a frame by a DMA from a surface into a new one, which the hook
-// repeats on the copies, in the game's order.
+// that copy; the hook reads the job from the player's objects and from the frame AvPlayer gave it.
+// FUN_01519d40 keeps a frame by a DMA from a surface into a new one, which the hook repeats on the
+// copies, in the game's order.
 namespace Gr2Port::Movies {
 
 /// The surfaces whose last copy the hooks keep: each player turns over three surfaces, and a scene
 /// plays several, the televisions and the screen's movie.
 inline constexpr u32 Surfaces = 32;
 
-/// Installs the hooks on the returns of the game's movie update and of its frame keeping, and in
-/// place of the writer of the job's user data and of the keeping's copy.
+/// Installs the hooks on the returns of the game's movie update and of its frame keeping.
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
 /// The game's last copy into a surface: the copy of its frame in AvPlayer's layout and the job's

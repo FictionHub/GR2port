@@ -183,10 +183,19 @@ bool AvPlayer::GetVideoData(AvPlayerFrameInfo& video_info) {
 }
 
 bool AvPlayer::GetVideoData(AvPlayerFrameInfoEx& video_info) {
-    if (m_state == nullptr) {
+    if (m_state == nullptr || !m_state->GetVideoData(video_info)) {
         return false;
     }
-    return m_state->GetVideoData(video_info);
+    m_last_video = video_info;
+    return true;
+}
+
+bool AvPlayer::LastVideoData(AvPlayerFrameInfoEx& video_info) const {
+    if (!m_last_video) {
+        return false;
+    }
+    video_info = *m_last_video;
+    return true;
 }
 
 bool AvPlayer::GetAudioData(AvPlayerFrameInfo& audio_info) {

@@ -12,6 +12,7 @@
 #include <fmt/ranges.h>
 
 #include "common/logging/log.h"
+#include "core/libraries/avplayer/avplayer.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/hooks.h"
@@ -23,36 +24,22 @@ namespace {
 
 using Capture::Load;
 
-// FUN_01519400(player): returns 1 when it copied a new frame. The player holds the frame's record
-// at +0x90 when done; a record holds its texture at +0x28, whose first word is the surface.
+// FUN_01519400(player): returns 1 when it copied a new frame. The player holds its AvPlayer at
+// +0x8, the frame's record at +0x90 when done, and the record it holds before the first frame at
+// +0xa0; a record holds the destination's pitch at +0x1a (u16) and its memory at +0x28, whose first
+// word is the surface.
 constexpr Hooks::Entry Update{0x1519400, 6, Hooks::FramePrologue};
+constexpr u64 PlayerAvPlayer = 0x8;
 constexpr u64 PlayerRecord = 0x90;
+constexpr u64 PlayerPlaceholder = 0xa0;
+constexpr u64 RecordPitch = 0x1a;
 constexpr u64 RecordTexture = 0x28;
-// The constant update engine of the movie job: the shader's table of where each resource goes at
-// +0x18a8, and the user data it copies into the job at +0x98. The table's entries for the first
-// read-only buffer, read-write buffer and constant buffer: an offset in dwords, with bit 15 set
-// when the resource goes into a user data register instead, which FUN_00429820 sets.
-constexpr VAddr Engine = 0x1f5a3f8;
-constexpr u64 EngineTable = 0x18a8;
-constexpr u64 EngineUserData = 0x98;
-constexpr u64 TableSource = 0x11;
-constexpr u64 TableDestination = 0x21;
-constexpr u64 TableConstants = 0x41;
-constexpr u16 Unused = 0xffff;
-constexpr u16 InRegister = 0x8000;
-constexpr u16 OffsetMask = 0x3fff;
-// FUN_00429820(commands, first, values, count) sets count compute user data registers from first
-// on, the movie job's in its command buffer at 0x1f5a3b8.
-constexpr Hooks::Entry UserDataWriter{0x429820, 6, Hooks::FramePrologue};
-constexpr VAddr JobCommands = 0x1f5a3b8;
 // FUN_01519d40(player) returns a texture object that keeps the player's frame: its memory object
-// at +0x28 begins with the surface, which FUN_0042bf10(commands, destination, source, bytes, ...)
-// fills from the frame's surface by a DMA.
+// at +0x28 begins with the surface, which a DMA fills from the surface of the player's record.
 constexpr Hooks::Entry Keep{0x1519d40, 6, Hooks::FramePrologue};
-constexpr Hooks::Entry KeepCopy{0x42bf10, 6, Hooks::FramePrologue};
 constexpr u64 KeptMemory = 0x28;
-constexpr u32 UserDataRegisters = 16;
-// The job's constants.
+// The job's constants, as FUN_01519400 writes them: the destination's pitch, the width and height
+// it copies, the source's pitch and height, and the crop's left and top.
 constexpr u32 Width = 1;
 constexpr u32 Height = 2;
 constexpr u32 SourcePitch = 3;
@@ -226,81 +213,45 @@ void Drop(Slots& slots, VAddr surface) {
     }
 }
 
-using UserData = std::array<u32, UserDataRegisters>;
-
-// The movie job's user data registers as FUN_00429820 last set them, and the destination and
-// source of the keep's last copy. Each is set inside the call whose return reads it.
-UserData g_user{};
-VAddr g_kept_destination = 0;
-VAddr g_kept_source = 0;
-
-// In place of FUN_00429820, whose packets nothing reads: keeps the movie job's user data.
-void PS4_SYSV_ABI OnUserData(VAddr commands, u32 first, const u32* values, u32 count) {
-    if (commands != g_base + JobCommands - Hooks::CodeBase) {
-        return;
-    }
-    for (u32 i = 0; i < count && first + i < UserDataRegisters; i++) {
-        g_user[first + i] = values[i];
-    }
-}
-
-// In place of FUN_0042bf10, whose packets nothing reads: keeps the copy.
-void PS4_SYSV_ABI OnKeepCopy(VAddr, VAddr destination, VAddr source) {
-    g_kept_destination = destination;
-    g_kept_source = source;
-}
-
-// The base of a resource's V#, wherever the engine put it; 0 for none.
-VAddr ResourceBase(VAddr engine, VAddr table, u64 index, const UserData& user) {
-    const u16 entry = Load<u16>(table + index * 2);
-    if (entry == Unused) {
-        return 0;
-    }
-    const u32 offset = entry & OffsetMask;
-    std::array<u32, 2> words{};
-    if ((entry & InRegister) != 0) {
-        if (offset + 2 > UserDataRegisters) {
-            return 0;
-        }
-        words = {user[offset], user[offset + 1]};
-    } else {
-        words = Load<std::array<u32, 2>>(engine + EngineUserData + u64{offset} * 4);
-    }
-    return u64{words[0]} | u64{words[1] & 0xfff} << 32;
-}
-
+// The job of the frame FUN_01519400 just took: its destination is the surface of the player's
+// record, its source the frame the game's last sceAvPlayerGetVideoDataEx gave it (FUN_01519400 is
+// the game's only caller), and its constants come from that frame's pitch, height and crop.
 void PS4_SYSV_ABI OnUpdate(u32, const Hooks::Arguments* arguments, u64 result) {
     if ((result & 0xff) == 0) {
         return;
     }
-    const VAddr record = Load<VAddr>(arguments->rdi + PlayerRecord);
+    const VAddr player = arguments->rdi;
+    const VAddr record = Load<VAddr>(player + PlayerRecord);
     const VAddr texture = record != 0 ? Load<VAddr>(record + RecordTexture) : 0;
     const VAddr surface = texture != 0 ? Load<VAddr>(texture) : 0;
-    const VAddr engine = g_base + Engine - Hooks::CodeBase;
-    const VAddr table = Load<VAddr>(engine + EngineTable);
-    const UserData& user = g_user;
-    const VAddr source = ResourceBase(engine, table, TableSource, user);
-    const VAddr destination = ResourceBase(engine, table, TableDestination, user);
-    const VAddr constants = ResourceBase(engine, table, TableConstants, user);
+    Libraries::AvPlayer::AvPlayerFrameInfoEx info{};
+    if (surface == 0 ||
+        !Libraries::AvPlayer::LastVideoData(
+            Load<Libraries::AvPlayer::AvPlayerHandle>(player + PlayerAvPlayer), info)) {
+        return;
+    }
+    const auto& video = info.details.video;
+    const std::array<u32, 7> values{
+        Load<u16>(record + RecordPitch),
+        video.pitch - video.crop_left_offset - video.crop_right_offset,
+        video.height - video.crop_top_offset - video.crop_bottom_offset,
+        video.pitch,
+        video.height,
+        video.crop_left_offset,
+        video.crop_top_offset,
+    };
+    const VAddr source = reinterpret_cast<VAddr>(info.p_data);
     if (g_logged < LoggedJobs) {
         g_logged++;
-        const auto values =
-            constants != 0 ? Load<std::array<u32, 7>>(constants) : std::array<u32, 7>{};
-        LOG_INFO(Render_Vulkan,
-                 "GR2port movies: frame into {:#x} (job's destination {:#x}) from {:#x}, constants "
-                 "{} {} {} {} {} {} {}; table entries {:#x} {:#x} {:#x}, user data {:x}",
-                 surface, destination, source, values[0], values[1], values[2], values[3],
-                 values[4], values[5], values[6], Load<u16>(table + TableSource * 2),
-                 Load<u16>(table + TableDestination * 2), Load<u16>(table + TableConstants * 2),
-                 fmt::join(user, " "));
+        LOG_INFO(Render_Vulkan, "GR2port movies: frame into {:#x} from {:#x}, constants {}",
+                 surface, source, fmt::join(values, " "));
     }
-    if (surface == 0 || surface != destination || source == 0 || constants == 0) {
+    if (source == 0) {
         return;
     }
     // AvPlayer reuses its frame two decodes later, so the frame is copied now, as the job reads it.
     Drop(g_kept, surface);
     Slot& slot = SlotOf(g_slots, g_next, surface);
-    const auto values = Load<std::array<u32, 7>>(constants);
     // The collector takes the buffers of a slot no surface owns, so it waits for the publish.
     std::scoped_lock lock{g_buffers};
     const bool copied = CopyFrame(slot, reinterpret_cast<const void*>(source),
@@ -308,13 +259,21 @@ void PS4_SYSV_ABI OnUpdate(u32, const Hooks::Arguments* arguments, u64 result) {
     Publish(slot, surface, 0, copied, values);
 }
 
-void PS4_SYSV_ABI OnKeep(u32, const Hooks::Arguments*, u64 result) {
+// The keep FUN_01519d40 just made: its DMA copies from the surface of the player's record, except
+// before the first frame, when the record is the placeholder and the keep is a 1x1 texture of its
+// colour.
+void PS4_SYSV_ABI OnKeep(u32, const Hooks::Arguments* arguments, u64 result) {
     const VAddr memory = result != 0 ? Load<VAddr>(result + KeptMemory) : 0;
     const VAddr surface = memory != 0 ? Load<VAddr>(memory) : 0;
     if (surface == 0) {
         return;
     }
-    const VAddr source = g_kept_destination == surface ? g_kept_source : 0;
+    const VAddr player = arguments->rdi;
+    const VAddr record = Load<VAddr>(player + PlayerRecord);
+    const VAddr record_memory = record != 0 && record != Load<VAddr>(player + PlayerPlaceholder)
+                                    ? Load<VAddr>(record + RecordTexture)
+                                    : 0;
+    const VAddr source = record_memory != 0 ? Load<VAddr>(record_memory) : 0;
     if (g_logged_keeps < LoggedKeeps) {
         g_logged_keeps++;
         LOG_INFO(Render_Vulkan, "GR2port movies: frame of {:#x} kept in {:#x}", source, surface);
@@ -347,11 +306,7 @@ void PS4_SYSV_ABI OnKeep(u32, const Hooks::Arguments*, u64 result) {
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     g_base = module_base;
     return Hooks::Hooked(Hooks::ObserveReturn(module_base, Update, c, capacity, &OnUpdate, 0)) &&
-           Hooks::Hooked(Hooks::ObserveReturn(module_base, Keep, c, capacity, &OnKeep, 0)) &&
-           Hooks::Hooked(Hooks::Replace(module_base, UserDataWriter, c, capacity,
-                                        reinterpret_cast<const void*>(&OnUserData))) &&
-           Hooks::Hooked(Hooks::Replace(module_base, KeepCopy, c, capacity,
-                                        reinterpret_cast<const void*>(&OnKeepCopy)));
+           Hooks::Hooked(Hooks::ObserveReturn(module_base, Keep, c, capacity, &OnKeep, 0));
 }
 
 Job Peek(u32 slot) {
