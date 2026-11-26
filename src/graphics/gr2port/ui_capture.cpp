@@ -155,6 +155,7 @@ constexpr std::array<PixelProgram, static_cast<u32>(Scene::UiPixelProgram::Count
     {0, true},
     {2, true},
     {0, true},
+    {1, true},
 }};
 
 // The engine's blend of the menus' own draws: the colour comes multiplied by its alpha.

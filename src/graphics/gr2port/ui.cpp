@@ -36,6 +36,7 @@
 #include "graphics/gr2port/shaders/ui_skinned_b_vert.h"
 #include "graphics/gr2port/shaders/ui_skinned_vert.h"
 #include "graphics/gr2port/shaders/ui_sprite_frag.h"
+#include "graphics/gr2port/shaders/ui_sprite_matrix_frag.h"
 #include "graphics/gr2port/shaders/ui_stroke_frag.h"
 #include "graphics/gr2port/shaders/ui_stroke_geom.h"
 #include "graphics/gr2port/shaders/ui_stroke_vert.h"
@@ -70,7 +71,8 @@ std::unordered_map<u64, Pipeline> g_pipelines;
 constexpr u32 VertexPrograms = static_cast<u32>(Scene::UiVertexProgram::Count);
 constexpr u32 PixelPrograms = static_cast<u32>(Scene::UiPixelProgram::Count);
 constexpr std::array<u32, VertexPrograms> VertexOutputs{3, 1, 3, 3, 3, 3, 3, 3, 3};
-constexpr std::array<u32, PixelPrograms> PixelInputs{1, 2, 1, 2, 1, 3, 3, 3, 2, 2, 2, 2, 1, 3, 3};
+constexpr std::array<u32, PixelPrograms> PixelInputs{1, 2, 1, 2, 1, 3, 3, 3,
+                                                     2, 2, 2, 2, 1, 3, 3, 3};
 constexpr u32 StrokeVertex = static_cast<u32>(Scene::UiVertexProgram::Stroke);
 constexpr u32 StrokePixel = static_cast<u32>(Scene::UiPixelProgram::Stroke);
 std::array<Pipeline, VertexPrograms * PixelPrograms> g_pairs;
@@ -407,6 +409,8 @@ std::span<const u32> PixelCode(u32 program) {
         return UI_MASK_SPRITE_FRAG;
     case Scene::UiPixelProgram::Stroke:
         return UI_STROKE_FRAG;
+    case Scene::UiPixelProgram::SpriteMatrix:
+        return UI_SPRITE_MATRIX_FRAG;
     default:
         return UI_COLOR_CONTROL_FRAG;
     }

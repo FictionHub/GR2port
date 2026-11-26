@@ -233,12 +233,13 @@ Scene::UiVertexProgram VertexProgram(VAddr object, bool bones) {
 }
 
 // The pixel program of a pixel shader object's variant: its row by the comic values (0 without,
-// 1 testing, 2 writing) and its column by the colour matrix.
+// 1 testing, 2 writing) and its column by the colour matrix. With the matrix, only the sprite's
+// first row is ported (FUN_017b68f0 loads 0x1b77944 at + 0x178).
 Scene::UiPixelProgram PixelProgram(VAddr object, u32 row, bool matrix) {
     using enum Scene::UiPixelProgram;
     const s32 slot = SlotOf(PixelObjects, 16, object);
     if (matrix) {
-        return Count;
+        return slot == 0 && row == 0 ? SpriteMatrix : Count;
     }
     switch (slot) {
     case 0:

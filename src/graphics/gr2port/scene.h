@@ -346,6 +346,8 @@ enum class UiPixelProgram : u32 {
     Mask,
     MaskSprite,
     Stroke,
+    /// The sprite through a colour matrix, as the menus draw some pictures.
+    SpriteMatrix,
     Count,
 };
 
