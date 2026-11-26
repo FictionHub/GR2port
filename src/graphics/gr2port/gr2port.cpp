@@ -52,6 +52,7 @@
 #include "graphics/gr2port/scripted_moves.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/smoke_and_dust.h"
+#include "graphics/gr2port/sound_delay.h"
 #include "graphics/gr2port/special_cameras.h"
 #include "graphics/gr2port/stick_tilt.h"
 #include "graphics/gr2port/textures.h"
@@ -179,6 +180,7 @@ void Install(VAddr module_base) {
         CordBend::Install(module_base, c, StubAreaSize);
         FrameWindows::Install(module_base, c, StubAreaSize);
         ScriptTimers::InstallFrameCounts(module_base, c, StubAreaSize);
+        SoundDelay::Install(module_base, c, StubAreaSize);
     }
     FieldOfView::Install(module_base, c, StubAreaSize);
     ScreenShake::Install(module_base, c, StubAreaSize);

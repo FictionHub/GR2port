@@ -149,6 +149,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/shadow_trace.h
     ${CMAKE_CURRENT_LIST_DIR}/shadows.cpp
     ${CMAKE_CURRENT_LIST_DIR}/shadows.h
+    ${CMAKE_CURRENT_LIST_DIR}/sound_delay.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sound_delay.h
     ${CMAKE_CURRENT_LIST_DIR}/splash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/splash.h
     ${CMAKE_CURRENT_LIST_DIR}/special_cameras.cpp
