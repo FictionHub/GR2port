@@ -46,6 +46,7 @@
     "Low": "低",
     "On": "オン",
     "Shadows": "影",
+    "Shadow Draw Distance": "影の描画距離",
     "Volumetric Fog": "ボリュメトリックフォグ",
     "Ambient Occlusion": "環境光遮蔽",
     "Motion Blur": "モーションブラー",

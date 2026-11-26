@@ -254,6 +254,8 @@ enum Control : int {
     IdDistortion,
     IdScreenShakeLabel,
     IdScreenShake,
+    IdShadowDistanceLabel,
+    IdShadowDistance,
     IdHudGravityMeterLabel,
     IdHudGravityMeter,
     IdHudHealthBarLabel,
@@ -599,6 +601,11 @@ constexpr std::array<const wchar_t*, 11> ScreenShakeChoices{L"Off", L"10%", L"20
                                                             L"40%", L"50%", L"60%",         L"70%",
                                                             L"80%", L"90%", L"PS4 Original"};
 constexpr int OwnScreenShake = 10;
+// The shadow draw distance's choices, in the order of Settings::ShadowDistanceLevels, and the
+// game's own.
+constexpr std::array<const wchar_t*, 6> ShadowDistanceChoices{L"50%",  L"75%",  L"PS4 Original",
+                                                              L"125%", L"150%", L"200%"};
+constexpr int OwnShadowDistance = 2;
 
 struct GraphicsColumn {
     int label_left;
@@ -635,6 +642,8 @@ constexpr std::array GraphicsRows{
     GraphicsRow{IdDistortionLabel, IdDistortion, L"Distortion", LeftColumn, 8, SwitchChoices},
     GraphicsRow{IdScreenShakeLabel, IdScreenShake, L"Screen Shake", LeftColumn, 9,
                 ScreenShakeChoices},
+    GraphicsRow{IdShadowDistanceLabel, IdShadowDistance, L"Shadow Draw Distance", LeftColumn, 10,
+                ShadowDistanceChoices},
     GraphicsRow{IdOutlinesLabel, IdOutlines, L"Outlines", RightColumn, 0, SwitchChoices},
     GraphicsRow{IdDecalsLabel, IdDecals, L"Decals", RightColumn, 1, SwitchChoices},
     GraphicsRow{IdGlassLabel, IdGlass, L"Glass Refraction", RightColumn, 2, SwitchChoices},
@@ -1565,6 +1574,8 @@ void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
            IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
     Select(Item(dialog, IdScreenShake),
            IndexOf(Settings::ScreenShakeLevels, graphics.screen_shake, OwnScreenShake));
+    Select(Item(dialog, IdShadowDistance),
+           IndexOf(Settings::ShadowDistanceLevels, graphics.shadow_distance, OwnShadowDistance));
     Select(Item(dialog, IdHudGravityMeter), graphics.hud_gravity_meter ? 0 : 1);
     Select(Item(dialog, IdHudHealthBar), graphics.hud_health_bar ? 0 : 1);
     Select(Item(dialog, IdHudCrosshair), graphics.hud_crosshair ? 0 : 1);
@@ -1606,6 +1617,8 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.distortion = Selected(Item(dialog, IdDistortion)) != 1;
     ReadChoice(Item(dialog, IdFieldOfView), Settings::FieldOfViewLevels, graphics.field_of_view);
     ReadChoice(Item(dialog, IdScreenShake), Settings::ScreenShakeLevels, graphics.screen_shake);
+    ReadChoice(Item(dialog, IdShadowDistance), Settings::ShadowDistanceLevels,
+               graphics.shadow_distance);
     graphics.hud_gravity_meter = Selected(Item(dialog, IdHudGravityMeter)) != 1;
     graphics.hud_health_bar = Selected(Item(dialog, IdHudHealthBar)) != 1;
     graphics.hud_crosshair = Selected(Item(dialog, IdHudCrosshair)) != 1;

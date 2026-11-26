@@ -298,11 +298,13 @@ int IndexOf(const std::array<u32, Count>& levels, u32 level, int fallback) {
 }
 
 // As the launcher's preset: its passes and detail, the shape, size and texture budget it sets,
-// and no VSync for a handheld. The field of view, the screen shake and the upscaler stay.
+// and no VSync for a handheld. The field of view, the screen shake, the shadow draw distance and
+// the upscaler stay.
 void ApplyPreset(Values& values, const Settings::Preset& preset) {
     Settings::Graphics graphics = Settings::FromPreset(preset);
     graphics.field_of_view = values.graphics.field_of_view;
     graphics.screen_shake = values.graphics.screen_shake;
+    graphics.shadow_distance = values.graphics.shadow_distance;
     graphics.upscaler = values.graphics.upscaler;
     graphics.upscale_quality = values.graphics.upscale_quality;
     graphics.upscale_sharpening = values.graphics.upscale_sharpening;
@@ -379,7 +381,7 @@ constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
 
-const std::array<Setting, 33> Table{{
+const std::array<Setting, 34> Table{{
     {"Preset",
      [](const Values&) {
          Names names;
@@ -438,6 +440,21 @@ const std::array<Setting, 33> Table{{
     {"Shadows", [](const Values&) { return Choices({"PS4 Original", "Medium", "Low", "Off"}); },
      [](const Values& values) { return static_cast<int>(values.graphics.shadows); },
      [](Values& values, int choice) { values.graphics.shadows = static_cast<Quality>(choice); }},
+    {"Shadow Draw Distance",
+     [](const Values&) {
+         Names names;
+         for (const u32 level : Settings::ShadowDistanceLevels) {
+             names.push_back(level == 100 ? std::string{"PS4 Original"}
+                                          : std::to_string(level) + "%");
+         }
+         return names;
+     },
+     [](const Values& values) {
+         return IndexOf(Settings::ShadowDistanceLevels, values.graphics.shadow_distance, 2);
+     },
+     [](Values& values, int choice) {
+         values.graphics.shadow_distance = Settings::ShadowDistanceLevels[choice];
+     }},
     {"Volumetric Fog", [](const Values&) { return Choices({"PS4 Original", "Medium", "Low"}); },
      [](const Values& values) { return std::min(static_cast<int>(values.graphics.fog), 2); },
      [](Values& values, int choice) { values.graphics.fog = static_cast<Quality>(choice); }},

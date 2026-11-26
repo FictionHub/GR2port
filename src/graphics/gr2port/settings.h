@@ -123,6 +123,8 @@ constexpr float UpscaleRatio(UpscaleQuality quality) {
 inline constexpr std::array<u32, 7> DetailLevels{400, 200, 150, 100, 75, 50, 25};
 /// The choices of Graphics::far_environment_detail: the game's own range last, longer ones before.
 inline constexpr std::array<u32, 4> FarDetailLevels{400, 200, 150, 100};
+/// The choices of Graphics::shadow_distance, from the nearest.
+inline constexpr std::array<u32, 6> ShadowDistanceLevels{50, 75, 100, 125, 150, 200};
 /// The choices of Graphics::field_of_view, from the narrowest.
 inline constexpr std::array<u32, 15> FieldOfViewLevels{80,  85,  90,  95,  100, 105, 110, 115,
                                                        120, 125, 130, 135, 140, 145, 150};
@@ -143,6 +145,11 @@ struct Graphics {
     /// Low 1024, 1024 and 2048; Off draws no shadows. Medium keeps three quarters of the game's
     /// casting distances and Low half, so smaller and farther objects cast no shadow.
     Quality shadows{Quality::Original};
+    /// How far the sun's shadows reach, in percent of the game's distances for the scene, a
+    /// ShadowDistanceLevels entry: every casting distance, and above 100 the far shadow map's end.
+    /// Above 100 the game's frame holds more casters: GamePatches gives the game room for them,
+    /// and the renderer its packets. It takes effect at the next start. Presets leave it.
+    u32 shadow_distance{100};
     /// The fog's grid of cells: Original 160 x 90 x 128, Medium 120 x 68 x 96, Low 80 x 45 x 64.
     Quality fog{Quality::Original};
     /// Ambient occlusion: Original at the scene's size, Medium at half its size, or Off.
@@ -213,6 +220,12 @@ struct Graphics {
 constexpr bool FinestDetail(const Graphics& graphics) {
     return graphics.far_environment_detail >= FarDetailLevels.front() ||
            graphics.near_environment_detail >= DetailLevels.front();
+}
+
+/// Whether the game's frame may hold more items than at its own settings: a level of detail
+/// setting at its finest, or shadows that reach farther than the game's.
+constexpr bool MoreItems(const Graphics& graphics) {
+    return FinestDetail(graphics) || graphics.shadow_distance > 100;
 }
 
 /// An integrated GPU's share of installed RAM when texture streaming takes the budget itself: the

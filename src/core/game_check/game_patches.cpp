@@ -457,7 +457,7 @@ void ApplySettings() {
     QueueVideoHeap(heap_growth);
     QueueDetail(WorldDetailRow, WorldDetail, graphics.near_environment_detail);
     QueueDetail(CharacterDetailRow, CharacterDetail, graphics.character_detail);
-    if (Settings::FinestDetail(graphics)) {
+    if (Settings::MoreItems(graphics)) {
         QueueFramePools();
     }
     if (graphics.far_environment_detail >= Settings::FarDetailLevels.front()) {

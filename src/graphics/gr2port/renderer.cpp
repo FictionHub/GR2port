@@ -385,8 +385,9 @@ bool Thread::Init() {
     swapchain = std::make_unique<Swapchain>(d);
     Splash::Show(d, *memory, *swapchain, slots[0].pool, slots[0].commands, slots[0].done,
                  slots[0].acquired);
-    // A level of detail setting at its finest puts several times the items in the game's frame.
-    Scene::g_room = Settings::FinestDetail(graphics) ? Scene::MostRoom : Scene::BaseRoom;
+    // A level of detail setting at its finest, or a longer shadow distance, puts more items in the
+    // game's frame.
+    Scene::g_room = Settings::MoreItems(graphics) ? Scene::MostRoom : Scene::BaseRoom;
     LOG_INFO(Render_Vulkan,
              "GR2port scene ring: {} slots of {} MB, each with room for {} draws, {} casters, {} "
              "materials and {} layer materials",

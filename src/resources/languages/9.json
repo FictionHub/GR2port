@@ -46,6 +46,7 @@
     "Low": "낮음",
     "On": "켬",
     "Shadows": "그림자",
+    "Shadow Draw Distance": "그림자 거리",
     "Volumetric Fog": "볼류메트릭 안개",
     "Ambient Occlusion": "앰비언트 오클루전",
     "Motion Blur": "모션 블러",

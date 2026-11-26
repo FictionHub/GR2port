@@ -46,6 +46,7 @@
     "Low": "Низкое",
     "On": "Вкл.",
     "Shadows": "Тени",
+    "Shadow Draw Distance": "Дальность теней",
     "Volumetric Fog": "Объемный туман",
     "Ambient Occlusion": "Фоновое затенение",
     "Motion Blur": "Размытие в движении",

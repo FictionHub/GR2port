@@ -46,6 +46,7 @@
     "Low": "Matala",
     "On": "Päällä",
     "Shadows": "Varjot",
+    "Shadow Draw Distance": "Varjojen etäisyys",
     "Volumetric Fog": "Volumetrinen sumu",
     "Ambient Occlusion": "Ympäristövarjostus",
     "Motion Blur": "Liike-epäterävyys",

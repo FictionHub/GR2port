@@ -369,6 +369,11 @@ constexpr int OwnFieldOfView = 4;
 constexpr std::array<std::string_view, 11> ScreenShakeChoices{
     "Off", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "PS4 Original"};
 constexpr int OwnScreenShake = 10;
+// The shadow draw distance's choices, in the order of Settings::ShadowDistanceLevels, and the
+// game's own.
+constexpr std::array<std::string_view, 6> ShadowDistanceChoices{"50%",  "75%",  "PS4 Original",
+                                                                "125%", "150%", "200%"};
+constexpr int OwnShadowDistance = 2;
 
 struct GraphicsColumn {
     int label_left;
@@ -502,6 +507,7 @@ struct Dialog {
     QComboBox* character_detail = nullptr;
     QComboBox* distortion = nullptr;
     QComboBox* screen_shake = nullptr;
+    QComboBox* shadow_distance = nullptr;
     QComboBox* hud_gravity_meter = nullptr;
     QComboBox* hud_health_bar = nullptr;
     QComboBox* hud_crosshair = nullptr;
@@ -1025,6 +1031,8 @@ void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
         IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
     dialog.screen_shake->setCurrentIndex(
         IndexOf(Settings::ScreenShakeLevels, graphics.screen_shake, OwnScreenShake));
+    dialog.shadow_distance->setCurrentIndex(
+        IndexOf(Settings::ShadowDistanceLevels, graphics.shadow_distance, OwnShadowDistance));
     dialog.hud_gravity_meter->setCurrentIndex(graphics.hud_gravity_meter ? 0 : 1);
     dialog.hud_health_bar->setCurrentIndex(graphics.hud_health_bar ? 0 : 1);
     dialog.hud_crosshair->setCurrentIndex(graphics.hud_crosshair ? 0 : 1);
@@ -1064,6 +1072,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.distortion = dialog.distortion->currentIndex() != 1;
     ReadChoice(dialog.field_of_view, Settings::FieldOfViewLevels, graphics.field_of_view);
     ReadChoice(dialog.screen_shake, Settings::ScreenShakeLevels, graphics.screen_shake);
+    ReadChoice(dialog.shadow_distance, Settings::ShadowDistanceLevels, graphics.shadow_distance);
     graphics.hud_gravity_meter = dialog.hud_gravity_meter->currentIndex() != 1;
     graphics.hud_health_bar = dialog.hud_health_bar->currentIndex() != 1;
     graphics.hud_crosshair = dialog.hud_crosshair->currentIndex() != 1;
@@ -1481,6 +1490,7 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
     dialog.character_detail = row("Character Detail", LeftColumn, 7, DetailChoices);
     dialog.distortion = row("Distortion", LeftColumn, 8, SwitchChoices);
     dialog.screen_shake = row("Screen Shake", LeftColumn, 9, ScreenShakeChoices);
+    dialog.shadow_distance = row("Shadow Draw Distance", LeftColumn, 10, ShadowDistanceChoices);
     dialog.outlines = row("Outlines", RightColumn, 0, SwitchChoices);
     dialog.decals = row("Decals", RightColumn, 1, SwitchChoices);
     dialog.glass_refraction = row("Glass Refraction", RightColumn, 2, SwitchChoices);

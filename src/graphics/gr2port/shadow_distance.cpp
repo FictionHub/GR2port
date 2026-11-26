@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 
@@ -40,13 +41,16 @@ constexpr float RadiusSquared = 400.0f;
 // The stubs and their values take about 120 bytes.
 constexpr size_t StubBytes = 192;
 
-// What the stubs read: the casting distances' factor and the two squared casting limits.
+// What the stubs read: the end's factor, the casting distances' factor, and the two squared
+// casting limits.
 struct Values {
+    float end;
     float casting;
     float farthest;
     float radius;
 };
 Values* g_values = nullptr;
+float g_distance = 1.0f;
 
 // The share of the casting distances a shadow quality keeps. Off draws no shadows, so the game
 // may as well submit fewer casters.
@@ -70,6 +74,8 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         LOG_ERROR(Render_Vulkan, "GR2port: no room for the shadow distance's hooks");
         return false;
     }
+    const Settings::Graphics& graphics = Settings::Get().graphics;
+    g_distance = static_cast<float>(graphics.shadow_distance) / 100.0f;
     c.align(16);
     Xbyak::Label values;
     c.L(values);
@@ -77,13 +83,17 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     for (size_t i = 0; i < sizeof(Values) / 4; i++) {
         c.dd(0);
     }
-    SetQuality(Settings::Get().graphics.shadows);
+    // A nearer end would spread the far map over less ground, so the same casters would fill
+    // more of its texels.
+    g_values->end = std::max(g_distance, 1.0f);
+    SetQuality(graphics.shadows);
 
     const void* copy = c.getCurr();
     c.mov(rcx, module_base + EndTimesShare - Hooks::CodeBase);
     c.vmovss(xmm1, dword[rax + 0x54]);
     c.vmovss(dword[rcx + WordAt], xmm1);
     c.vmovss(xmm1, dword[rax + 0x50]);
+    c.vmulss(xmm1, xmm1, dword[rip + values + static_cast<int>(offsetof(Values, end))]);
     c.vmovss(dword[rcx + EndAt], xmm1);
     c.vmulss(xmm1, xmm1, dword[rax + 0x58]);
     c.vmovss(dword[rcx], xmm1);
@@ -110,6 +120,7 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
         LOG_ERROR(Render_Vulkan, "GR2port: the shadow distances are not the expected code");
         return false;
     }
+    LOG_INFO(Render_Vulkan, "GR2port: shadow draw distance {}%", graphics.shadow_distance);
     return true;
 }
 
@@ -117,7 +128,7 @@ void SetQuality(Settings::Quality quality) {
     if (g_values == nullptr) {
         return;
     }
-    const float share = CastingShare(quality);
+    const float share = g_distance * CastingShare(quality);
     std::atomic_ref<float>(g_values->casting).store(share, std::memory_order_relaxed);
     std::atomic_ref<float>(g_values->farthest)
         .store(FarthestSquared * share * share, std::memory_order_relaxed);
